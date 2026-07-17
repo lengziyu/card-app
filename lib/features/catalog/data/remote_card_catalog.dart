@@ -1,0 +1,79 @@
+import 'package:card_app/core/network/api_client.dart';
+import 'package:card_app/features/catalog/domain/card_summary.dart';
+
+class RemoteCardCatalogRepository implements CardCatalogRepository {
+  RemoteCardCatalogRepository(this._apiClient);
+
+  final ApiClient _apiClient;
+  List<CardSummary>? _cache;
+
+  @override
+  Future<List<CardSummary>> loadCards({bool force = false}) async {
+    if (!force && _cache != null) return _cache!;
+    final response = jsonObject(
+      await _apiClient.get(
+        '/api/cards',
+        query: const {'offset': 0, 'limit': 500},
+      ),
+    );
+    final cards = jsonList(response['items'], label: '卡片列表')
+        .map((item) => _cardFromJson(jsonObject(item, label: '卡片')))
+        .toList(growable: false);
+    _cache = cards;
+    return cards;
+  }
+
+  CardSummary _cardFromJson(Map<String, dynamic> json) {
+    final categoryLabel = json['category']?.toString() ?? '';
+    final imagePath = json['cardImageSrc']?.toString() ?? '';
+    return CardSummary(
+      id: json['id']?.toString() ?? '',
+      name: json['name']?.toString() ?? '未命名卡片',
+      issuer: json['issuer']?.toString() ?? '',
+      category: switch (categoryLabel.toLowerCase()) {
+        'u卡' || 'u 卡' || 'ucard' => CardCategory.uCard,
+        '信用卡' || 'credit' => CardCategory.creditCard,
+        '借记卡' || 'debit' => CardCategory.debitCard,
+        _ => CardCategory.bankAccount,
+      },
+      label: [
+        json['suffix']?.toString() ?? '',
+        json['meta']?.toString() ?? '',
+      ].where((value) => value.isNotEmpty).join(' · '),
+      tint: _parseColor(json['surfaceColor']?.toString()),
+      imageUrl: imagePath.isEmpty
+          ? null
+          : _apiClient.resolve(imagePath).toString(),
+      sourceUrl: json['sourceUrl']?.toString(),
+      kycDocuments: {
+        for (final value
+            in json['kycDocuments'] is List
+                ? json['kycDocuments'] as List
+                : const [])
+          if (value.toString().toLowerCase().contains('passport'))
+            KycDocument.passport
+          else if (value.toString().toLowerCase().contains('id'))
+            KycDocument.idCard,
+      },
+      isNew: _isNew(json['launchTimestamp'], json['createdAt']),
+    );
+  }
+
+  int _parseColor(String? source) {
+    final hex = (source ?? '').replaceAll('#', '');
+    final value = int.tryParse(hex, radix: 16);
+    if (value == null) return 0xFF6B78FF;
+    return hex.length == 6 ? 0xFF000000 | value : value;
+  }
+
+  bool _isNew(Object? timestamp, Object? createdAt) {
+    final milliseconds = timestamp is num
+        ? timestamp.toInt()
+        : DateTime.tryParse(
+            createdAt?.toString() ?? '',
+          )?.millisecondsSinceEpoch;
+    if (milliseconds == null) return false;
+    return DateTime.now().millisecondsSinceEpoch - milliseconds <
+        const Duration(days: 45).inMilliseconds;
+  }
+}

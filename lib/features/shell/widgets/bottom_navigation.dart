@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:card_app/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 
@@ -43,27 +45,14 @@ class BottomNavigation extends StatelessWidget {
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     return SizedBox(
-      height: 84 + bottomInset,
+      height: 94 + bottomInset,
       child: Padding(
-        padding: EdgeInsets.fromLTRB(16, 0, 16, 10 + bottomInset),
+        padding: EdgeInsets.fromLTRB(18, 0, 18, 18 + bottomInset),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Expanded(
-              child: Container(
-                height: 58,
-                decoration: BoxDecoration(
-                  color: const Color(0xE6131B2D),
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: AppColors.line),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x66000000),
-                      blurRadius: 28,
-                      offset: Offset(0, 12),
-                    ),
-                  ],
-                ),
+              child: _GlassNavigationSurface(
                 child: Row(
                   children: [
                     _NavItem(
@@ -90,7 +79,7 @@ class BottomNavigation extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(width: 10),
+            SizedBox(width: 10),
             Semantics(
               button: true,
               selected: addSelected,
@@ -98,45 +87,112 @@ class BottomNavigation extends StatelessWidget {
               child: Material(
                 color: Colors.transparent,
                 child: InkWell(
-                  key: const Key('nav-add'),
+                  key: Key('nav-add'),
                   onTap: onAdd,
-                  customBorder: const CircleBorder(),
-                  child: AnimatedContainer(
-                    duration: MediaQuery.disableAnimationsOf(context)
-                        ? Duration.zero
-                        : const Duration(milliseconds: 240),
-                    width: 58,
-                    height: 58,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: addSelected
-                          ? const LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [AppColors.cyan, AppColors.violet],
-                            )
-                          : const LinearGradient(
-                              colors: [Color(0xE61A2336), Color(0xE6131B2D)],
-                            ),
-                      border: Border.all(color: AppColors.line),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0x6653D8FF),
-                          blurRadius: 20,
-                          offset: Offset(0, 8),
+                  customBorder: CircleBorder(),
+                  child: ClipOval(
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+                      child: AnimatedContainer(
+                        duration: MediaQuery.disableAnimationsOf(context)
+                            ? Duration.zero
+                            : Duration(milliseconds: 500),
+                        width: 58,
+                        height: 58,
+                        decoration: _glassDecoration(selected: addSelected),
+                        child: Icon(
+                          Icons.add_rounded,
+                          color: addSelected
+                              ? (AppColors.isDark
+                                    ? Color(0xFFDFE5FF)
+                                    : Color(0xFF4F67FF))
+                              : AppColors.navIcon,
+                          size: 30,
                         ),
-                      ],
-                    ),
-                    child: Icon(
-                      Icons.add_rounded,
-                      color: addSelected ? Colors.white : AppColors.textMuted,
-                      size: 30,
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+BoxDecoration _glassDecoration({bool selected = false}) {
+  final selectedGradient = AppColors.isDark
+      ? LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0x705B6BFF), Color(0x474CA9FF)],
+        )
+      : LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xF5E6ECFF), Color(0xD1BED7FF)],
+        );
+  return BoxDecoration(
+    shape: BoxShape.circle,
+    gradient: selected
+        ? selectedGradient
+        : LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: AppColors.isDark
+                ? [Color(0x24FFFFFF), Color(0x0AFFFFFF)]
+                : [Color(0x9EFFFFFF), Color(0x6BF4F7FF)],
+          ),
+    border: Border.all(
+      color: AppColors.isDark ? Color(0x1FFFFFFF) : Color(0xBDFFFFFF),
+    ),
+    boxShadow: [
+      BoxShadow(
+        color: AppColors.isDark ? Color(0x3D000000) : Color(0x245A64A0),
+        blurRadius: AppColors.isDark ? 32 : 38,
+        offset: Offset(0, AppColors.isDark ? 16 : 20),
+      ),
+    ],
+  );
+}
+
+class _GlassNavigationSurface extends StatelessWidget {
+  const _GlassNavigationSurface({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(999),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+        child: Container(
+          height: 58,
+          padding: const EdgeInsets.all(5),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: AppColors.isDark
+                  ? [Color(0x24FFFFFF), Color(0x0AFFFFFF)]
+                  : [Color(0x9EFFFFFF), Color(0x6BF4F7FF)],
+            ),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: AppColors.isDark ? Color(0x1FFFFFFF) : Color(0xBDFFFFFF),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.isDark ? Color(0x3D000000) : Color(0x245A64A0),
+                blurRadius: AppColors.isDark ? 32 : 38,
+                offset: Offset(0, AppColors.isDark ? 16 : 20),
+              ),
+            ],
+          ),
+          child: child,
         ),
       ),
     );
@@ -156,7 +212,7 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? AppColors.cyan : AppColors.textMuted;
+    final color = selected ? AppColors.cyan : AppColors.navIcon;
     return Expanded(
       child: Semantics(
         button: true,
@@ -172,21 +228,34 @@ class _NavItem extends StatelessWidget {
               AnimatedContainer(
                 duration: MediaQuery.disableAnimationsOf(context)
                     ? Duration.zero
-                    : const Duration(milliseconds: 240),
-                width: 46,
+                    : Duration(milliseconds: 240),
+                width: double.infinity,
                 height: 46,
                 decoration: BoxDecoration(
-                  shape: BoxShape.circle,
+                  borderRadius: BorderRadius.circular(999),
                   gradient: selected
-                      ? const LinearGradient(
-                          colors: [Color(0x706B78FF), Color(0x5053D8FF)],
+                      ? LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: AppColors.isDark
+                              ? [Color(0x705B6BFF), Color(0x474CA9FF)]
+                              : [Color(0xF5E6ECFF), Color(0xD1BED7FF)],
                         )
+                      : null,
+                  boxShadow: selected && !AppColors.isDark
+                      ? [
+                          BoxShadow(
+                            color: Color(0x1F5C73FF),
+                            blurRadius: 14,
+                            offset: Offset(0, 5),
+                          ),
+                        ]
                       : null,
                 ),
                 child: Icon(
                   selected ? item.selectedIcon : item.icon,
                   color: color,
-                  size: 24,
+                  size: 25,
                 ),
               ),
             ],

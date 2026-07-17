@@ -1,23 +1,28 @@
 import 'package:card_app/core/theme/app_colors.dart';
-import 'package:card_app/features/home/presentation/mock_card.dart';
+import 'package:card_app/features/catalog/domain/card_summary.dart';
+import 'package:card_app/features/catalog/widgets/card_artwork.dart';
 import 'package:flutter/material.dart';
 
 class AddCardPage extends StatelessWidget {
   const AddCardPage({
     required this.addedCardIds,
+    required this.cards,
     required this.onCardChanged,
+    required this.onSearch,
     super.key,
   });
 
   final Set<String> addedCardIds;
-  final void Function(MockCard card, bool added) onCardChanged;
+  final List<CardSummary> cards;
+  final void Function(CardSummary card, bool added) onCardChanged;
+  final VoidCallback onSearch;
 
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     return CustomScrollView(
-      key: const Key('add-card-page'),
-      physics: const BouncingScrollPhysics(),
+      key: Key('add-card-page'),
+      physics: BouncingScrollPhysics(),
       slivers: [
         SliverPadding(
           padding: EdgeInsets.fromLTRB(24, 18, 24, 132 + bottomInset),
@@ -32,10 +37,10 @@ class AddCardPage extends StatelessWidget {
                       children: [
                         Text(
                           '添加卡片',
-                          key: const Key('add-card-title'),
+                          key: Key('add-card-title'),
                           style: Theme.of(context).textTheme.headlineMedium,
                         ),
-                        const SizedBox(height: 8),
+                        SizedBox(height: 8),
                         Text(
                           '从卡片目录添加到你的收藏',
                           style: Theme.of(context).textTheme.bodyMedium,
@@ -43,20 +48,20 @@ class AddCardPage extends StatelessWidget {
                       ],
                     ),
                   ),
-                  const SizedBox(width: 16),
-                  const _RoundActionButton(),
+                  SizedBox(width: 16),
+                  _RoundActionButton(onPressed: onSearch),
                 ],
               ),
-              const SizedBox(height: 24),
-              const _DemoNotice(),
-              const SizedBox(height: 18),
-              for (final card in mockCards) ...[
+              SizedBox(height: 24),
+              const _CatalogNotice(),
+              SizedBox(height: 18),
+              for (final card in cards) ...[
                 _CardRow(
                   card: card,
                   added: addedCardIds.contains(card.id),
                   onChanged: (added) => onCardChanged(card, added),
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: 12),
               ],
             ],
           ),
@@ -67,51 +72,56 @@ class AddCardPage extends StatelessWidget {
 }
 
 class _RoundActionButton extends StatelessWidget {
-  const _RoundActionButton();
+  const _RoundActionButton({required this.onPressed});
+
+  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(
-      label: '搜索卡片，演示版暂不可用',
-      button: true,
-      enabled: false,
-      child: Container(
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: AppColors.surfaceRaised.withValues(alpha: 0.82),
-          shape: BoxShape.circle,
-          border: Border.all(color: AppColors.line),
-        ),
-        child: const Icon(
-          Icons.search_rounded,
-          color: AppColors.textMuted,
-          size: 22,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        key: Key('add-search-button'),
+        onTap: onPressed,
+        customBorder: CircleBorder(),
+        child: Ink(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: AppColors.glassStrong,
+            shape: BoxShape.circle,
+            border: Border.all(color: AppColors.line),
+          ),
+          child: Icon(
+            Icons.search_rounded,
+            color: AppColors.textMuted,
+            size: 22,
+          ),
         ),
       ),
     );
   }
 }
 
-class _DemoNotice extends StatelessWidget {
-  const _DemoNotice();
+class _CatalogNotice extends StatelessWidget {
+  const _CatalogNotice();
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: AppColors.surface.withValues(alpha: 0.76),
+        color: AppColors.glass,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: AppColors.line),
       ),
-      child: const Row(
+      child: Row(
         children: [
           Icon(Icons.info_outline_rounded, color: AppColors.cyan, size: 20),
           SizedBox(width: 12),
           Expanded(
             child: Text(
-              '当前使用本地演示数据，不会连接账号或提交申请。',
+              '卡片目录来自线上公开数据；游客调整仅保存在当前会话。',
               style: TextStyle(
                 color: AppColors.textMuted,
                 fontSize: 13,
@@ -132,17 +142,17 @@ class _CardRow extends StatelessWidget {
     required this.onChanged,
   });
 
-  final MockCard card;
+  final CardSummary card;
   final bool added;
   final ValueChanged<bool> onChanged;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      constraints: const BoxConstraints(minHeight: 88),
+      constraints: BoxConstraints(minHeight: 88),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.surface.withValues(alpha: 0.78),
+        color: AppColors.glass,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: AppColors.line),
       ),
@@ -150,25 +160,13 @@ class _CardRow extends StatelessWidget {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
-            child: Image.asset(
-              card.assetPath,
+            child: SizedBox(
               width: 86,
               height: 54,
-              fit: BoxFit.cover,
-              errorBuilder: (_, _, _) => ColoredBox(
-                color: AppColors.surfaceRaised,
-                child: SizedBox(
-                  width: 86,
-                  height: 54,
-                  child: Icon(
-                    Icons.credit_card_rounded,
-                    color: Color(card.tint),
-                  ),
-                ),
-              ),
+              child: CardArtwork(card: card, showGeneratedLabels: false),
             ),
           ),
-          const SizedBox(width: 14),
+          SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -177,18 +175,18 @@ class _CardRow extends StatelessWidget {
                   card.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppColors.text,
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                const SizedBox(height: 5),
+                SizedBox(height: 5),
                 Text(
                   card.label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppColors.textMuted,
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
@@ -197,7 +195,7 @@ class _CardRow extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(width: 10),
+          SizedBox(width: 10),
           Semantics(
             button: true,
             toggled: added,

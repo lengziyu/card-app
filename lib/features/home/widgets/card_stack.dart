@@ -1,13 +1,31 @@
+import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:card_app/core/theme/app_colors.dart';
-import 'package:card_app/features/home/presentation/mock_card.dart';
+import 'package:card_app/features/catalog/domain/card_summary.dart';
+import 'package:card_app/features/catalog/widgets/card_artwork.dart';
+import 'package:card_app/features/home/domain/home_card_layout.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 class CardStack extends StatefulWidget {
-  const CardStack({required this.cards, super.key});
+  const CardStack({
+    required this.cards,
+    required this.heightScale,
+    required this.scrollController,
+    required this.onOpenCard,
+    required this.onHeightScaleChanged,
+    required this.onReorder,
+    required this.onInteractionChanged,
+    super.key,
+  });
 
-  final List<MockCard> cards;
+  final List<CardSummary> cards;
+  final double heightScale;
+  final ScrollController scrollController;
+  final ValueChanged<CardSummary> onOpenCard;
+  final ValueChanged<double> onHeightScaleChanged;
+  final ValueChanged<List<String>> onReorder;
+  final ValueChanged<bool> onInteractionChanged;
 
   @override
   State<CardStack> createState() => _CardStackState();
@@ -15,12 +33,38 @@ class CardStack extends StatefulWidget {
 
 class _CardStackState extends State<CardStack>
     with SingleTickerProviderStateMixin {
+  static const _dragHold = Duration(milliseconds: 140);
+  static const _dragStartThreshold = 6.0;
+  static const _earlyDragThreshold = 18.0;
+  static const _autoScrollEdge = 84.0;
+  static const _autoScrollStep = 14.0;
+
   late final AnimationController _entryController;
-  int _selected = 0;
+  late List<CardSummary> _orderedCards;
+  final Map<int, Offset> _pointers = {};
+
+  Timer? _dragArmTimer;
+  Timer? _autoScrollTimer;
+  int? _primaryPointer;
+  String? _pressedCardId;
+  String? _draggingCardId;
+  Offset? _pressStartLocal;
+  double _dragStartLocalY = 0;
+  double _lastDragLocalY = 0;
+  double _dragOffset = 0;
+  double _previewHeight = 0;
+  double _fullCardHeight = 0;
+  double _cardStep = 0;
+  bool _dragArmed = false;
+  bool _pressCancelled = false;
+  bool _isPinching = false;
+  double _pinchStartDistance = 0;
+  double _pinchStartScale = 1;
 
   @override
   void initState() {
     super.initState();
+    _orderedCards = [...widget.cards];
     _entryController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 640),
@@ -28,73 +72,297 @@ class _CardStackState extends State<CardStack>
   }
 
   @override
+  void didUpdateWidget(CardStack oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final nextIds = widget.cards.map((card) => card.id).toList();
+    final currentIds = _orderedCards.map((card) => card.id).toList();
+    if (!_sameOrder(nextIds, currentIds)) {
+      _orderedCards = [...widget.cards];
+    }
+  }
+
+  bool _sameOrder(List<String> left, List<String> right) {
+    if (left.length != right.length) return false;
+    for (var index = 0; index < left.length; index++) {
+      if (left[index] != right[index]) return false;
+    }
+    return true;
+  }
+
+  @override
   void dispose() {
+    _dragArmTimer?.cancel();
+    _autoScrollTimer?.cancel();
     _entryController.dispose();
     super.dispose();
   }
 
-  void _select(int index) {
-    if (index == _selected) {
+  void _handlePointerDown(PointerDownEvent event) {
+    _pointers[event.pointer] = event.localPosition;
+    if (_pointers.length == 2) {
+      _beginPinch();
       return;
     }
-    setState(() => _selected = index);
+    if (_pointers.length != 1 || _isPinching) return;
+
+    final card = _cardAt(event.localPosition.dy);
+    if (card == null) return;
+    _primaryPointer = event.pointer;
+    _pressedCardId = card.id;
+    _pressStartLocal = event.localPosition;
+    _dragStartLocalY = event.localPosition.dy;
+    _lastDragLocalY = event.localPosition.dy;
+    _dragArmed = event.kind == PointerDeviceKind.mouse;
+    _pressCancelled = false;
+    setState(() {});
+
+    if (!_dragArmed) {
+      _dragArmTimer = Timer(_dragHold, () {
+        if (!mounted || _primaryPointer != event.pointer || _isPinching) return;
+        _dragArmed = true;
+      });
+    }
+  }
+
+  void _handlePointerMove(PointerMoveEvent event) {
+    _pointers[event.pointer] = event.localPosition;
+    if (_isPinching) {
+      _updatePinch();
+      return;
+    }
+    if (event.pointer != _primaryPointer || _pressStartLocal == null) return;
+
+    final distance = event.localPosition.dy - _pressStartLocal!.dy;
+    _lastDragLocalY = event.localPosition.dy;
+    if (!_dragArmed && distance.abs() > _earlyDragThreshold) {
+      _cancelPress();
+      return;
+    }
+    if (!_dragArmed || distance.abs() <= _dragStartThreshold) return;
+
+    if (_draggingCardId == null) {
+      _draggingCardId = _pressedCardId;
+      _dragStartLocalY = _pressStartLocal!.dy;
+      _setInteractionActive(true);
+    }
+    _updateDrag(event.localPosition.dy);
+    _updateAutoScroll(event.position.dy);
+  }
+
+  void _handlePointerUp(PointerEvent event) {
+    final wasPinching = _isPinching;
+    _pointers.remove(event.pointer);
+    if (wasPinching) {
+      if (_pointers.length < 2) {
+        _isPinching = false;
+        _setInteractionActive(false);
+        setState(() {});
+      }
+      if (event.pointer == _primaryPointer) _resetPress();
+      return;
+    }
+    if (event.pointer != _primaryPointer) return;
+
+    final tappedCardId = _pressedCardId;
+    final didDrag = _draggingCardId != null;
+    final canTap = !_pressCancelled && !didDrag && tappedCardId != null;
+    _finishDrag();
+    if (canTap) {
+      final card = _orderedCards
+          .where((candidate) => candidate.id == tappedCardId)
+          .firstOrNull;
+      if (card != null) widget.onOpenCard(card);
+    }
+  }
+
+  void _handlePointerCancel(PointerCancelEvent event) {
+    _pressCancelled = true;
+    _handlePointerUp(event);
+  }
+
+  void _beginPinch() {
+    final points = _pointers.values.take(2).toList();
+    _dragArmTimer?.cancel();
+    _finishDrag(notify: false);
+    _isPinching = true;
+    _pressCancelled = true;
+    _pinchStartDistance = (points[0] - points[1]).distance;
+    _pinchStartScale = widget.heightScale;
+    _setInteractionActive(true);
+    setState(() {});
+  }
+
+  void _updatePinch() {
+    if (_pointers.length < 2 || _pinchStartDistance <= 0) return;
+    final points = _pointers.values.take(2).toList();
+    final distance = (points[0] - points[1]).distance;
+    widget.onHeightScaleChanged(
+      clampHomeCardHeightScale(
+        _pinchStartScale * distance / _pinchStartDistance,
+      ),
+    );
+  }
+
+  void _updateDrag(double localY) {
+    if (_draggingCardId == null) return;
+    _dragOffset = localY - _dragStartLocalY;
+    _reorderForPointer(localY);
+    setState(() {});
+  }
+
+  void _reorderForPointer(double localY) {
+    final activeId = _draggingCardId;
+    if (activeId == null || _orderedCards.length < 2) return;
+    final activeIndex = _orderedCards.indexWhere((card) => card.id == activeId);
+    var targetIndex = activeIndex;
+
+    for (var index = 0; index < _orderedCards.length; index++) {
+      if (index == activeIndex) continue;
+      final height = index == _orderedCards.length - 1
+          ? _fullCardHeight
+          : _previewHeight;
+      final midpoint = index * _cardStep + height / 2;
+      if (index < activeIndex && localY < midpoint) targetIndex = index;
+      if (index > activeIndex && localY > midpoint) targetIndex = index;
+    }
+    if (targetIndex == activeIndex) return;
+
+    final oldTop = activeIndex * _cardStep;
+    final card = _orderedCards.removeAt(activeIndex);
+    _orderedCards.insert(targetIndex, card);
+    final newTop = targetIndex * _cardStep;
+    _dragStartLocalY += newTop - oldTop;
+    _dragOffset = localY - _dragStartLocalY;
+    widget.onReorder(_orderedCards.map((item) => item.id).toList());
+  }
+
+  void _updateAutoScroll(double globalY) {
+    final screenHeight = MediaQuery.sizeOf(context).height;
+    final direction = globalY < _autoScrollEdge
+        ? -1
+        : globalY > screenHeight - _autoScrollEdge
+        ? 1
+        : 0;
+    if (direction == 0) {
+      _autoScrollTimer?.cancel();
+      _autoScrollTimer = null;
+      return;
+    }
+    if (_autoScrollTimer?.isActive ?? false) return;
+    _autoScrollTimer = Timer.periodic(const Duration(milliseconds: 16), (_) {
+      if (!mounted || _draggingCardId == null) return;
+      final controller = widget.scrollController;
+      if (!controller.hasClients) return;
+      final current = controller.offset;
+      final next = (current + direction * _autoScrollStep).clamp(
+        controller.position.minScrollExtent,
+        controller.position.maxScrollExtent,
+      );
+      final applied = next - current;
+      if (applied == 0) return;
+      controller.jumpTo(next);
+      _lastDragLocalY += applied;
+      _updateDrag(_lastDragLocalY);
+    });
+  }
+
+  CardSummary? _cardAt(double localY) {
+    for (var index = _orderedCards.length - 1; index >= 0; index--) {
+      final top = index * _cardStep;
+      final height = index == _orderedCards.length - 1
+          ? _fullCardHeight
+          : _previewHeight;
+      if (localY >= top && localY <= top + height) {
+        return _orderedCards[index];
+      }
+    }
+    return null;
+  }
+
+  void _cancelPress() {
+    _dragArmTimer?.cancel();
+    _pressCancelled = true;
+    _pressedCardId = null;
+    setState(() {});
+  }
+
+  void _finishDrag({bool notify = true}) {
+    _dragArmTimer?.cancel();
+    _autoScrollTimer?.cancel();
+    _autoScrollTimer = null;
+    final wasDragging = _draggingCardId != null;
+    _draggingCardId = null;
+    _dragOffset = 0;
+    _resetPress();
+    if (notify && wasDragging) _setInteractionActive(false);
+    if (mounted) setState(() {});
+  }
+
+  void _resetPress() {
+    _primaryPointer = null;
+    _pressedCardId = null;
+    _pressStartLocal = null;
+    _dragArmed = false;
+    _pressCancelled = false;
+  }
+
+  void _setInteractionActive(bool active) {
+    widget.onInteractionChanged(active);
   }
 
   @override
   Widget build(BuildContext context) {
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
-    final ordered = <int>[
-      _selected,
-      ...List<int>.generate(
-        widget.cards.length,
-        (i) => i,
-      ).where((i) => i != _selected),
-    ];
     return LayoutBuilder(
       builder: (context, constraints) {
         final cardWidth = math.min(constraints.maxWidth, 420.0);
-        final cardHeight = cardWidth / 1.586;
-        return SizedBox(
-          height: cardHeight + 250,
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              for (var position = ordered.length - 1; position >= 0; position--)
-                _StackedCard(
-                  card: widget.cards[ordered[position]],
-                  position: position,
-                  width: cardWidth,
-                  height: cardHeight,
-                  isTop: position == 0,
-                  reduceMotion: reduceMotion,
-                  entry: _entryController,
-                  onTap: () => _select(ordered[position]),
-                ),
-              Positioned(
-                left: 4,
-                right: 4,
-                top: cardHeight + 208,
-                child: Row(
-                  children: const [
-                    Icon(
-                      Icons.touch_app_outlined,
-                      size: 16,
-                      color: AppColors.textMuted,
-                    ),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        '轻触卡片，将它置于最前',
-                        style: TextStyle(
-                          color: AppColors.textMuted,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+        _previewHeight =
+            cardWidth * (homeCardPreviewDefault / 1010) * widget.heightScale;
+        _fullCardHeight = cardWidth * (630 / 1010);
+        _cardStep = math.max(0.0, _previewHeight - 24);
+        final lastCardTop = math.max(0, _orderedCards.length - 1) * _cardStep;
+        final paintingOrder = List.generate(_orderedCards.length, (i) => i);
+        final draggingIndex = _orderedCards.indexWhere(
+          (card) => card.id == _draggingCardId,
+        );
+        if (draggingIndex >= 0) {
+          paintingOrder
+            ..remove(draggingIndex)
+            ..add(draggingIndex);
+        }
+
+        return Listener(
+          behavior: HitTestBehavior.opaque,
+          onPointerDown: _handlePointerDown,
+          onPointerMove: _handlePointerMove,
+          onPointerUp: _handlePointerUp,
+          onPointerCancel: _handlePointerCancel,
+          child: SizedBox(
+            height: lastCardTop + _fullCardHeight,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                for (final index in paintingOrder)
+                  _StackedCard(
+                    key: Key('home-card-${_orderedCards[index].id}'),
+                    card: _orderedCards[index],
+                    top:
+                        index * _cardStep +
+                        (_orderedCards[index].id == _draggingCardId
+                            ? _dragOffset
+                            : 0),
+                    width: cardWidth,
+                    height: index == _orderedCards.length - 1
+                        ? _fullCardHeight
+                        : _previewHeight,
+                    isLast: index == _orderedCards.length - 1,
+                    isPressed: _orderedCards[index].id == _pressedCardId,
+                    isDragging: _orderedCards[index].id == _draggingCardId,
+                    reduceMotion: reduceMotion,
+                    entry: _entryController,
+                  ),
+              ],
+            ),
           ),
         );
       },
@@ -102,50 +370,48 @@ class _CardStackState extends State<CardStack>
   }
 }
 
-class _StackedCard extends StatefulWidget {
+class _StackedCard extends StatelessWidget {
   const _StackedCard({
     required this.card,
-    required this.position,
+    required this.top,
     required this.width,
     required this.height,
-    required this.isTop,
+    required this.isLast,
+    required this.isPressed,
+    required this.isDragging,
     required this.reduceMotion,
     required this.entry,
-    required this.onTap,
+    super.key,
   });
 
-  final MockCard card;
-  final int position;
+  final CardSummary card;
+  final double top;
   final double width;
   final double height;
-  final bool isTop;
+  final bool isLast;
+  final bool isPressed;
+  final bool isDragging;
   final bool reduceMotion;
   final Animation<double> entry;
-  final VoidCallback onTap;
-
-  @override
-  State<_StackedCard> createState() => _StackedCardState();
-}
-
-class _StackedCardState extends State<_StackedCard> {
-  bool _pressed = false;
 
   @override
   Widget build(BuildContext context) {
-    final targetTop = widget.position * 58.0;
+    final duration = reduceMotion
+        ? Duration.zero
+        : const Duration(milliseconds: 180);
     return AnimatedPositioned(
-      duration: widget.reduceMotion
+      duration: isDragging || reduceMotion
           ? Duration.zero
           : const Duration(milliseconds: 380),
       curve: Curves.easeOutCubic,
-      left: widget.position * 3.0,
-      right: widget.position * 3.0,
-      top: targetTop,
-      height: widget.height,
+      left: 0,
+      right: 0,
+      top: top,
+      height: height,
       child: AnimatedBuilder(
-        animation: widget.entry,
+        animation: entry,
         builder: (context, child) {
-          final progress = widget.reduceMotion ? 1.0 : widget.entry.value;
+          final progress = reduceMotion ? 1.0 : entry.value;
           return Opacity(
             opacity: progress,
             child: Transform.translate(
@@ -156,113 +422,38 @@ class _StackedCardState extends State<_StackedCard> {
         },
         child: Semantics(
           button: true,
-          label:
-              '${widget.card.name}，${widget.card.label}，'
-              '${widget.isTop ? '当前置顶' : '轻触置顶'}',
-          child: GestureDetector(
-            onTap: widget.onTap,
-            onTapDown: (_) => setState(() => _pressed = true),
-            onTapUp: (_) => setState(() => _pressed = false),
-            onTapCancel: () => setState(() => _pressed = false),
+          label: '${card.name}，${card.label}，轻触查看详情，长按拖动排序',
+          child: AnimatedRotation(
+            turns: isDragging ? -1.2 / 360 : 0,
+            duration: duration,
             child: AnimatedScale(
-              duration: widget.reduceMotion
-                  ? Duration.zero
-                  : const Duration(milliseconds: 130),
-              scale: _pressed ? 0.975 : 1,
+              duration: duration,
+              scale: isDragging ? 1.01 : (isPressed ? 0.975 : 1),
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(14),
                   boxShadow: [
                     BoxShadow(
-                      color: Color(
-                        widget.card.tint,
-                      ).withValues(alpha: widget.isTop ? 0.22 : 0.10),
-                      blurRadius: widget.isTop ? 30 : 18,
-                      offset: const Offset(0, 16),
+                      color: Color(card.tint).withValues(
+                        alpha: isDragging ? 0.28 : (isLast ? 0.18 : 0.10),
+                      ),
+                      blurRadius: isDragging ? 40 : (isLast ? 32 : 18),
+                      offset: Offset(0, isDragging ? 22 : 18),
                     ),
                   ],
                 ),
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(14),
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      Image.asset(
-                        widget.card.assetPath,
-                        fit: BoxFit.cover,
-                        filterQuality: FilterQuality.medium,
-                        errorBuilder: (_, _, _) => ColoredBox(
-                          color: AppColors.surfaceRaised,
-                          child: Icon(
-                            Icons.credit_card_rounded,
-                            color: Color(widget.card.tint),
-                            size: 48,
-                          ),
-                        ),
-                      ),
+                      CardArtwork(card: card, alignment: Alignment.topCenter),
                       DecoratedBox(
                         decoration: BoxDecoration(
                           border: Border.all(
-                            color: Colors.white.withValues(
-                              alpha: widget.isTop ? 0.36 : 0.18,
-                            ),
-                            width: 1.1,
+                            color: Colors.white.withValues(alpha: 0.08),
                           ),
-                          borderRadius: BorderRadius.circular(20),
-                          gradient: const LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [Color(0x00000000), Color(0x99020810)],
-                            stops: [0.48, 1],
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        left: 18,
-                        right: 18,
-                        bottom: 15,
-                        child: MediaQuery.withClampedTextScaling(
-                          maxScaleFactor: 1.3,
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  widget.card.name,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w700,
-                                    shadows: [
-                                      Shadow(
-                                        color: Colors.black54,
-                                        blurRadius: 8,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Flexible(
-                                child: FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  alignment: Alignment.centerRight,
-                                  child: Text(
-                                    widget.card.label,
-                                    maxLines: 1,
-                                    style: const TextStyle(
-                                      color: Color(0xD9FFFFFF),
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.w700,
-                                      letterSpacing: 0.4,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
+                          borderRadius: BorderRadius.circular(14),
                         ),
                       ),
                     ],

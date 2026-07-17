@@ -3,5 +3,5 @@ import 'package:flutter/widgets.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const CardApp());
+  runApp(const CardApp(enableRemoteData: true));
 }
