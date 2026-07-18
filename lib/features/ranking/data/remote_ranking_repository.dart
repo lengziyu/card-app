@@ -7,6 +7,13 @@ class RemoteRankingRepository {
 
   final ApiClient _apiClient;
 
+  // 与 H5 保持相同的历史卡片 ID 兼容，避免后台排行榜仍使用旧 ID
+  // 时，已发布的卡片被静默过滤掉。
+  static const _legacyCardIdAliases = <String, String>{
+    'etherfi': 'etherfi-core',
+    'starryblu': 'starryblu-xingkong',
+  };
+
   Future<List<RankingGroup>> loadRankings() async {
     final response = jsonObject(await _apiClient.get('/api/rankings'));
     return jsonList(response['groups'], label: '排行榜')
@@ -16,10 +23,9 @@ class RemoteRankingRepository {
             id: json['id']?.toString() ?? '',
             name: json['name']?.toString() ?? '',
             description: json['description']?.toString() ?? '',
-            cardIds: jsonList(
-              json['cardIds'] ?? const [],
-              label: '卡片编号',
-            ).map((id) => id.toString()).toList(growable: false),
+            cardIds: jsonList(json['cardIds'] ?? const [], label: '卡片编号')
+                .map((id) => _normalizeCardId(id.toString()))
+                .toList(growable: false),
           );
         })
         .toList(growable: false);
@@ -157,6 +163,13 @@ class RemoteRankingRepository {
           json['relatedCardIds'] ?? const [],
           label: '相关卡片',
         ).map((value) => value.toString()).toList(growable: false),
+        coverImageUrl: coverPath.isEmpty
+            ? null
+            : _apiClient.resolve(coverPath).toString(),
+        markdown: raw.isEmpty ? null : raw,
+        inviteCode: _nullableText(json['inviteCode']),
+        inviteUrl: _nullableText(json['inviteUrl']),
+        author: _nullableText(json['author']),
       ),
       coverImageUrl: coverPath.isEmpty
           ? null
@@ -172,10 +185,20 @@ class RemoteRankingRepository {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 
+  String? _nullableText(Object? value) {
+    final text = value?.toString().trim() ?? '';
+    return text.isEmpty ? null : text;
+  }
+
   int _parseColor(String? source) {
     final hex = (source ?? '').replaceAll('#', '');
     final value = int.tryParse(hex, radix: 16);
     if (value == null) return 0xFF6B78FF;
     return hex.length == 6 ? 0xFF000000 | value : value;
+  }
+
+  static String _normalizeCardId(String value) {
+    final id = value.trim();
+    return _legacyCardIdAliases[id] ?? id;
   }
 }

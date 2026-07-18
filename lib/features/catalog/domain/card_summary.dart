@@ -20,6 +20,8 @@ enum KycDocument {
   final String label;
 }
 
+enum CardNetwork { visa, mastercard, other }
+
 class CardSummary {
   const CardSummary({
     required this.id,
@@ -46,6 +48,16 @@ class CardSummary {
   final String? sourceUrl;
   final Set<KycDocument> kycDocuments;
   final bool isNew;
+
+  CardNetwork get network {
+    final normalized = label.toLowerCase();
+    if (normalized.contains('visa')) return CardNetwork.visa;
+    if (normalized.contains('mastercard') ||
+        RegExp(r'(^|\W)mc($|\W)').hasMatch(normalized)) {
+      return CardNetwork.mastercard;
+    }
+    return CardNetwork.other;
+  }
 
   bool matches(String keyword) {
     final normalized = keyword.trim().toLowerCase();

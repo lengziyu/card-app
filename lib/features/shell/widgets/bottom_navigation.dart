@@ -97,6 +97,7 @@ class BottomNavigation extends StatelessWidget {
                         duration: MediaQuery.disableAnimationsOf(context)
                             ? Duration.zero
                             : Duration(milliseconds: 500),
+                        curve: Curves.easeOutCubic,
                         width: 58,
                         height: 58,
                         decoration: _glassDecoration(selected: addSelected),
@@ -228,7 +229,8 @@ class _NavItem extends StatelessWidget {
               AnimatedContainer(
                 duration: MediaQuery.disableAnimationsOf(context)
                     ? Duration.zero
-                    : Duration(milliseconds: 240),
+                    : Duration(milliseconds: 500),
+                curve: Curves.easeOutCubic,
                 width: double.infinity,
                 height: 46,
                 decoration: BoxDecoration(
@@ -252,10 +254,20 @@ class _NavItem extends StatelessWidget {
                         ]
                       : null,
                 ),
-                child: Icon(
-                  selected ? item.selectedIcon : item.icon,
-                  color: color,
-                  size: 25,
+                child: TweenAnimationBuilder<double>(
+                  key: ValueKey('${item.label}-$selected'),
+                  tween: Tween(begin: selected ? 0.86 : 1, end: 1),
+                  duration: MediaQuery.disableAnimationsOf(context)
+                      ? Duration.zero
+                      : Duration(milliseconds: selected ? 580 : 180),
+                  curve: selected ? Curves.elasticOut : Curves.easeOutCubic,
+                  builder: (context, scale, child) =>
+                      Transform.scale(scale: scale, child: child),
+                  child: Icon(
+                    selected ? item.selectedIcon : item.icon,
+                    color: color,
+                    size: 25,
+                  ),
                 ),
               ),
             ],

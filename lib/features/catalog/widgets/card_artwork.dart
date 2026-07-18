@@ -1,5 +1,6 @@
 import 'package:card_app/core/theme/app_colors.dart';
 import 'package:card_app/features/catalog/domain/card_summary.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 class CardArtwork extends StatelessWidget {
@@ -13,20 +14,36 @@ class CardArtwork extends StatelessWidget {
 
   final CardSummary card;
   final BoxFit fit;
-  final AlignmentGeometry alignment;
+  final Alignment alignment;
   final bool showGeneratedLabels;
 
   @override
   Widget build(BuildContext context) {
     final imageUrl = card.imageUrl;
     if (imageUrl != null && imageUrl.isNotEmpty) {
-      return Image.network(
-        imageUrl,
-        fit: fit,
-        alignment: alignment,
-        filterQuality: FilterQuality.medium,
-        errorBuilder: (_, _, _) =>
-            _GeneratedArtwork(card: card, showLabels: showGeneratedLabels),
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final pixelRatio = MediaQuery.devicePixelRatioOf(context);
+          final width = constraints.maxWidth.isFinite
+              ? (constraints.maxWidth * pixelRatio).round().clamp(1, 1280)
+              : null;
+          return CachedNetworkImage(
+            imageUrl: imageUrl,
+            fit: fit,
+            alignment: alignment,
+            memCacheWidth: width,
+            maxWidthDiskCache: 1280,
+            filterQuality: FilterQuality.medium,
+            fadeInDuration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : const Duration(milliseconds: 180),
+            fadeOutDuration: const Duration(milliseconds: 90),
+            placeholder: (_, _) =>
+                _GeneratedArtwork(card: card, showLabels: showGeneratedLabels),
+            errorWidget: (_, _, _) =>
+                _GeneratedArtwork(card: card, showLabels: showGeneratedLabels),
+          );
+        },
       );
     }
     final assetPath = card.assetPath;

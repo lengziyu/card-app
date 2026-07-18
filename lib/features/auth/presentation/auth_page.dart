@@ -53,6 +53,18 @@ class _AuthPageState extends State<AuthPage> {
     });
   }
 
+  void _previewSocialAuth(String provider) {
+    FocusScope.of(context).unfocus();
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text('$provider 授权入口已就绪，服务端 OAuth 配置完成后即可正式使用。'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+  }
+
   String? _validateAccount(String? value) {
     final account = value?.trim() ?? '';
     if (account.isEmpty) return '请输入用户名或邮箱';
@@ -107,7 +119,7 @@ class _AuthPageState extends State<AuthPage> {
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     final title = _isLogin ? '欢迎回来' : '创建账号';
-    final subtitle = _isLogin ? '登录后同步你的卡片收藏' : '使用用户名或邮箱开始集卡';
+    final subtitle = _isLogin ? '登录后同步你的卡片收藏' : '使用邮箱、Google 或 Apple 开始集卡';
 
     return CustomScrollView(
       key: Key(_isLogin ? 'login-page' : 'register-page'),
@@ -171,7 +183,7 @@ class _AuthPageState extends State<AuthPage> {
                         autocorrect: false,
                         enableSuggestions: false,
                         decoration: _decoration(
-                          hint: '用户名或邮箱',
+                          hint: '邮箱（支持 Gmail）或用户名',
                           icon: Icons.person_outline_rounded,
                         ),
                         validator: _validateAccount,
@@ -304,6 +316,37 @@ class _AuthPageState extends State<AuthPage> {
                           style: TextStyle(color: AppColors.cyan),
                         ),
                       ),
+                      Row(
+                        children: [
+                          Expanded(child: Divider(color: AppColors.line)),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: Text(
+                              '其他方式',
+                              style: TextStyle(
+                                color: AppColors.textMuted,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          Expanded(child: Divider(color: AppColors.line)),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      _SocialAuthButton(
+                        key: const Key('auth-google'),
+                        provider: 'Google',
+                        label: _isLogin ? '使用 Google 登录' : '使用 Google 注册',
+                        onPressed: () => _previewSocialAuth('Google'),
+                      ),
+                      const SizedBox(height: 10),
+                      _SocialAuthButton(
+                        key: const Key('auth-apple'),
+                        provider: 'Apple',
+                        label: _isLogin ? '使用 Apple 登录' : '使用 Apple 注册',
+                        onPressed: () => _previewSocialAuth('Apple'),
+                      ),
                     ],
                   ),
                 ),
@@ -346,6 +389,60 @@ class _BrandMark extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _SocialAuthButton extends StatelessWidget {
+  const _SocialAuthButton({
+    required this.provider,
+    required this.label,
+    required this.onPressed,
+    super.key,
+  });
+
+  final String provider;
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final isApple = provider == 'Apple';
+    return OutlinedButton(
+      onPressed: onPressed,
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size.fromHeight(52),
+        foregroundColor: AppColors.text,
+        backgroundColor: AppColors.glassStrong,
+        side: BorderSide(color: AppColors.line),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: SizedBox(
+              width: 28,
+              child: isApple
+                  ? Icon(Icons.apple, color: AppColors.text, size: 23)
+                  : const Text(
+                      'G',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Color(0xFF4285F4),
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+            ),
+          ),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+          ),
+        ],
+      ),
     );
   }
 }

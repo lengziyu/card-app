@@ -6,6 +6,7 @@ import 'package:card_app/features/catalog/widgets/card_artwork.dart';
 import 'package:card_app/features/home/domain/home_card_layout.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class CardStack extends StatefulWidget {
   const CardStack({
@@ -34,6 +35,7 @@ class CardStack extends StatefulWidget {
 class _CardStackState extends State<CardStack>
     with SingleTickerProviderStateMixin {
   static const _dragHold = Duration(milliseconds: 140);
+  static const _pinchHold = Duration(milliseconds: 140);
   static const _dragStartThreshold = 6.0;
   static const _earlyDragThreshold = 18.0;
   static const _autoScrollEdge = 84.0;
@@ -42,8 +44,10 @@ class _CardStackState extends State<CardStack>
   late final AnimationController _entryController;
   late List<CardSummary> _orderedCards;
   final Map<int, Offset> _pointers = {};
+  final Set<int> _pinchPointers = {};
 
   Timer? _dragArmTimer;
+  Timer? _pinchArmTimer;
   Timer? _autoScrollTimer;
   int? _primaryPointer;
   String? _pressedCardId;
@@ -58,6 +62,7 @@ class _CardStackState extends State<CardStack>
   bool _dragArmed = false;
   bool _pressCancelled = false;
   bool _isPinching = false;
+  bool _pinchPending = false;
   double _pinchStartDistance = 0;
   double _pinchStartScale = 1;
 
@@ -92,6 +97,7 @@ class _CardStackState extends State<CardStack>
   @override
   void dispose() {
     _dragArmTimer?.cancel();
+    _pinchArmTimer?.cancel();
     _autoScrollTimer?.cancel();
     _entryController.dispose();
     super.dispose();
@@ -150,12 +156,17 @@ class _CardStackState extends State<CardStack>
   }
 
   void _handlePointerUp(PointerEvent event) {
-    final wasPinching = _isPinching;
+    final wasPinching =
+        _isPinching || _pinchPending || _pinchPointers.contains(event.pointer);
     _pointers.remove(event.pointer);
     if (wasPinching) {
+      _pinchPointers.remove(event.pointer);
+      _pinchArmTimer?.cancel();
+      _pinchPending = false;
       if (_pointers.length < 2) {
+        final shouldNotify = _isPinching;
         _isPinching = false;
-        _setInteractionActive(false);
+        if (shouldNotify) _setInteractionActive(false);
         setState(() {});
       }
       if (event.pointer == _primaryPointer) _resetPress();
@@ -181,15 +192,27 @@ class _CardStackState extends State<CardStack>
   }
 
   void _beginPinch() {
-    final points = _pointers.values.take(2).toList();
     _dragArmTimer?.cancel();
     _finishDrag(notify: false);
-    _isPinching = true;
+    _pinchArmTimer?.cancel();
+    _pinchPointers
+      ..clear()
+      ..addAll(_pointers.keys);
+    _pinchPending = true;
     _pressCancelled = true;
-    _pinchStartDistance = (points[0] - points[1]).distance;
-    _pinchStartScale = widget.heightScale;
-    _setInteractionActive(true);
-    setState(() {});
+    _pinchArmTimer = Timer(_pinchHold, () {
+      if (!mounted || _pointers.length != 2 || !_pinchPending) return;
+      final points = _pointers.values.take(2).toList();
+      final distance = (points[0] - points[1]).distance;
+      if (distance <= 0) return;
+      _pinchStartDistance = distance;
+      _pinchStartScale = widget.heightScale;
+      _pinchPending = false;
+      _isPinching = true;
+      HapticFeedback.selectionClick();
+      _setInteractionActive(true);
+      setState(() {});
+    });
   }
 
   void _updatePinch() {

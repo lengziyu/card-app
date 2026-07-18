@@ -8,6 +8,11 @@ class LocalArticle {
     required this.tags,
     required this.publishedLabel,
     required this.relatedCardIds,
+    this.coverImageUrl,
+    this.markdown,
+    this.inviteCode,
+    this.inviteUrl,
+    this.author,
   });
 
   final String id;
@@ -18,6 +23,13 @@ class LocalArticle {
   final List<String> tags;
   final String publishedLabel;
   final List<String> relatedCardIds;
+  final String? coverImageUrl;
+
+  /// 原始 Markdown 正文。离线演示文章继续使用 [body] 作为兜底。
+  final String? markdown;
+  final String? inviteCode;
+  final String? inviteUrl;
+  final String? author;
 }
 
 const localArticles = <LocalArticle>[

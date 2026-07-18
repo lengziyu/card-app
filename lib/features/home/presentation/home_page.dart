@@ -141,6 +141,8 @@ class _HomeHeader extends StatelessWidget {
           label: '添加卡片',
           child: Material(
             color: Colors.transparent,
+            shape: const CircleBorder(),
+            clipBehavior: Clip.antiAlias,
             child: InkWell(
               key: Key('home-add-button'),
               onTap: onAddCard,
@@ -152,15 +154,6 @@ class _HomeHeader extends StatelessWidget {
                   shape: BoxShape.circle,
                   color: AppColors.glassStrong,
                   border: Border.all(color: AppColors.line),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.isDark
-                          ? Color(0x3D000000)
-                          : Color(0x385F6A96),
-                      blurRadius: 22,
-                      offset: Offset(0, 12),
-                    ),
-                  ],
                 ),
                 child: Icon(Icons.add_rounded, color: AppColors.text, size: 24),
               ),

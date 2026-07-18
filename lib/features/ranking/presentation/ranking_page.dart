@@ -6,6 +6,8 @@ import 'package:card_app/features/catalog/widgets/card_artwork.dart';
 import 'package:card_app/features/ranking/data/remote_ranking_repository.dart';
 import 'package:card_app/features/ranking/domain/local_article.dart';
 import 'package:card_app/features/ranking/domain/ranking_data.dart';
+import 'package:card_app/features/shell/widgets/animated_glass_segment.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 enum RankingTab { ranking, charts, metrics, articles }
@@ -78,6 +80,7 @@ class _RankingPageState extends State<RankingPage> {
   CardMetricsDashboard? _metrics;
   List<ArticleFeedItem>? _articles;
   final Set<RankingTab> _failed = {};
+  int _contentDirection = 1;
 
   @override
   void initState() {
@@ -136,29 +139,55 @@ class _RankingPageState extends State<RankingPage> {
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.paddingOf(context).bottom;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
     return CustomScrollView(
       key: const Key('ranking-page'),
       physics: const BouncingScrollPhysics(),
       slivers: [
+        SliverPersistentHeader(
+          pinned: true,
+          delegate: PinnedGlassHeaderDelegate(
+            height: 66,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 10),
+              child: _RankingTabs(selected: _tab, onChanged: _selectTab),
+            ),
+          ),
+        ),
         SliverPadding(
-          padding: EdgeInsets.fromLTRB(20, 18, 20, 132 + bottomInset),
+          padding: EdgeInsets.fromLTRB(
+            20,
+            _tab == RankingTab.ranking ? 22 : 10,
+            20,
+            132 + bottomInset,
+          ),
           sliver: SliverList.list(
             children: [
-              _RankingTabs(
-                selected: _tab,
-                onChanged: (tab) => setState(() => _tab = tab),
-              ),
-              SizedBox(height: _tab == RankingTab.ranking ? 22 : 10),
               AnimatedSwitcher(
-                duration: MediaQuery.disableAnimationsOf(context)
+                duration: reduceMotion
                     ? Duration.zero
-                    : const Duration(milliseconds: 240),
-                child: switch (_tab) {
-                  RankingTab.ranking => _rankingContent(),
-                  RankingTab.charts => _stablecoinContent(),
-                  RankingTab.metrics => _metricsContent(),
-                  RankingTab.articles => _articleContent(),
+                    : const Duration(milliseconds: 320),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                transitionBuilder: (child, animation) {
+                  final slide = Tween<Offset>(
+                    begin: Offset(0.055 * _contentDirection, 0),
+                    end: Offset.zero,
+                  ).animate(animation);
+                  return FadeTransition(
+                    opacity: animation,
+                    child: SlideTransition(position: slide, child: child),
+                  );
                 },
+                child: KeyedSubtree(
+                  key: ValueKey(_tab),
+                  child: switch (_tab) {
+                    RankingTab.ranking => _rankingContent(),
+                    RankingTab.charts => _stablecoinContent(),
+                    RankingTab.metrics => _metricsContent(),
+                    RankingTab.articles => _articleContent(),
+                  },
+                ),
               ),
             ],
           ),
@@ -167,12 +196,21 @@ class _RankingPageState extends State<RankingPage> {
     );
   }
 
+  void _selectTab(RankingTab tab) {
+    if (tab == _tab) return;
+    setState(() {
+      _contentDirection = tab.index > _tab.index ? 1 : -1;
+      _tab = tab;
+    });
+  }
+
   Widget _rankingContent() {
     if (_failed.contains(RankingTab.ranking)) {
-      return const _H5EmptyState(
+      return _H5EmptyState(
         key: ValueKey('ranking-unavailable'),
         title: '排行榜暂时没加载出来',
-        description: '稍后刷新或重新打开试试。',
+        description: '请检查网络后重新加载。',
+        onRetry: _reloadRankings,
       );
     }
     if (_groups == null) return const _LoadingPanel();
@@ -180,6 +218,18 @@ class _RankingPageState extends State<RankingPage> {
       groups: _groups!,
       cards: widget.cards,
       onOpenCard: widget.onOpenCard,
+    );
+  }
+
+  Future<void> _reloadRankings() async {
+    setState(() {
+      _groups = null;
+      _failed.remove(RankingTab.ranking);
+    });
+    await _load(
+      RankingTab.ranking,
+      widget.repository.loadRankings,
+      (value) => _groups = value,
     );
   }
 
@@ -253,92 +303,124 @@ class _LiveTierList extends StatelessWidget {
     return Column(
       key: const Key('ranking-live'),
       children: [
-        for (final group in groups) ...[
-          Container(
-            padding: const EdgeInsets.all(13),
-            decoration: _panelDecoration(radius: 18),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        for (var groupIndex = 0; groupIndex < groups.length; groupIndex++) ...[
+          _TierRow(
+            label: _tierLabel(groupIndex),
+            color: _tierColor(groupIndex),
+            child: Wrap(
+              spacing: 7,
+              runSpacing: 9,
+              alignment: WrapAlignment.center,
               children: [
-                SizedBox(
-                  width: 70,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        group.name,
-                        style: TextStyle(
-                          color: AppColors.text,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                      if (group.description.isNotEmpty) ...[
-                        const SizedBox(height: 5),
-                        Text(
-                          group.description,
-                          style: TextStyle(
-                            color: AppColors.textMuted,
-                            fontSize: 9,
-                            height: 1.3,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 10,
-                    children: [
-                      for (final id in group.cardIds)
-                        if (byId[id] case final card?)
-                          InkWell(
-                            key: Key('rank-card-${card.id}'),
-                            onTap: () => onOpenCard(card),
-                            borderRadius: BorderRadius.circular(9),
-                            child: SizedBox(
-                              width: 64,
-                              child: Column(
-                                children: [
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(7),
-                                    child: AspectRatio(
-                                      aspectRatio: 1.586,
-                                      child: CardArtwork(
-                                        card: card,
-                                        showGeneratedLabels: false,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    card.name,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color: AppColors.text,
-                                      fontSize: 8.5,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ],
+                for (final id in groups[groupIndex].cardIds)
+                  if (byId[id] case final card?)
+                    InkWell(
+                      key: Key('rank-card-${card.id}'),
+                      onTap: () => onOpenCard(card),
+                      borderRadius: BorderRadius.circular(9),
+                      child: SizedBox(
+                        width: 62,
+                        child: Column(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(7),
+                              child: AspectRatio(
+                                aspectRatio: 1.586,
+                                child: CardArtwork(
+                                  card: card,
+                                  showGeneratedLabels: false,
+                                ),
                               ),
                             ),
-                          ),
-                    ],
-                  ),
-                ),
+                            const SizedBox(height: 4),
+                            Text(
+                              card.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: AppColors.text,
+                                fontSize: 8.5,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
               ],
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
         ],
       ],
     );
   }
+
+  String _tierLabel(int index) => const ['S', 'A', 'B', 'C', 'D'][index % 5];
+
+  List<Color> _tierColor(int index) => switch (index % 5) {
+    0 => const [Color(0xFFFF1524), Color(0xFFE10614)],
+    1 => const [Color(0xFFFF7B1A), Color(0xFFFF5A0A)],
+    2 => const [Color(0xFFFFC928), Color(0xFFFFAE12)],
+    3 => const [Color(0xFF36A5FF), Color(0xFF1D83EE)],
+    _ => const [Color(0xFFB7BECE), Color(0xFF9BA4B8)],
+  };
+}
+
+class _TierRow extends StatelessWidget {
+  const _TierRow({
+    required this.label,
+    required this.color,
+    required this.child,
+  });
+
+  final String label;
+  final List<Color> color;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Container(
+        width: 52,
+        constraints: const BoxConstraints(minHeight: 96),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: color,
+          ),
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x1F5C66A0),
+              blurRadius: 23,
+              offset: Offset(0, 12),
+            ),
+          ],
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 22,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
+      const SizedBox(width: 8),
+      Expanded(
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 96),
+          padding: const EdgeInsets.fromLTRB(10, 12, 10, 10),
+          decoration: _panelDecoration(radius: 12),
+          child: child,
+        ),
+      ),
+    ],
+  );
 }
 
 class _LiveArticleList extends StatelessWidget {
@@ -372,6 +454,27 @@ class _LiveArticleList extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (item.coverImageUrl case final cover?) ...[
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(14),
+                        child: CachedNetworkImage(
+                          imageUrl: cover,
+                          width: double.infinity,
+                          fit: BoxFit.fitWidth,
+                          memCacheWidth: 1000,
+                          maxWidthDiskCache: 1200,
+                          fadeInDuration: const Duration(milliseconds: 180),
+                          placeholder: (_, _) => AspectRatio(
+                            aspectRatio: 16 / 9,
+                            child: ColoredBox(
+                              color: AppColors.violet.withValues(alpha: 0.08),
+                            ),
+                          ),
+                          errorWidget: (_, _, _) => const SizedBox.shrink(),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                    ],
                     Text(
                       item.article.category,
                       style: TextStyle(
@@ -435,82 +538,18 @@ class _RankingTabs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 48,
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: AppColors.glass,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.line),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.isDark
-                ? const Color(0x33000000)
-                : const Color(0x17646FA8),
-            blurRadius: 24,
-            offset: const Offset(0, 10),
+    return AnimatedGlassSegment<RankingTab>(
+      items: [
+        for (final tab in RankingTab.values)
+          GlassSegmentItem(
+            value: tab,
+            label: labels[tab]!,
+            key: Key('ranking-tab-${tab.name}'),
           ),
-        ],
-      ),
-      child: Row(
-        children: [
-          for (final tab in RankingTab.values)
-            Expanded(
-              child: InkWell(
-                key: Key('ranking-tab-${tab.name}'),
-                onTap: () => onChanged(tab),
-                borderRadius: BorderRadius.circular(20),
-                child: AnimatedContainer(
-                  duration: MediaQuery.disableAnimationsOf(context)
-                      ? Duration.zero
-                      : const Duration(milliseconds: 220),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    gradient: selected == tab
-                        ? LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: AppColors.isDark
-                                ? const [Color(0x57969EEA), Color(0x706771C2)]
-                                : const [Color(0xE8FFFFFF), Color(0xCFFFFFFF)],
-                          )
-                        : null,
-                    borderRadius: BorderRadius.circular(20),
-                    border: selected == tab
-                        ? Border.all(
-                            color: AppColors.isDark
-                                ? const Color(0x1FFFFFFF)
-                                : const Color(0x4D5E79FF),
-                          )
-                        : null,
-                    boxShadow: selected == tab
-                        ? [
-                            BoxShadow(
-                              color: AppColors.isDark
-                                  ? const Color(0x47503C88)
-                                  : const Color(0x245360B4),
-                              blurRadius: 20,
-                              offset: const Offset(0, 8),
-                            ),
-                          ]
-                        : null,
-                  ),
-                  child: Text(
-                    labels[tab]!,
-                    maxLines: 1,
-                    style: TextStyle(
-                      color: selected == tab
-                          ? AppColors.cyan
-                          : AppColors.textMuted,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
+      ],
+      selected: selected,
+      onChanged: onChanged,
+      fontSize: 11,
     );
   }
 }
@@ -519,11 +558,13 @@ class _H5EmptyState extends StatelessWidget {
   const _H5EmptyState({
     required this.title,
     required this.description,
+    this.onRetry,
     super.key,
   });
 
   final String title;
   final String description;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -552,6 +593,10 @@ class _H5EmptyState extends StatelessWidget {
               height: 1.4,
             ),
           ),
+          if (onRetry != null) ...[
+            const SizedBox(height: 16),
+            TextButton(onPressed: onRetry, child: const Text('重新加载')),
+          ],
         ],
       ),
     );

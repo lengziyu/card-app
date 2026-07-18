@@ -38,6 +38,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('card-preview-page')), findsOneWidget);
+    expect(find.byKey(const Key('home-title')), findsNothing);
   });
 
   testWidgets('home card previews crop from the top like H5', (tester) async {
@@ -80,6 +81,50 @@ void main() {
     expect(clampHomeCardHeightScale(0), homeCardHeightScaleMin);
     expect(clampHomeCardHeightScale(10), homeCardHeightScaleMax);
     expect(homeCardHeightPercent(1), 62);
+  });
+
+  testWidgets('two-finger hold then pinch changes the home card height', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const CardApp());
+    await tester.pumpAndSettle();
+
+    final stack = find.byKey(const Key('card-stack'));
+    final initialHeight = tester.getSize(stack).height;
+    final center = tester.getTopLeft(stack) + const Offset(200, 110);
+    tester.binding.handlePointerEvent(
+      PointerDownEvent(pointer: 11, position: center - const Offset(32, 0)),
+    );
+    tester.binding.handlePointerEvent(
+      PointerDownEvent(pointer: 12, position: center + const Offset(32, 0)),
+    );
+    await tester.pump(const Duration(milliseconds: 160));
+    tester.binding.handlePointerEvent(
+      PointerMoveEvent(
+        pointer: 11,
+        position: center - const Offset(66, 0),
+        delta: const Offset(-34, 0),
+      ),
+    );
+    tester.binding.handlePointerEvent(
+      PointerMoveEvent(
+        pointer: 12,
+        position: center + const Offset(66, 0),
+        delta: const Offset(34, 0),
+      ),
+    );
+    await tester.pump();
+    tester.binding.handlePointerEvent(
+      PointerUpEvent(pointer: 11, position: center - const Offset(66, 0)),
+    );
+    tester.binding.handlePointerEvent(
+      PointerUpEvent(pointer: 12, position: center + const Offset(66, 0)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('card-preview-page')), findsNothing);
+    expect(stack, findsOneWidget);
+    expect(tester.getSize(stack).height, greaterThan(initialHeight));
   });
 
   testWidgets('home title toggles the bottom navigation like H5', (
@@ -357,6 +402,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('login-page')), findsOneWidget);
     expect(find.byKey(const Key('auth-service-notice')), findsOneWidget);
+    expect(find.byKey(const Key('auth-google')), findsOneWidget);
+    expect(find.byKey(const Key('auth-apple')), findsOneWidget);
     expect(find.byKey(const Key('nav-我的')), findsNothing);
   });
 
@@ -562,14 +609,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('catalog-card-etherfi-core')));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.byKey(const Key('detail-correction')),
-      400,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.drag(find.byType(Scrollable).first, const Offset(0, -100));
+    await tester.tap(find.byKey(const Key('detail-more')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('detail-correction')));
+    await tester.tap(find.byKey(const Key('detail-action-correction')));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('card-correction-page')), findsOneWidget);
@@ -584,6 +626,33 @@ void main() {
     await tester.tap(find.byKey(const Key('correction-back')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('card-preview-page')), findsOneWidget);
+  });
+
+  testWidgets('card detail more menu exposes H5 actions', (tester) async {
+    await tester.pumpWidget(const CardApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('home-card-etherfi-core')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('detail-more')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('detail-action-favorite')), findsOneWidget);
+    expect(find.byKey(const Key('detail-effect-particle')), findsOneWidget);
+    expect(find.byKey(const Key('detail-action-similar')), findsOneWidget);
+    expect(find.byKey(const Key('detail-action-official')), findsOneWidget);
+    expect(find.byKey(const Key('detail-action-correction')), findsOneWidget);
+    expect(find.byKey(const Key('detail-action-remove')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('detail-effect-flame')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('detail-action-favorite')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('detail-more')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('detail-action-similar')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('market-page')), findsOneWidget);
+    expect(find.byKey(const Key('card-preview-page')), findsNothing);
   });
 
   testWidgets('ranking article state mirrors the unavailable H5 service', (

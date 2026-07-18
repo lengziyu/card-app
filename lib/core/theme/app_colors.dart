@@ -22,7 +22,7 @@ abstract final class AppColors {
   static Color get surfaceRaised =>
       _dark ? const Color(0xFF262A3A) : const Color(0xFFF9FAFF);
   static Color get line =>
-      _dark ? const Color(0x14FFFFFF) : const Color(0xC2FFFFFF);
+      _dark ? const Color(0x14FFFFFF) : const Color(0x8AFFFFFF);
   static Color get text =>
       _dark ? const Color(0xFFF2F5FF) : const Color(0xFF10131D);
   static Color get textMuted =>
@@ -36,10 +36,10 @@ abstract final class AppColors {
 
   static Color get glass => _dark
       ? const Color.fromRGBO(35, 39, 55, 0.66)
-      : const Color.fromRGBO(255, 255, 255, 0.66);
+      : const Color.fromRGBO(255, 255, 255, 0.58);
   static Color get glassStrong => _dark
       ? const Color.fromRGBO(38, 42, 58, 0.82)
-      : const Color.fromRGBO(255, 255, 255, 0.82);
+      : const Color.fromRGBO(255, 255, 255, 0.72);
   static Color get navIcon =>
       _dark ? const Color(0xFFADB4C8) : const Color(0xFF697185);
   static Color get selectedWash =>

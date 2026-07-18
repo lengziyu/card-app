@@ -112,7 +112,7 @@ void main() {
                   'id': 'popular',
                   'name': '热门',
                   'description': '公开排行',
-                  'cardIds': ['card-1'],
+                  'cardIds': ['etherfi'],
                 },
               ],
             },
@@ -177,11 +177,19 @@ void main() {
       );
       final repository = RemoteRankingRepository(client);
 
-      expect((await repository.loadRankings()).single.cardIds, ['card-1']);
+      expect((await repository.loadRankings()).single.cardIds, [
+        'etherfi-core',
+      ]);
       expect((await repository.loadStablecoins()).assets.single.id, '1');
       expect((await repository.loadStablecoinDetail('1')).history, [1, 2, 3]);
       expect((await repository.loadMetrics()).items.single.total, 100);
-      expect((await repository.loadArticles()).single.article.id, 'news-one');
+      final article = (await repository.loadArticles()).single;
+      expect(article.article.id, 'news-one');
+      expect(article.coverImageUrl, 'https://example.test/covers/news.jpg');
+      expect(
+        article.article.coverImageUrl,
+        'https://example.test/covers/news.jpg',
+      );
       expect((await repository.loadArticle('news-one')).article.body, [
         '第一段',
         '第二段',
@@ -202,6 +210,7 @@ const _articleJson = <String, Object?>{
   'slug': 'news-one',
   'title': '文章',
   'summary': '摘要',
+  'coverImageUrl': '/covers/news.jpg',
   'category': 'news',
   'tags': ['行业'],
   'relatedCardIds': ['card-1'],

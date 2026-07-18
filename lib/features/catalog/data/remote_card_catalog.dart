@@ -6,10 +6,23 @@ class RemoteCardCatalogRepository implements CardCatalogRepository {
 
   final ApiClient _apiClient;
   List<CardSummary>? _cache;
+  Future<List<CardSummary>>? _inFlight;
 
   @override
   Future<List<CardSummary>> loadCards({bool force = false}) async {
     if (!force && _cache != null) return _cache!;
+    final pending = _inFlight;
+    if (!force && pending != null) return pending;
+    final request = _fetchCards();
+    _inFlight = request;
+    try {
+      return await request;
+    } finally {
+      if (identical(_inFlight, request)) _inFlight = null;
+    }
+  }
+
+  Future<List<CardSummary>> _fetchCards() async {
     final response = jsonObject(
       await _apiClient.get(
         '/api/cards',

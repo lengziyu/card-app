@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:card_app/features/add/presentation/add_card_page.dart';
 import 'package:card_app/features/auth/presentation/auth_page.dart';
 import 'package:card_app/core/network/api_client.dart';
@@ -24,6 +25,7 @@ import 'package:card_app/features/ranking/presentation/ranking_page.dart';
 import 'package:card_app/features/shell/widgets/aurora_background.dart';
 import 'package:card_app/features/shell/widgets/bottom_navigation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AppShell extends StatefulWidget {
@@ -148,6 +150,9 @@ class _AppShellState extends State<AppShell> {
               ..addAll(homeIds);
           }
         });
+        _warmCardArtwork(
+          sortedCards.where((card) => homeIds.contains(card.id)).take(8),
+        );
       }
     } catch (_) {
       // 市场展示正式失败态；搜索继续使用随包目录作为离线兜底。
@@ -162,6 +167,22 @@ class _AppShellState extends State<AppShell> {
     }
   }
 
+  void _warmCardArtwork(Iterable<CardSummary> cards) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      for (final card in cards) {
+        final imageUrl = card.imageUrl;
+        if (imageUrl == null || imageUrl.isEmpty) continue;
+        unawaited(
+          precacheImage(
+            CachedNetworkImageProvider(imageUrl),
+            context,
+          ).catchError((_) {}),
+        );
+      }
+    });
+  }
+
   @override
   void dispose() {
     _apiClient.close();
@@ -169,6 +190,7 @@ class _AppShellState extends State<AppShell> {
   }
 
   void _addCard() {
+    HapticFeedback.selectionClick();
     setState(() {
       _index = 4;
       _navigationHidden = false;
@@ -281,6 +303,19 @@ class _AppShellState extends State<AppShell> {
     });
   }
 
+  void _viewSimilarCards() {
+    setState(() {
+      _index = 1;
+      _navigationHidden = false;
+      _searchMode = null;
+      _previewCard = null;
+      _authMode = null;
+      _profileSection = null;
+      _article = null;
+      _correctionCard = null;
+    });
+  }
+
   void _closeOverlay() {
     setState(() {
       if (_correctionCard != null) {
@@ -300,6 +335,8 @@ class _AppShellState extends State<AppShell> {
   }
 
   void _selectDestination(int index) {
+    if (index == _index) return;
+    HapticFeedback.selectionClick();
     setState(() {
       _index = index;
       _navigationHidden = false;
@@ -334,15 +371,71 @@ class _AppShellState extends State<AppShell> {
             bottom: false,
             child: Stack(
               children: [
-                Positioned.fill(child: _body()),
+                Positioned.fill(
+                  child: Offstage(
+                    offstage: hasOverlay,
+                    child: IgnorePointer(
+                      ignoring: hasOverlay,
+                      child: ExcludeSemantics(
+                        excluding: hasOverlay,
+                        child: _mainBody(),
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned.fill(
+                  child: AnimatedSwitcher(
+                    duration: MediaQuery.disableAnimationsOf(context)
+                        ? Duration.zero
+                        : const Duration(milliseconds: 360),
+                    reverseDuration: MediaQuery.disableAnimationsOf(context)
+                        ? Duration.zero
+                        : const Duration(milliseconds: 280),
+                    switchInCurve: Curves.easeOutCubic,
+                    switchOutCurve: Curves.easeInCubic,
+                    transitionBuilder: (child, animation) => FadeTransition(
+                      opacity: animation,
+                      child: SlideTransition(
+                        position: Tween<Offset>(
+                          begin: const Offset(0.055, 0),
+                          end: Offset.zero,
+                        ).animate(animation),
+                        child: child,
+                      ),
+                    ),
+                    layoutBuilder: (currentChild, previousChildren) =>
+                        currentChild ?? const SizedBox.shrink(),
+                    child: hasOverlay
+                        ? _EdgeSwipeBack(
+                            key: ValueKey(_overlayIdentity),
+                            onBack: _closeOverlay,
+                            child: _overlayBody()!,
+                          )
+                        : const SizedBox.shrink(key: ValueKey('main-pages')),
+                  ),
+                ),
                 if (!hasOverlay && !_navigationHidden)
                   Align(
                     alignment: Alignment.bottomCenter,
-                    child: BottomNavigation(
-                      selectedIndex: _index,
-                      addSelected: _index == 4,
-                      onDestinationSelected: _selectDestination,
-                      onAdd: _addCard,
+                    child: TweenAnimationBuilder<double>(
+                      tween: Tween(begin: 0, end: 1),
+                      duration: MediaQuery.disableAnimationsOf(context)
+                          ? Duration.zero
+                          : const Duration(milliseconds: 300),
+                      curve: Curves.easeOutCubic,
+                      builder: (context, value, child) => Opacity(
+                        opacity: value,
+                        child: Transform.translate(
+                          offset: Offset(0, (1 - value) * 18),
+                          child: child,
+                        ),
+                      ),
+                      child: BottomNavigation(
+                        selectedIndex: _index,
+                        addSelected: _index == 4,
+                        onDestinationSelected: _selectDestination,
+                        onAdd: _addCard,
+                      ),
                     ),
                   ),
               ],
@@ -353,7 +446,17 @@ class _AppShellState extends State<AppShell> {
     );
   }
 
-  Widget _body() {
+  String get _overlayIdentity {
+    if (_correctionCard case final card?) return 'correction-${card.id}';
+    if (_previewCard case final card?) return 'preview-${card.id}';
+    if (_authMode case final mode?) return 'auth-${mode.name}';
+    if (_article case final article?) return 'article-${article.id}';
+    if (_profileSection case final section?) return 'profile-${section.name}';
+    if (_searchMode case final mode?) return 'search-${mode.name}';
+    return 'main-pages';
+  }
+
+  Widget? _overlayBody() {
     final correctionCard = _correctionCard;
     if (correctionCard != null) {
       return CardCorrectionPage(card: correctionCard, onBack: _closeOverlay);
@@ -380,6 +483,7 @@ class _AppShellState extends State<AppShell> {
           onFavoriteChanged: (favorite) =>
               _changeCardFavorite(previewCard, favorite),
           onCorrection: () => _openCorrection(previewCard),
+          onViewSimilar: _viewSimilarCards,
         );
       }
       return FutureBuilder(
@@ -397,6 +501,7 @@ class _AppShellState extends State<AppShell> {
             onFavoriteChanged: (favorite) =>
                 _changeCardFavorite(previewCard, favorite),
             onCorrection: () => _openCorrection(previewCard),
+            onViewSimilar: _viewSimilarCards,
           );
         },
       );
@@ -446,54 +551,203 @@ class _AppShellState extends State<AppShell> {
         onCardChanged: _changeCard,
       );
     }
-    if (_index == 0) {
-      return HomePage(
-        cards: _cardsForIds(_addedCardIds),
-        cardHeightScale: _homeCardHeightScale,
-        onAddCard: _addCard,
-        onOpenCard: _openCard,
-        onCardHeightScaleChanged: _changeHomeCardHeightScale,
-        onReorderCards: _reorderHomeCards,
-        onToggleNavigation: () =>
-            setState(() => _navigationHidden = !_navigationHidden),
-      );
-    }
-    if (_index == 1) {
-      return MarketPage(
-        repository: _catalogRepository,
-        onSearch: () => _showSearch(CardSearchMode.market),
-        onOpenCard: _openCard,
-      );
-    }
-    if (_index == 4) {
-      return AddCardPage(
-        cards: _catalogCards,
-        addedCardIds: _addedCardIds,
-        onCardChanged: _changeCard,
-        onSearch: () => _showSearch(CardSearchMode.add),
-      );
-    }
-    if (_index == 2) {
-      return RankingPage(
-        cards: _catalogCards,
-        onOpenCard: _openCard,
-        onOpenArticle: _openArticle,
-        repository: _rankingRepository,
-        enableRemoteData: widget.enableRemoteData,
-      );
-    }
-    if (_index == 3) {
-      return ProfilePage(
-        cardCount: _addedCardIds.length,
-        favoriteCount: _favoriteCardIds.length + _favoriteArticleIds.length,
-        historyCount: _recentCardIds.length,
-        onLogin: () => _showAuth(AuthMode.login),
-        onOpenSection: _openProfileSection,
-        isDarkMode: widget.isDarkMode,
-        onToggleTheme: widget.onToggleTheme,
-      );
-    }
-    return const SizedBox.shrink();
+    return null;
+  }
+
+  Widget _mainBody() {
+    return _AnimatedTabStage(
+      index: _index,
+      children: [
+        HomePage(
+          cards: _cardsForIds(_addedCardIds),
+          cardHeightScale: _homeCardHeightScale,
+          onAddCard: _addCard,
+          onOpenCard: _openCard,
+          onCardHeightScaleChanged: _changeHomeCardHeightScale,
+          onReorderCards: _reorderHomeCards,
+          onToggleNavigation: () =>
+              setState(() => _navigationHidden = !_navigationHidden),
+        ),
+        MarketPage(
+          repository: _catalogRepository,
+          onSearch: () => _showSearch(CardSearchMode.market),
+          onOpenCard: _openCard,
+        ),
+        RankingPage(
+          cards: _catalogCards,
+          onOpenCard: _openCard,
+          onOpenArticle: _openArticle,
+          repository: _rankingRepository,
+          enableRemoteData: widget.enableRemoteData,
+        ),
+        ProfilePage(
+          cardCount: _addedCardIds.length,
+          favoriteCount: _favoriteCardIds.length + _favoriteArticleIds.length,
+          historyCount: _recentCardIds.length,
+          onLogin: () => _showAuth(AuthMode.login),
+          onOpenSection: _openProfileSection,
+          isDarkMode: widget.isDarkMode,
+          onToggleTheme: widget.onToggleTheme,
+        ),
+        AddCardPage(
+          cards: _catalogCards,
+          addedCardIds: _addedCardIds,
+          onCardChanged: _changeCard,
+          onSearch: () => _showSearch(CardSearchMode.add),
+        ),
+      ],
+    );
+  }
+}
+
+class _AnimatedTabStage extends StatefulWidget {
+  const _AnimatedTabStage({required this.index, required this.children});
+
+  final int index;
+  final List<Widget> children;
+
+  @override
+  State<_AnimatedTabStage> createState() => _AnimatedTabStageState();
+}
+
+/// H5 页面在触屏设备上支持从左边缘右滑返回；所有二级页面共用这一层。
+class _EdgeSwipeBack extends StatefulWidget {
+  const _EdgeSwipeBack({required this.child, required this.onBack, super.key});
+
+  final Widget child;
+  final VoidCallback onBack;
+
+  @override
+  State<_EdgeSwipeBack> createState() => _EdgeSwipeBackState();
+}
+
+class _EdgeSwipeBackState extends State<_EdgeSwipeBack> {
+  bool _tracking = false;
+  double _distance = 0;
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    behavior: HitTestBehavior.translucent,
+    onHorizontalDragStart: (details) {
+      _tracking = details.globalPosition.dx <= 28;
+      _distance = 0;
+    },
+    onHorizontalDragUpdate: (details) {
+      if (_tracking && details.primaryDelta != null) {
+        _distance += details.primaryDelta!;
+      }
+    },
+    onHorizontalDragEnd: (details) {
+      final velocity = details.primaryVelocity ?? 0;
+      if (_tracking && (_distance > 72 || velocity > 680)) widget.onBack();
+      _tracking = false;
+      _distance = 0;
+    },
+    onHorizontalDragCancel: () {
+      _tracking = false;
+      _distance = 0;
+    },
+    child: widget.child,
+  );
+}
+
+class _AnimatedTabStageState extends State<_AnimatedTabStage>
+    with SingleTickerProviderStateMixin {
+  late final Set<int> _visited = {widget.index};
+  late final AnimationController _controller;
+  int? _outgoingIndex;
+  int _direction = 1;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 340),
+          value: 1,
+        )..addStatusListener((status) {
+          if (status == AnimationStatus.completed && _outgoingIndex != null) {
+            setState(() => _outgoingIndex = null);
+          }
+        });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _controller.duration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : const Duration(milliseconds: 340);
+  }
+
+  @override
+  void didUpdateWidget(covariant _AnimatedTabStage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.index == widget.index) return;
+    _visited.add(widget.index);
+    _outgoingIndex = oldWidget.index;
+    _direction = widget.index > oldWidget.index ? 1 : -1;
+    _controller.forward(from: 0);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final curvedAnimation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOutCubic,
+    );
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        for (
+          var childIndex = 0;
+          childIndex < widget.children.length;
+          childIndex++
+        )
+          if (_visited.contains(childIndex))
+            KeyedSubtree(
+              key: ValueKey('main-tab-$childIndex'),
+              child: Offstage(
+                offstage:
+                    childIndex != widget.index && childIndex != _outgoingIndex,
+                child: IgnorePointer(
+                  ignoring: childIndex != widget.index,
+                  child: ExcludeSemantics(
+                    excluding: childIndex != widget.index,
+                    child: TickerMode(
+                      enabled:
+                          childIndex == widget.index ||
+                          childIndex == _outgoingIndex,
+                      child: FadeTransition(
+                        opacity: childIndex == widget.index
+                            ? curvedAnimation
+                            : ReverseAnimation(curvedAnimation),
+                        child: SlideTransition(
+                          position: Tween<Offset>(
+                            begin: childIndex == widget.index
+                                ? Offset(_direction * 0.045, 0)
+                                : Offset.zero,
+                            end: childIndex == widget.index
+                                ? Offset.zero
+                                : Offset(_direction * -0.025, 0),
+                          ).animate(curvedAnimation),
+                          child: widget.children[childIndex],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+      ],
+    );
   }
 }
 

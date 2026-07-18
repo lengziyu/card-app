@@ -22,17 +22,17 @@ class CatalogCardRow extends StatelessWidget {
     final isAdded = added ?? false;
     return Material(
       color: AppColors.glass,
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(10),
       child: InkWell(
         key: Key('catalog-card-${card.id}'),
         onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(10),
         child: ConstrainedBox(
           constraints: BoxConstraints(minHeight: 88),
           child: Ink(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(10),
               border: Border.all(color: AppColors.line),
             ),
             child: Row(
@@ -40,12 +40,12 @@ class CatalogCardRow extends StatelessWidget {
                 ClipRRect(
                   borderRadius: BorderRadius.circular(10),
                   child: SizedBox(
-                    width: 92,
-                    height: 58,
+                    width: 112,
+                    height: 70,
                     child: CardArtwork(card: card, showGeneratedLabels: false),
                   ),
                 ),
-                SizedBox(width: 14),
+                SizedBox(width: 17),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -70,17 +70,6 @@ class CatalogCardRow extends StatelessWidget {
                           color: AppColors.textMuted,
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      SizedBox(height: 3),
-                      Text(
-                        card.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: Color(card.tint).withValues(alpha: 0.9),
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ],
@@ -109,7 +98,7 @@ class CatalogCardRow extends StatelessWidget {
                     ),
                   )
                 else
-                  Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
+                  _CardNetworkMark(network: card.network, fallback: card.label),
               ],
             ),
           ),
@@ -117,4 +106,75 @@ class CatalogCardRow extends StatelessWidget {
       ),
     );
   }
+}
+
+class _CardNetworkMark extends StatelessWidget {
+  const _CardNetworkMark({required this.network, required this.fallback});
+
+  final CardNetwork network;
+  final String fallback;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 64,
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: switch (network) {
+          CardNetwork.visa => Text(
+            'VISA',
+            style: TextStyle(
+              color: AppColors.isDark
+                  ? const Color(0xFF4F86FF)
+                  : const Color(0xFF0A347E),
+              fontSize: 20,
+              fontWeight: FontWeight.w900,
+              fontStyle: FontStyle.italic,
+              letterSpacing: -1.2,
+            ),
+          ),
+          CardNetwork.mastercard => const _MastercardMark(),
+          CardNetwork.other => Text(
+            fallback.split('·').first.trim(),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.right,
+            style: TextStyle(
+              color: AppColors.textMuted,
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        },
+      ),
+    );
+  }
+}
+
+class _MastercardMark extends StatelessWidget {
+  const _MastercardMark();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 43,
+      height: 28,
+      child: Stack(
+        children: [
+          Positioned(left: 1, top: 3, child: _circle(const Color(0xFFEB001B))),
+          Positioned(
+            right: 1,
+            top: 3,
+            child: _circle(const Color(0xFFF79E1B).withValues(alpha: 0.92)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _circle(Color color) => Container(
+    width: 25,
+    height: 25,
+    decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+  );
 }
