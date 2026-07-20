@@ -1,7 +1,9 @@
+import 'package:card_app/core/localization/app_language.dart';
 import 'package:card_app/core/theme/app_colors.dart';
 import 'package:card_app/core/theme/app_theme.dart';
 import 'package:card_app/features/shell/presentation/app_shell.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class CardApp extends StatefulWidget {
@@ -15,12 +17,33 @@ class CardApp extends StatefulWidget {
 
 class _CardAppState extends State<CardApp> {
   static const _themePreferenceKey = 'card-h5-theme-v1';
+  static const _languagePreferenceKey = 'card-app-language-v1';
   ThemeMode _themeMode = ThemeMode.light;
+  AppLanguage _language = AppLanguage.system;
 
   @override
   void initState() {
     super.initState();
     _restoreTheme();
+    _restoreLanguage();
+  }
+
+  Future<void> _restoreLanguage() async {
+    final preferences = await SharedPreferences.getInstance();
+    final savedLanguage = AppLanguage.fromStorage(
+      preferences.getString(_languagePreferenceKey),
+    );
+    if (!mounted || savedLanguage == _language) return;
+    setState(() => _language = savedLanguage);
+  }
+
+  void _changeLanguage(AppLanguage language) {
+    if (language == _language) return;
+    setState(() => _language = language);
+    SharedPreferences.getInstance().then(
+      (preferences) =>
+          preferences.setString(_languagePreferenceKey, language.storageKey),
+    );
   }
 
   Future<void> _restoreTheme() async {
@@ -57,10 +80,19 @@ class _CardAppState extends State<CardApp> {
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: _themeMode,
+      locale: _language.locale,
+      supportedLocales: AppLanguage.supportedLocales,
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: AppShell(
         enableRemoteData: widget.enableRemoteData,
         isDarkMode: _themeMode == ThemeMode.dark,
         onToggleTheme: _toggleTheme,
+        selectedLanguage: _language,
+        onLanguageChanged: _changeLanguage,
       ),
     );
   }

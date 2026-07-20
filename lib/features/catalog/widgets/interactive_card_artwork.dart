@@ -27,6 +27,7 @@ class _InteractiveCardArtworkState extends State<InteractiveCardArtwork>
     with TickerProviderStateMixin {
   late final AnimationController _entranceController;
   late final AnimationController _idleController;
+  late final AnimationController _glassSweepController;
   final List<_PixelParticle> _pixels = [];
 
   ImageStream? _imageStream;
@@ -51,6 +52,10 @@ class _InteractiveCardArtworkState extends State<InteractiveCardArtwork>
       vsync: this,
       duration: const Duration(milliseconds: 2800),
     );
+    _glassSweepController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 3400),
+    );
   }
 
   @override
@@ -61,6 +66,7 @@ class _InteractiveCardArtworkState extends State<InteractiveCardArtwork>
     if (_lastReduceMotion != reduceMotion) {
       _lastReduceMotion = reduceMotion;
       _startEffect();
+      _configureGlassSweep();
     }
   }
 
@@ -103,6 +109,16 @@ class _InteractiveCardArtworkState extends State<InteractiveCardArtwork>
         ..repeat();
     } else {
       _idleController.value = .18;
+    }
+  }
+
+  void _configureGlassSweep() {
+    if ((_lastReduceMotion ?? false) || _isWidgetTest) {
+      _glassSweepController.value = .42;
+      return;
+    }
+    if (!_glassSweepController.isAnimating) {
+      _glassSweepController.repeat();
     }
   }
 
@@ -273,6 +289,7 @@ class _InteractiveCardArtworkState extends State<InteractiveCardArtwork>
     _detachImageListener();
     _entranceController.dispose();
     _idleController.dispose();
+    _glassSweepController.dispose();
     super.dispose();
   }
 
@@ -302,6 +319,7 @@ class _InteractiveCardArtworkState extends State<InteractiveCardArtwork>
               animation: Listenable.merge([
                 _entranceController,
                 _idleController,
+                _glassSweepController,
               ]),
               builder: (context, _) {
                 final entrance = _entranceController.value;
@@ -314,6 +332,12 @@ class _InteractiveCardArtworkState extends State<InteractiveCardArtwork>
                 final blur = widget.effect == CardVisualEffect.flame
                     ? (1 - reveal) * 11
                     : 0.0;
+                final glassProgress = Curves.easeOut.transform(
+                  _glassSweepController.value,
+                );
+                final glassOpacity = _glassSweepOpacity(
+                  _glassSweepController.value,
+                );
                 return Stack(
                   clipBehavior: Clip.none,
                   alignment: Alignment.center,
@@ -327,11 +351,26 @@ class _InteractiveCardArtworkState extends State<InteractiveCardArtwork>
                             child: SizedBox(
                               width: cardSize.width * 1.62,
                               height: cardSize.height * 2.08,
-                              child: CustomPaint(
-                                painter: _effectPainter(
-                                  entrance: entrance,
-                                  idle: _idleController.value,
-                                  cardSize: cardSize,
+                              child: ShaderMask(
+                                blendMode: BlendMode.dstIn,
+                                shaderCallback: (bounds) =>
+                                    const LinearGradient(
+                                      colors: [
+                                        Colors.transparent,
+                                        Colors.transparent,
+                                        Colors.black,
+                                        Colors.black,
+                                        Colors.transparent,
+                                        Colors.transparent,
+                                      ],
+                                      stops: [0, .16, .28, .72, .84, 1],
+                                    ).createShader(bounds),
+                                child: CustomPaint(
+                                  painter: _effectPainter(
+                                    entrance: entrance,
+                                    idle: _idleController.value,
+                                    cardSize: cardSize,
+                                  ),
                                 ),
                               ),
                             ),
@@ -379,27 +418,53 @@ class _InteractiveCardArtworkState extends State<InteractiveCardArtwork>
                               fit: StackFit.expand,
                               children: [
                                 CardArtwork(card: widget.card),
-                                // 对齐 H5 的窄幅玻璃扫光，避免覆盖成一整片白带。
-                                IgnorePointer(
-                                  child: DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        begin: const Alignment(-0.8, 1),
-                                        end: const Alignment(-0.08, -1),
-                                        colors: [
-                                          Colors.transparent,
-                                          Colors.white.withValues(alpha: 0.02),
-                                          Colors.white.withValues(alpha: 0.16),
-                                          Colors.white.withValues(alpha: 0.05),
-                                          Colors.transparent,
-                                        ],
-                                        stops: const [
-                                          0,
-                                          0.34,
-                                          0.46,
-                                          0.58,
-                                          0.70,
-                                        ],
+                                Positioned(
+                                  top: -cardSize.height * .1,
+                                  bottom: -cardSize.height * .1,
+                                  left:
+                                      -cardSize.width * .3 +
+                                      glassProgress * cardSize.width * 1.104,
+                                  width: cardSize.width * .24,
+                                  child: IgnorePointer(
+                                    child: Opacity(
+                                      opacity: glassOpacity,
+                                      child: ImageFiltered(
+                                        imageFilter: ui.ImageFilter.blur(
+                                          sigmaX: 2,
+                                          sigmaY: 2,
+                                        ),
+                                        child: Transform(
+                                          transform: Matrix4.skewX(-.31),
+                                          alignment: Alignment.center,
+                                          child: DecoratedBox(
+                                            decoration: BoxDecoration(
+                                              gradient: LinearGradient(
+                                                begin: Alignment.topLeft,
+                                                end: Alignment.bottomRight,
+                                                colors: [
+                                                  Colors.transparent,
+                                                  Colors.white.withValues(
+                                                    alpha: .03,
+                                                  ),
+                                                  Colors.white.withValues(
+                                                    alpha: .38,
+                                                  ),
+                                                  Colors.white.withValues(
+                                                    alpha: .14,
+                                                  ),
+                                                  Colors.transparent,
+                                                ],
+                                                stops: const [
+                                                  0,
+                                                  .24,
+                                                  .46,
+                                                  .58,
+                                                  1,
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -478,6 +543,14 @@ double _interval(double value, double start, double end) {
 
 double _easeOutCubic(double value) =>
     1 - math.pow(1 - value.clamp(0.0, 1.0), 3).toDouble();
+
+double _glassSweepOpacity(double progress) {
+  if (progress <= .18) return progress / .18 * .55;
+  if (progress <= .32) {
+    return .55 + (progress - .18) / .14 * (.36 - .55);
+  }
+  return (.36 * (1 - (progress - .32) / .68)).clamp(0.0, 1.0);
+}
 
 class _PixelParticle {
   const _PixelParticle({

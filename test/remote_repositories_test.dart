@@ -6,6 +6,7 @@ import 'package:card_app/features/catalog/data/remote_card_details.dart';
 import 'package:card_app/features/catalog/data/remote_catalog_settings.dart';
 import 'package:card_app/features/catalog/domain/card_summary.dart';
 import 'package:card_app/features/ranking/data/remote_ranking_repository.dart';
+import 'package:card_app/features/ranking/domain/ranking_data.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -133,10 +134,17 @@ void main() {
                   'marketCap': r'$1B',
                   'dominancePct': 90,
                   'color': '#22B99A',
+                  'image': '/icons/usdt.png',
                 },
               ],
               'chains': [
-                {'name': 'Ethereum', 'value': r'$1B', 'share': 100},
+                {
+                  'name': 'Ethereum',
+                  'value': r'$1B',
+                  'share': 100,
+                  'image': '/icons/ethereum.png',
+                  'color': '#6F7CF9',
+                },
               ],
             },
             '/api/stablecoins/1' => {
@@ -154,6 +162,7 @@ void main() {
                   'id': 'metric-1',
                   'name': 'Card One',
                   'cardId': 'card-1',
+                  'logo': 'logo-etherfi',
                   'sevenDayDepositVolume': 7,
                   'thirtyDayDepositVolume': 30,
                   'totalDepositVolume': 100,
@@ -167,7 +176,13 @@ void main() {
                   ? [_articleJson]
                   : null,
               'item': request.url.path == '/api/articles/news-one'
-                  ? {..._articleJson, 'rawContent': '第一段\n\n第二段'}
+                  ? {
+                      ..._articleJson,
+                      'rawContent': '被压平的纯文本',
+                      'bodyHtml':
+                          '<h2>第一节</h2><p>第一段<strong>重点</strong></p>'
+                          '<p><img src="/body/image.jpg" alt="示意图" /></p>',
+                    }
                   : null,
             },
             _ => throw StateError('Unexpected request: ${request.url}'),
@@ -180,9 +195,21 @@ void main() {
       expect((await repository.loadRankings()).single.cardIds, [
         'etherfi-core',
       ]);
-      expect((await repository.loadStablecoins()).assets.single.id, '1');
+      final stablecoins = await repository.loadStablecoins();
+      expect(stablecoins.assets.single.id, '1');
+      expect(stablecoins.assets.single.chains, isEmpty);
+      expect(
+        stablecoins.assets.single.imageUrl,
+        'https://example.test/icons/usdt.png',
+      );
+      expect(
+        stablecoins.chains.single.imageUrl,
+        'https://example.test/icons/ethereum.png',
+      );
       expect((await repository.loadStablecoinDetail('1')).history, [1, 2, 3]);
-      expect((await repository.loadMetrics()).items.single.total, 100);
+      final metric = (await repository.loadMetrics()).items.single;
+      expect(metric.total, 100);
+      expect(metric.logo, 'logo-etherfi');
       final article = (await repository.loadArticles()).single;
       expect(article.article.id, 'news-one');
       expect(article.coverImageUrl, 'https://example.test/covers/news.jpg');
@@ -190,10 +217,11 @@ void main() {
         article.article.coverImageUrl,
         'https://example.test/covers/news.jpg',
       );
-      expect((await repository.loadArticle('news-one')).article.body, [
-        '第一段',
-        '第二段',
-      ]);
+      expect(article.category, ArticleFeedCategory.news);
+      final detail = (await repository.loadArticle('news-one')).article;
+      expect(detail.markdown, contains('## 第一节'));
+      expect(detail.markdown, contains('**重点**'));
+      expect(detail.markdown, contains('https://example.test/body/image.jpg'));
       await repository.recordArticleView('news-one');
       await repository.likeArticle('news-one');
       expect(postedPaths, [

@@ -76,8 +76,15 @@ class RemoteCardDetailRepository {
             : '',
       ].where((value) => value.isNotEmpty).join(' · '),
       note: detail['note']?.toString() ?? '费用与权益请以官网最新规则为准。',
+      inviteCode: _nullableText(detail['inviteCode']),
+      inviteUrl: _nullableText(detail['inviteUrl']),
     );
   }
 
   bool _truthy(Object? value) => value == true || value == 1 || value == 'true';
+
+  String? _nullableText(Object? value) {
+    final text = value?.toString().trim() ?? '';
+    return text.isEmpty ? null : text;
+  }
 }

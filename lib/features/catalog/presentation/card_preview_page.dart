@@ -1,8 +1,11 @@
 import 'package:card_app/core/theme/app_colors.dart';
+import 'package:card_app/core/widgets/app_feedback.dart';
 import 'package:card_app/features/catalog/domain/card_detail.dart';
 import 'package:card_app/features/catalog/domain/card_summary.dart';
 import 'package:card_app/features/catalog/widgets/interactive_card_artwork.dart';
+import 'package:card_app/features/shell/widgets/sticky_page_header.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class CardPreviewPage extends StatefulWidget {
@@ -33,16 +36,106 @@ class CardPreviewPage extends StatefulWidget {
   State<CardPreviewPage> createState() => _CardPreviewPageState();
 }
 
+class CardPreviewSkeleton extends StatelessWidget {
+  const CardPreviewSkeleton({required this.onBack, super.key});
+
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    final topInset = MediaQuery.paddingOf(context).top;
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
+    return Stack(
+      key: const Key('card-preview-skeleton'),
+      children: [
+        AppShimmer(
+          child: _TopFadedScroll(
+            topInset: topInset,
+            child: ListView(
+              physics: const NeverScrollableScrollPhysics(),
+              padding: EdgeInsets.fromLTRB(
+                24,
+                topInset + 102,
+                24,
+                bottomInset + 40,
+              ),
+              children: const [
+                _SkeletonBox(height: 214, radius: 22),
+                SizedBox(height: 25),
+                _SkeletonBox(height: 28, widthFactor: .58, radius: 10),
+                SizedBox(height: 12),
+                _SkeletonBox(height: 15, widthFactor: .34, radius: 8),
+                SizedBox(height: 20),
+                Row(
+                  children: [
+                    _SkeletonBox(height: 34, width: 68, radius: 14),
+                    SizedBox(width: 9),
+                    _SkeletonBox(height: 34, width: 76, radius: 14),
+                    SizedBox(width: 9),
+                    _SkeletonBox(height: 34, width: 84, radius: 14),
+                  ],
+                ),
+                SizedBox(height: 20),
+                _SkeletonBox(height: 148, radius: 20),
+                SizedBox(height: 16),
+                _SkeletonBox(height: 132, radius: 18),
+              ],
+            ),
+          ),
+        ),
+        Align(
+          alignment: Alignment.topCenter,
+          child: _StickyDetailNavigation(onBack: onBack, onMore: () {}),
+        ),
+      ],
+    );
+  }
+}
+
+class _SkeletonBox extends StatelessWidget {
+  const _SkeletonBox({
+    required this.height,
+    required this.radius,
+    this.width,
+    this.widthFactor,
+  });
+
+  final double height;
+  final double radius;
+  final double? width;
+  final double? widthFactor;
+
+  @override
+  Widget build(BuildContext context) {
+    final box = Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: AppColors.isDark
+            ? Colors.white.withValues(alpha: .075)
+            : Colors.white.withValues(alpha: .72),
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(color: AppColors.line),
+      ),
+    );
+    if (widthFactor case final factor?) {
+      return FractionallySizedBox(
+        alignment: Alignment.centerLeft,
+        widthFactor: factor,
+        child: box,
+      );
+    }
+    return box;
+  }
+}
+
 class _CardPreviewPageState extends State<CardPreviewPage> {
   CardVisualEffect _effect = CardVisualEffect.particle;
 
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
-      );
-  }
+  void _showMessage(
+    String message, {
+    AppNoticeTone tone = AppNoticeTone.warning,
+  }) => AppNotice.show(context, message, tone: tone);
 
   Future<void> _openOfficial() async {
     final source = widget.card.sourceUrl;
@@ -76,7 +169,10 @@ class _CardPreviewPageState extends State<CardPreviewPage> {
         onEffect: (effect) {
           Navigator.pop(sheetContext);
           setState(() => _effect = effect);
-          _showMessage('${_effectLabel(effect)}已启用');
+          _showMessage(
+            '${_effectLabel(effect)}已启用',
+            tone: AppNoticeTone.success,
+          );
         },
         onViewSimilar: () {
           Navigator.pop(sheetContext);
@@ -114,85 +210,108 @@ class _CardPreviewPageState extends State<CardPreviewPage> {
     final added = widget.added;
     final onBack = widget.onBack;
     final onAddedChanged = widget.onAddedChanged;
+    final topInset = MediaQuery.paddingOf(context).top;
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     return Stack(
       key: Key('card-preview-page'),
       children: [
-        ListView(
-          physics: BouncingScrollPhysics(),
-          padding: EdgeInsets.fromLTRB(24, 14, 24, 112 + bottomInset),
-          children: [
-            _DetailNavigation(onBack: onBack, onMore: _showActions),
-            SizedBox(height: 24),
-            AspectRatio(
-              aspectRatio: 1.586,
-              child: InteractiveCardArtwork(card: card, effect: _effect),
+        _TopFadedScroll(
+          topInset: topInset,
+          child: ListView(
+            physics: BouncingScrollPhysics(),
+            padding: EdgeInsets.fromLTRB(
+              24,
+              102 + topInset,
+              24,
+              112 + bottomInset,
             ),
-            SizedBox(height: 25),
-            Text(
-              card.name,
-              key: Key('detail-title'),
-              style: TextStyle(
-                color: AppColors.text,
-                fontSize: 25,
-                fontWeight: FontWeight.w900,
-                letterSpacing: -1.1,
+            children: [
+              _DetailCardStage(card: card, effect: _effect),
+              SizedBox(height: 25),
+              Text(
+                card.name,
+                key: Key('detail-title'),
+                style: TextStyle(
+                  color: AppColors.text,
+                  fontSize: 25,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -1.1,
+                ),
               ),
-            ),
-            SizedBox(height: 8),
-            Text(
-              card.issuer,
-              style: TextStyle(
-                color: AppColors.textMuted,
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
+              SizedBox(height: 8),
+              Text(
+                card.issuer,
+                style: TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-            ),
-            SizedBox(height: 16),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final tag in detail.tags)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 11,
-                      vertical: 7,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.violet.withValues(alpha: 0.16),
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(color: AppColors.line),
-                    ),
-                    child: Text(
-                      tag,
-                      style: TextStyle(
-                        color: AppColors.text,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
+              SizedBox(height: 16),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final tag in detail.tags)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 7,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.isDark
+                            ? const Color(0x297973FF)
+                            : Colors.white.withValues(alpha: 0.72),
+                        borderRadius: BorderRadius.circular(13),
+                        boxShadow: AppColors.isDark
+                            ? null
+                            : const [
+                                BoxShadow(
+                                  color: Color(0x145B67A0),
+                                  blurRadius: 10,
+                                  offset: Offset(0, 5),
+                                ),
+                              ],
+                      ),
+                      child: Text(
+                        tag,
+                        style: TextStyle(
+                          color: AppColors.isDark
+                              ? const Color(0xFFC9C7FF)
+                              : const Color(0xFF5E70FF),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                     ),
-                  ),
-              ],
-            ),
-            SizedBox(height: 18),
-            _BasicInfo(detail: detail),
-            SizedBox(height: 16),
-            _KycBlock(card: card, detail: detail),
-            if (detail.paymentChannels.isNotEmpty) ...[
+                ],
+              ),
+              SizedBox(height: 18),
+              _BasicInfo(detail: detail),
               SizedBox(height: 16),
-              _PaymentBlock(channels: detail.paymentChannels),
+              _KycBlock(card: card, detail: detail),
+              SizedBox(height: 22),
+              _FeatureBlock(features: detail.features),
+              SizedBox(height: 28),
+              _FeeBlock(detail: detail),
+              if (detail.paymentChannels.isNotEmpty) ...[
+                SizedBox(height: 20),
+                _PaymentBlock(channels: detail.paymentChannels),
+              ],
+              SizedBox(height: 20),
+              _SourceBlock(detail: detail, onOpenOfficial: _openOfficial),
+              if (detail.inviteCode?.isNotEmpty == true ||
+                  detail.inviteUrl?.isNotEmpty == true) ...[
+                const SizedBox(height: 20),
+                _InviteBlock(detail: detail, onMessage: _showMessage),
+              ],
+              const SizedBox(height: 20),
             ],
-            SizedBox(height: 16),
-            _OfficialAction(onTap: _openOfficial),
-            SizedBox(height: 22),
-            _FeatureBlock(features: detail.features),
-            SizedBox(height: 28),
-            _FeeBlock(detail: detail),
-            SizedBox(height: 16),
-            _SourceBlock(detail: detail),
-            const SizedBox(height: 20),
-          ],
+          ),
+        ),
+        Align(
+          alignment: Alignment.topCenter,
+          child: _StickyDetailNavigation(onBack: onBack, onMore: _showActions),
         ),
         Align(
           alignment: Alignment.bottomCenter,
@@ -252,44 +371,140 @@ class _CardPreviewPageState extends State<CardPreviewPage> {
   }
 }
 
-class _OfficialAction extends StatelessWidget {
-  const _OfficialAction({required this.onTap});
+class _DetailCardStage extends StatelessWidget {
+  const _DetailCardStage({required this.card, required this.effect});
 
-  final VoidCallback onTap;
+  final CardSummary card;
+  final CardVisualEffect effect;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.glassStrong,
-      borderRadius: BorderRadius.circular(18),
-      child: InkWell(
-        key: const Key('detail-open-official'),
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 50),
-          padding: const EdgeInsets.symmetric(horizontal: 17),
-          decoration: BoxDecoration(
-            border: Border.all(color: AppColors.line),
-            borderRadius: BorderRadius.circular(18),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '打开官方网站',
-                  style: TextStyle(
-                    color: AppColors.text,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w900,
+    return AspectRatio(
+      aspectRatio: 1.586,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            top: -74,
+            bottom: -112,
+            left: -92,
+            right: -70,
+            child: IgnorePointer(
+              child: _HorizontalAmbientFade(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: RadialGradient(
+                      center: const Alignment(-0.72, -0.02),
+                      radius: 0.86,
+                      colors: AppColors.isDark
+                          ? const [Color(0x8A9DA4B2), Color(0x00070B19)]
+                          : const [Color(0x70C9D6F2), Color(0x00F8FBFF)],
+                    ),
                   ),
                 ),
               ),
-              Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
-            ],
+            ),
           ),
-        ),
+          Positioned(
+            top: -78,
+            left: 42,
+            right: -18,
+            height: 164,
+            child: IgnorePointer(
+              child: _HorizontalAmbientFade(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: RadialGradient(
+                      center: Alignment.topCenter,
+                      radius: 1,
+                      colors: AppColors.isDark
+                          ? const [Color(0x294F2548), Color(0x00070B19)]
+                          : const [Color(0x24E3C9F3), Color(0x00F8FBFF)],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned.fill(
+            child: InteractiveCardArtwork(card: card, effect: effect),
+          ),
+        ],
       ),
+    );
+  }
+}
+
+class _HorizontalAmbientFade extends StatelessWidget {
+  const _HorizontalAmbientFade({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return ShaderMask(
+      blendMode: BlendMode.dstIn,
+      shaderCallback: (bounds) => const LinearGradient(
+        colors: [
+          Colors.transparent,
+          Colors.transparent,
+          Colors.black,
+          Colors.black,
+          Colors.transparent,
+          Colors.transparent,
+        ],
+        stops: [0, .16, .28, .72, .84, 1],
+      ).createShader(bounds),
+      child: child,
+    );
+  }
+}
+
+class _StickyDetailNavigation extends StatelessWidget {
+  const _StickyDetailNavigation({required this.onBack, required this.onMore});
+
+  final VoidCallback onBack;
+  final VoidCallback onMore;
+
+  @override
+  Widget build(BuildContext context) {
+    final topInset = MediaQuery.paddingOf(context).top;
+    return FrostedHeaderFade(
+      height: 92 + topInset,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(24, 8 + topInset, 24, 28),
+        child: _DetailNavigation(onBack: onBack, onMore: onMore),
+      ),
+    );
+  }
+}
+
+class _TopFadedScroll extends StatelessWidget {
+  const _TopFadedScroll({required this.topInset, required this.child});
+
+  final double topInset;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return ShaderMask(
+      blendMode: BlendMode.dstIn,
+      shaderCallback: (bounds) {
+        final hold = (topInset * .55 / bounds.height).clamp(0.0, .18);
+        final fadeEnd = ((topInset + 82) / bounds.height).clamp(.05, .28);
+        return LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: const [
+            Colors.transparent,
+            Colors.transparent,
+            Colors.black,
+            Colors.black,
+          ],
+          stops: [0, hold, fadeEnd, 1],
+        ).createShader(bounds);
+      },
+      child: child,
     );
   }
 }
@@ -606,6 +821,117 @@ class _ActionRow extends StatelessWidget {
   }
 }
 
+class _InviteBlock extends StatelessWidget {
+  const _InviteBlock({required this.detail, required this.onMessage});
+
+  final CardDetail detail;
+  final ValueChanged<String> onMessage;
+
+  Future<void> _copy(BuildContext context, String value, String label) async {
+    await Clipboard.setData(ClipboardData(text: value));
+    if (context.mounted) onMessage('$label已复制');
+  }
+
+  Future<void> _openLink(BuildContext context, String value) async {
+    final url = Uri.tryParse(value);
+    if (url == null ||
+        !await launchUrl(url, mode: LaunchMode.externalApplication)) {
+      if (context.mounted) onMessage('暂时无法打开邀请链接');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _DetailPanel(
+      key: const Key('detail-invite'),
+      title: '开卡信息',
+      subtitle: '由运营后台人工审核后展示，请以官方规则为准',
+      child: Column(
+        children: [
+          if (detail.inviteCode?.isNotEmpty == true)
+            _InviteLine(
+              label: '邀请码',
+              value: detail.inviteCode!,
+              icon: Icons.copy_rounded,
+              actionLabel: '复制',
+              onTap: () => _copy(context, detail.inviteCode!, '邀请码'),
+            ),
+          if (detail.inviteCode?.isNotEmpty == true &&
+              detail.inviteUrl?.isNotEmpty == true)
+            const SizedBox(height: 10),
+          if (detail.inviteUrl?.isNotEmpty == true)
+            _InviteLine(
+              label: '邀请链接',
+              value: detail.inviteUrl!,
+              icon: Icons.open_in_new_rounded,
+              actionLabel: '打开',
+              onTap: () => _openLink(context, detail.inviteUrl!),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InviteLine extends StatelessWidget {
+  const _InviteLine({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.actionLabel,
+    required this.onTap,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+  final String actionLabel;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(13, 12, 10, 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: AppColors.isDark ? .06 : .56),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.line),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(color: AppColors.textMuted, fontSize: 11),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: AppColors.text,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          TextButton.icon(
+            onPressed: onTap,
+            icon: Icon(icon, size: 16),
+            label: Text(actionLabel),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _BasicInfo extends StatelessWidget {
   const _BasicInfo({required this.detail});
 
@@ -625,7 +951,7 @@ class _BasicInfo extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _MetaCell(label: '适用地区', value: detail.region),
-          Container(height: 1, color: AppColors.line),
+          const SizedBox(height: 2),
           Row(
             children: [
               Expanded(
@@ -635,7 +961,7 @@ class _BasicInfo extends StatelessWidget {
                   compact: true,
                 ),
               ),
-              Container(width: 1, height: 78, color: AppColors.line),
+              const SizedBox(width: 8),
               Expanded(
                 child: _MetaCell(
                   label: '开放状态',
@@ -716,21 +1042,11 @@ class _KycBlock extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'KYC 与身份材料',
+            '身份验证（KYC）',
             style: TextStyle(
               color: AppColors.text,
               fontSize: 18,
               fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 5),
-          Text(
-            '仅展示公开资料标签，不收集证件',
-            style: TextStyle(
-              color: AppColors.textMuted,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              height: 1.45,
             ),
           ),
           const SizedBox(height: 14),
@@ -745,19 +1061,28 @@ class _KycBlock extends StatelessWidget {
                 ),
             ],
           ),
-          const SizedBox(height: 10),
-          Text(
-            detail.kycNote,
-            style: TextStyle(
-              color: AppColors.textMuted,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              height: 1.5,
+          if (_showKycNote(detail.kycNote)) ...[
+            const SizedBox(height: 10),
+            Text(
+              detail.kycNote,
+              style: TextStyle(
+                color: AppColors.textMuted,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                height: 1.5,
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
+  }
+
+  bool _showKycNote(String note) {
+    final normalized = note.trim();
+    return normalized.isNotEmpty &&
+        !normalized.startsWith('待补充') &&
+        !normalized.startsWith('暂无');
   }
 }
 
@@ -788,7 +1113,7 @@ class _StatusPill extends StatelessWidget {
           const SizedBox(width: 7),
           Flexible(
             child: Text(
-              '$label · ${supported ? '资料提及' : '待确认'}',
+              '$label · ${supported ? '支持' : '待确认'}',
               style: TextStyle(
                 color: color,
                 fontSize: 11,
@@ -906,8 +1231,10 @@ class _FeatureBlock extends StatelessWidget {
                           child: Text(
                             feature.text,
                             style: TextStyle(
-                              color: AppColors.textMuted,
-                              fontSize: 14,
+                              color: AppColors.isDark
+                                  ? const Color(0xFFB8BED0)
+                                  : const Color(0xFF626B7E),
+                              fontSize: 13.5,
                               fontWeight: FontWeight.w800,
                               height: 1.3,
                             ),
@@ -925,10 +1252,14 @@ class _FeatureBlock extends StatelessWidget {
   }
 
   Color _color(DetailFeatureIcon icon) => switch (icon) {
-    DetailFeatureIcon.wallet => const Color(0xFF969BFF),
-    DetailFeatureIcon.payments => const Color(0xFFA98AFF),
-    DetailFeatureIcon.globe => const Color(0xFF67D4FF),
-    DetailFeatureIcon.shield => const Color(0xFFB7A6FF),
+    DetailFeatureIcon.wallet =>
+      AppColors.isDark ? const Color(0xFF8F96FF) : const Color(0xFF5F6DFF),
+    DetailFeatureIcon.payments =>
+      AppColors.isDark ? const Color(0xFFA98AFF) : const Color(0xFF8668FF),
+    DetailFeatureIcon.globe =>
+      AppColors.isDark ? const Color(0xFF67D4FF) : const Color(0xFF2DA9C7),
+    DetailFeatureIcon.shield =>
+      AppColors.isDark ? const Color(0xFFA28CFF) : const Color(0xFF7767FF),
   };
 }
 
@@ -1002,41 +1333,78 @@ class _FeeRow extends StatelessWidget {
 }
 
 class _SourceBlock extends StatelessWidget {
-  const _SourceBlock({required this.detail});
+  const _SourceBlock({required this.detail, required this.onOpenOfficial});
 
   final CardDetail detail;
+  final VoidCallback onOpenOfficial;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      key: Key('detail-source'),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.glass.withValues(alpha: 0.48),
+    return Material(
+      key: const Key('detail-source'),
+      color: AppColors.glass.withValues(alpha: 0.48),
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        key: const Key('detail-open-official'),
+        onTap: onOpenOfficial,
         borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '资料来源 · ${detail.sourceLabel}',
-            style: TextStyle(
-              color: AppColors.textMuted,
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-            ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 13, 12, 13),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '资料来源 · ${detail.sourceLabel}',
+                      style: TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 7),
+                    Text(
+                      '公开资料整理，具体信息以发卡方为准。',
+                      style: TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        height: 1.45,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '官网',
+                    style: TextStyle(
+                      color: AppColors.isDark
+                          ? const Color(0xFFC9C7FF)
+                          : AppColors.cyan,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(width: 3),
+                  Icon(
+                    Icons.open_in_new_rounded,
+                    color: AppColors.isDark
+                        ? const Color(0xFFC9C7FF)
+                        : AppColors.cyan,
+                    size: 15,
+                  ),
+                ],
+              ),
+            ],
           ),
-          const SizedBox(height: 7),
-          Text(
-            '资料整理自公开来源，具体费用与申请结果以发卡方规则为准。',
-            style: TextStyle(
-              color: AppColors.textMuted,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              height: 1.55,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

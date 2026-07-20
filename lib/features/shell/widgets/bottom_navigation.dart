@@ -45,9 +45,9 @@ class BottomNavigation extends StatelessWidget {
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     return SizedBox(
-      height: 94 + bottomInset,
+      height: 84 + bottomInset,
       child: Padding(
-        padding: EdgeInsets.fromLTRB(18, 0, 18, 18 + bottomInset),
+        padding: EdgeInsets.fromLTRB(18, 0, 18, 8 + bottomInset),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
@@ -103,11 +103,11 @@ class BottomNavigation extends StatelessWidget {
                         decoration: _glassDecoration(selected: addSelected),
                         child: Icon(
                           Icons.add_rounded,
-                          color: addSelected
-                              ? (AppColors.isDark
-                                    ? Color(0xFFDFE5FF)
-                                    : Color(0xFF4F67FF))
-                              : AppColors.navIcon,
+                          color: AppColors.isDark
+                              ? Colors.white
+                              : (addSelected
+                                    ? const Color(0xFF4F67FF)
+                                    : AppColors.navIcon),
                           size: 30,
                         ),
                       ),
@@ -213,7 +213,11 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? AppColors.cyan : AppColors.navIcon;
+    // 浅色玻璃底栏在深色卡面上叠加时，对比会显著变低；未选中项也
+    // 使用白色，选中项仍通过品牌蓝和胶囊背景区分。
+    final color = AppColors.isDark
+        ? Colors.white
+        : (selected ? AppColors.cyan : const Color(0xFF46536E));
     return Expanded(
       child: Semantics(
         button: true,

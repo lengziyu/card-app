@@ -41,7 +41,7 @@ abstract final class AppColors {
       ? const Color.fromRGBO(38, 42, 58, 0.82)
       : const Color.fromRGBO(255, 255, 255, 0.72);
   static Color get navIcon =>
-      _dark ? const Color(0xFFADB4C8) : const Color(0xFF697185);
+      _dark ? const Color(0xFFADB4C8) : const Color(0xFF52617F);
   static Color get selectedWash =>
       _dark ? const Color(0x52777DFF) : const Color(0x665C73FF);
 }

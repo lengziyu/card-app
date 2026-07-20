@@ -53,16 +53,24 @@ class AnimatedGlassSegment<T> extends StatelessWidget {
             final itemWidth =
                 (constraints.maxWidth - padding * 2) / items.length;
             return Container(
+              key: const Key('animated-glass-segment-surface'),
               height: height,
               padding: EdgeInsets.all(padding),
               decoration: BoxDecoration(
                 color: showOuterSurface
                     ? (AppColors.isDark
                           ? const Color(0xA6232737)
-                          : const Color(0x57FFFFFF))
+                          : const Color(0x247386A8))
                     : Colors.transparent,
+                gradient: showOuterSurface && !AppColors.isDark
+                    ? const LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Color(0x52FFFFFF), Color(0x26FFFFFF)],
+                      )
+                    : null,
                 borderRadius: BorderRadius.circular(radius),
-                border: showOuterSurface
+                border: showOuterSurface && AppColors.isDark
                     ? Border.all(color: AppColors.line)
                     : null,
                 boxShadow: showOuterSurface
@@ -70,7 +78,7 @@ class AnimatedGlassSegment<T> extends StatelessWidget {
                         BoxShadow(
                           color: AppColors.isDark
                               ? const Color(0x33000000)
-                              : const Color(0x17646FA8),
+                              : const Color(0x0F646FA8),
                           blurRadius: 24,
                           offset: const Offset(0, 10),
                         ),
@@ -86,33 +94,29 @@ class AnimatedGlassSegment<T> extends StatelessWidget {
                     top: 0,
                     bottom: 0,
                     width: itemWidth,
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: padding / 2),
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: AppColors.isDark
-                                ? const [Color(0x57969EEA), Color(0x706771C2)]
-                                : const [Color(0xF5FFFFFF), Color(0xC2FFFFFF)],
-                          ),
-                          borderRadius: BorderRadius.circular(radius - padding),
-                          border: Border.all(
-                            color: AppColors.isDark
-                                ? const Color(0x1FFFFFFF)
-                                : const Color(0x4D5E79FF),
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.isDark
-                                  ? const Color(0x47503C88)
-                                  : const Color(0x245360B4),
-                              blurRadius: 18,
-                              offset: const Offset(0, 7),
-                            ),
-                          ],
+                    child: DecoratedBox(
+                      key: const Key('animated-glass-segment-indicator'),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: AppColors.isDark
+                              ? const [Color(0x57969EEA), Color(0x706771C2)]
+                              : const [Color(0xF7FFFFFF), Color(0xE8FFFFFF)],
                         ),
+                        borderRadius: BorderRadius.circular(radius - padding),
+                        border: AppColors.isDark
+                            ? Border.all(color: const Color(0x1FFFFFFF))
+                            : null,
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.isDark
+                                ? const Color(0x47503C88)
+                                : const Color(0x145360B4),
+                            blurRadius: 18,
+                            offset: const Offset(0, 7),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -289,28 +293,7 @@ class PinnedGlassHeaderDelegate extends SliverPersistentHeaderDelegate {
     double shrinkOffset,
     bool overlapsContent,
   ) {
-    return ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: Colors.transparent,
-            boxShadow: overlapsContent
-                ? [
-                    BoxShadow(
-                      color: AppColors.isDark
-                          ? Colors.black.withValues(alpha: 0.04)
-                          : const Color(0x0D6470A8),
-                      blurRadius: 12,
-                      offset: const Offset(0, 5),
-                    ),
-                  ]
-                : null,
-          ),
-          child: SizedBox.expand(child: child),
-        ),
-      ),
-    );
+    return SizedBox.expand(child: child);
   }
 
   @override

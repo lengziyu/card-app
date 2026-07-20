@@ -39,6 +39,7 @@ class RemoteCardCatalogRepository implements CardCatalogRepository {
   CardSummary _cardFromJson(Map<String, dynamic> json) {
     final categoryLabel = json['category']?.toString() ?? '';
     final imagePath = json['cardImageSrc']?.toString() ?? '';
+    final logoPath = json['logoImageSrc']?.toString() ?? '';
     return CardSummary(
       id: json['id']?.toString() ?? '',
       name: json['name']?.toString() ?? '未命名卡片',
@@ -57,6 +58,9 @@ class RemoteCardCatalogRepository implements CardCatalogRepository {
       imageUrl: imagePath.isEmpty
           ? null
           : _apiClient.resolve(imagePath).toString(),
+      logoImageUrl: logoPath.isEmpty
+          ? null
+          : _apiClient.resolve(logoPath).toString(),
       sourceUrl: json['sourceUrl']?.toString(),
       kycDocuments: {
         for (final value

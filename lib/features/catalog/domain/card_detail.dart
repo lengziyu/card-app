@@ -40,6 +40,8 @@ class CardDetail {
     required this.paymentChannels,
     required this.sourceLabel,
     required this.note,
+    this.inviteCode,
+    this.inviteUrl,
   });
 
   final String cardId;
@@ -53,6 +55,8 @@ class CardDetail {
   final Set<PaymentChannel> paymentChannels;
   final String sourceLabel;
   final String note;
+  final String? inviteCode;
+  final String? inviteUrl;
 }
 
 abstract interface class CardDetailRepository {

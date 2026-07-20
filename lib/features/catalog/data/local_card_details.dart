@@ -38,7 +38,7 @@ const _details = <String, CardDetail>{
     ],
     kycNote: '可能支持身份证或护照，实际材料、地区和审核结果以官方申请流程为准。',
     paymentChannels: {PaymentChannel.applePay, PaymentChannel.googlePay},
-    sourceLabel: '本地演示资料 · 来源待复核',
+    sourceLabel: '演示资料 · 来源待复核',
     note: '等级、返现和转账额度可能随官方规则变化，本页不构成申请建议。',
   ),
   'bybit-card': CardDetail(
@@ -56,7 +56,7 @@ const _details = <String, CardDetail>{
     fees: _defaultFees,
     kycNote: '演示资料标记为护照路径；实际身份材料与可申请地区以官方流程为准。',
     paymentChannels: {PaymentChannel.applePay, PaymentChannel.googlePay},
-    sourceLabel: '本地演示资料 · 来源待复核',
+    sourceLabel: '演示资料 · 来源待复核',
     note: '费用、返现、卡片形式和支持地区可能变化，请查阅官方最新规则。',
   ),
   'redotpay': CardDetail(
@@ -74,7 +74,7 @@ const _details = <String, CardDetail>{
     fees: _defaultFees,
     kycNote: '演示资料包含身份证和护照标签，不代表所有地区均可使用相同材料。',
     paymentChannels: {PaymentChannel.applePay, PaymentChannel.googlePay},
-    sourceLabel: '本地演示资料 · 来源待复核',
+    sourceLabel: '演示资料 · 来源待复核',
     note: '本页仅展示信息结构，不保证产品可申请或可在特定地区使用。',
   ),
   'metamask-card': CardDetail(
@@ -92,7 +92,7 @@ const _details = <String, CardDetail>{
     fees: _defaultFees,
     kycNote: '演示资料标记为护照路径；实际 KYC 要求以官方申请页面为准。',
     paymentChannels: {PaymentChannel.applePay, PaymentChannel.googlePay},
-    sourceLabel: '本地演示资料 · 来源待复核',
+    sourceLabel: '演示资料 · 来源待复核',
     note: '钱包、支持资产、费用和开放地区均可能调整，请以官方最新说明为准。',
   ),
 };
@@ -115,7 +115,7 @@ CardDetail _fallback(CardSummary card) {
         ? '身份材料暂未核验。'
         : '公开信息可能涉及${card.kycDocuments.map((item) => item.label).join('或')}，最终以官方流程为准。',
     paymentChannels: const <PaymentChannel>{},
-    sourceLabel: '本地演示资料 · 尚未核验',
-    note: '当前为本地 Mock 详情，用于验证页面结构与交互，不代表产品最新规则。',
+    sourceLabel: '演示资料 · 尚未核验',
+    note: '当前为演示详情，用于验证页面结构与交互，不代表产品最新规则。',
   );
 }

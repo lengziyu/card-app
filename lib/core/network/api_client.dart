@@ -36,6 +36,9 @@ class ApiClient {
   Future<Object?> post(String path, {Object? body}) =>
       _send('POST', path, body: body);
 
+  Future<Object?> delete(String path, {Object? body}) =>
+      _send('DELETE', path, body: body);
+
   Future<Object?> _send(
     String method,
     String path, {

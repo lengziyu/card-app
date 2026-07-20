@@ -121,7 +121,7 @@ class _CatalogNotice extends StatelessWidget {
           SizedBox(width: 12),
           Expanded(
             child: Text(
-              '卡片目录来自线上公开数据；游客调整仅保存在当前会话。',
+              '卡片目录来自公开资料；登录后即可添加并管理你的卡片。',
               style: TextStyle(
                 color: AppColors.textMuted,
                 fontSize: 13,

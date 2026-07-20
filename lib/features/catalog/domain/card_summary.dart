@@ -32,6 +32,7 @@ class CardSummary {
     required this.tint,
     this.assetPath,
     this.imageUrl,
+    this.logoImageUrl,
     this.sourceUrl,
     this.kycDocuments = const <KycDocument>{},
     this.isNew = false,
@@ -45,6 +46,7 @@ class CardSummary {
   final int tint;
   final String? assetPath;
   final String? imageUrl;
+  final String? logoImageUrl;
   final String? sourceUrl;
   final Set<KycDocument> kycDocuments;
   final bool isNew;

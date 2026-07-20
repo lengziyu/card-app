@@ -1,4 +1,5 @@
 import 'package:card_app/core/theme/app_colors.dart';
+import 'package:card_app/core/widgets/app_feedback.dart';
 import 'package:flutter/material.dart';
 
 enum AuthMode { login, register }
@@ -23,10 +24,7 @@ class _AuthPageState extends State<AuthPage> {
   final _formKey = GlobalKey<FormState>();
   final _accountController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _confirmPasswordController = TextEditingController();
   bool _passwordVisible = false;
-  bool _confirmPasswordVisible = false;
-  bool _rememberAccount = true;
   bool _submittedPreview = false;
 
   bool get _isLogin => widget.mode == AuthMode.login;
@@ -35,7 +33,6 @@ class _AuthPageState extends State<AuthPage> {
   void dispose() {
     _accountController.dispose();
     _passwordController.dispose();
-    _confirmPasswordController.dispose();
     super.dispose();
   }
 
@@ -45,24 +42,19 @@ class _AuthPageState extends State<AuthPage> {
 
     FocusScope.of(context).unfocus();
     _passwordController.clear();
-    _confirmPasswordController.clear();
     setState(() {
       _passwordVisible = false;
-      _confirmPasswordVisible = false;
       _submittedPreview = true;
     });
   }
 
   void _previewSocialAuth(String provider) {
     FocusScope.of(context).unfocus();
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text('$provider 授权入口已就绪，服务端 OAuth 配置完成后即可正式使用。'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+    AppNotice.info(
+      context,
+      '$provider 授权入口已就绪，服务端 OAuth 配置完成后即可正式使用。',
+      title: '授权预览',
+    );
   }
 
   String? _validateAccount(String? value) {
@@ -80,7 +72,7 @@ class _AuthPageState extends State<AuthPage> {
   String? _validatePassword(String? value) {
     final password = value ?? '';
     if (password.isEmpty) return '请输入密码';
-    if (!_isLogin && password.length < 8) return '密码至少需要 8 位';
+    if (!_isLogin && password.length < 6) return '密码至少需要 6 位';
     return null;
   }
 
@@ -111,252 +103,185 @@ class _AuthPageState extends State<AuthPage> {
       focusedErrorBorder: border.copyWith(
         borderSide: BorderSide(color: Color(0xFFFF8496), width: 1.4),
       ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 17),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final topInset = MediaQuery.paddingOf(context).top;
     final bottomInset = MediaQuery.paddingOf(context).bottom;
-    final title = _isLogin ? '欢迎回来' : '创建账号';
-    final subtitle = _isLogin ? '登录后同步你的卡片收藏' : '使用邮箱、Google 或 Apple 开始集卡';
-
+    final compactLayout =
+        MediaQuery.textScalerOf(context).scale(1) > 1.35 ||
+        MediaQuery.sizeOf(context).width < 340;
     return CustomScrollView(
       key: Key(_isLogin ? 'login-page' : 'register-page'),
-      physics: BouncingScrollPhysics(),
+      physics: const BouncingScrollPhysics(),
       slivers: [
         SliverPadding(
-          padding: EdgeInsets.fromLTRB(20, 12, 20, 28 + bottomInset),
-          sliver: SliverList.list(
-            children: [
-              Align(
-                alignment: Alignment.centerLeft,
-                child: IconButton(
-                  key: Key('auth-back'),
-                  onPressed: widget.onBack,
-                  tooltip: '返回',
-                  icon: Icon(Icons.arrow_back_rounded),
-                  style: IconButton.styleFrom(
-                    minimumSize: Size(48, 48),
-                    backgroundColor: AppColors.glass,
-                    side: BorderSide(color: AppColors.line),
-                  ),
-                ),
-              ),
-              SizedBox(height: 22),
-              const _BrandMark(),
-              SizedBox(height: 24),
-              Text(title, style: Theme.of(context).textTheme.headlineMedium),
-              SizedBox(height: 8),
-              Text(subtitle, style: Theme.of(context).textTheme.bodyMedium),
-              SizedBox(height: 20),
-              const _ServiceNotice(),
-              SizedBox(height: 18),
-              Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: AppColors.glass,
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: AppColors.line),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Color(0x3D000000),
-                      blurRadius: 28,
-                      offset: Offset(0, 14),
-                    ),
-                  ],
-                ),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      TextFormField(
-                        key: Key('auth-account-field'),
-                        controller: _accountController,
-                        keyboardType: TextInputType.emailAddress,
-                        textInputAction: TextInputAction.next,
-                        autofillHints: [
-                          AutofillHints.username,
-                          AutofillHints.email,
-                        ],
-                        autocorrect: false,
-                        enableSuggestions: false,
-                        decoration: _decoration(
-                          hint: '邮箱（支持 Gmail）或用户名',
-                          icon: Icons.person_outline_rounded,
-                        ),
-                        validator: _validateAccount,
-                      ),
-                      SizedBox(height: 14),
-                      TextFormField(
-                        key: Key('auth-password-field'),
-                        controller: _passwordController,
-                        textInputAction: _isLogin
-                            ? TextInputAction.done
-                            : TextInputAction.next,
-                        autofillHints: [
-                          _isLogin
-                              ? AutofillHints.password
-                              : AutofillHints.newPassword,
-                        ],
-                        autocorrect: false,
-                        enableSuggestions: false,
-                        obscureText: !_passwordVisible,
-                        onFieldSubmitted: _isLogin ? (_) => _submit() : null,
-                        decoration: _decoration(
-                          hint: _isLogin ? '密码' : '密码（至少 8 位）',
-                          icon: Icons.lock_outline_rounded,
-                          suffixIcon: _VisibilityButton(
-                            key: Key('password-visibility'),
-                            visible: _passwordVisible,
-                            onPressed: () => setState(
-                              () => _passwordVisible = !_passwordVisible,
-                            ),
+          padding: EdgeInsets.fromLTRB(20, topInset + 24, 20, 28 + bottomInset),
+          sliver: SliverFillRemaining(
+            hasScrollBody: false,
+            child: Align(
+              alignment: const Alignment(0, -0.12),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 460),
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(22, 22, 22, 20),
+                  decoration: _authPanelDecoration(),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (compactLayout)
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const _BrandMark(),
+                              const SizedBox(height: 14),
+                              _HomeButton(
+                                key: const Key('auth-home'),
+                                onPressed: widget.onBack,
+                              ),
+                            ],
+                          )
+                        else
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Expanded(child: _BrandMark()),
+                              const SizedBox(width: 12),
+                              _HomeButton(
+                                key: const Key('auth-home'),
+                                onPressed: widget.onBack,
+                              ),
+                            ],
                           ),
-                        ),
-                        validator: _validatePassword,
-                      ),
-                      if (!_isLogin) ...[
-                        SizedBox(height: 14),
+                        const SizedBox(height: 28),
                         TextFormField(
-                          key: Key('auth-confirm-field'),
-                          controller: _confirmPasswordController,
-                          textInputAction: TextInputAction.done,
-                          autofillHints: [AutofillHints.newPassword],
+                          key: Key('auth-account-field'),
+                          controller: _accountController,
+                          keyboardType: TextInputType.emailAddress,
+                          textInputAction: TextInputAction.next,
+                          autofillHints: [
+                            AutofillHints.username,
+                            AutofillHints.email,
+                          ],
                           autocorrect: false,
                           enableSuggestions: false,
-                          obscureText: !_confirmPasswordVisible,
-                          onFieldSubmitted: (_) => _submit(),
                           decoration: _decoration(
-                            hint: '再次输入密码',
-                            icon: Icons.verified_user_outlined,
+                            hint: '用户名 / 邮箱',
+                            icon: Icons.person_outline_rounded,
+                          ),
+                          validator: _validateAccount,
+                        ),
+                        const SizedBox(height: 14),
+                        TextFormField(
+                          key: Key('auth-password-field'),
+                          controller: _passwordController,
+                          textInputAction: _isLogin
+                              ? TextInputAction.done
+                              : TextInputAction.next,
+                          autofillHints: [
+                            _isLogin
+                                ? AutofillHints.password
+                                : AutofillHints.newPassword,
+                          ],
+                          autocorrect: false,
+                          enableSuggestions: false,
+                          obscureText: !_passwordVisible,
+                          onFieldSubmitted: _isLogin ? (_) => _submit() : null,
+                          decoration: _decoration(
+                            hint: _isLogin ? '密码' : '至少 6 位',
+                            icon: Icons.lock_outline_rounded,
                             suffixIcon: _VisibilityButton(
-                              visible: _confirmPasswordVisible,
+                              key: Key('password-visibility'),
+                              visible: _passwordVisible,
                               onPressed: () => setState(
-                                () => _confirmPasswordVisible =
-                                    !_confirmPasswordVisible,
+                                () => _passwordVisible = !_passwordVisible,
                               ),
                             ),
                           ),
-                          validator: (value) {
-                            if ((value ?? '').isEmpty) return '请再次输入密码';
-                            if (value != _passwordController.text) {
-                              return '两次输入的密码不一致';
-                            }
-                            return null;
-                          },
+                          validator: _validatePassword,
                         ),
-                      ],
-                      SizedBox(height: 12),
-                      if (_isLogin)
-                        Material(
-                          type: MaterialType.transparency,
-                          child: CheckboxListTile(
-                            key: Key('remember-account'),
-                            value: _rememberAccount,
-                            onChanged: (value) => setState(
-                              () => _rememberAccount = value ?? false,
-                            ),
-                            contentPadding: EdgeInsets.zero,
-                            dense: true,
-                            controlAffinity: ListTileControlAffinity.leading,
-                            title: Text(
-                              '记住账号（正式接入后启用）',
-                              style: TextStyle(
-                                color: AppColors.textMuted,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                        )
-                      else
-                        Padding(
-                          padding: EdgeInsets.symmetric(vertical: 5),
-                          child: Text(
-                            '继续即表示你已了解：当前仅预览注册流程，不会创建真实账号。',
-                            style: TextStyle(
-                              color: AppColors.textMuted,
-                              fontSize: 12,
-                              height: 1.45,
-                            ),
+                        const SizedBox(height: 12),
+                        _AuthOptions(
+                          compact: compactLayout,
+                          isLogin: _isLogin,
+                          onModeChanged: () => widget.onModeChanged(
+                            _isLogin ? AuthMode.register : AuthMode.login,
                           ),
                         ),
-                      if (_submittedPreview) ...[
-                        SizedBox(height: 8),
-                        const _PreviewResult(),
-                      ],
-                      SizedBox(height: 16),
-                      FilledButton.icon(
-                        key: Key('auth-submit'),
-                        onPressed: _submit,
-                        iconAlignment: IconAlignment.end,
-                        icon: Icon(Icons.arrow_forward_rounded),
-                        label: Text(_isLogin ? '预览登录' : '预览注册'),
-                        style: FilledButton.styleFrom(
-                          minimumSize: const Size.fromHeight(52),
-                          foregroundColor: Colors.white,
-                          backgroundColor: AppColors.violet,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(17),
-                          ),
-                        ),
-                      ),
-                      SizedBox(height: 14),
-                      TextButton(
-                        key: Key(
-                          _isLogin ? 'switch-to-register' : 'switch-to-login',
-                        ),
-                        onPressed: () => widget.onModeChanged(
-                          _isLogin ? AuthMode.register : AuthMode.login,
-                        ),
-                        child: Text(
-                          _isLogin ? '还没有账号？预览注册' : '已有账号？返回登录',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: AppColors.cyan),
-                        ),
-                      ),
-                      Row(
-                        children: [
-                          Expanded(child: Divider(color: AppColors.line)),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            child: Text(
-                              '其他方式',
-                              style: TextStyle(
-                                color: AppColors.textMuted,
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                          Expanded(child: Divider(color: AppColors.line)),
+                        if (_submittedPreview) ...[
+                          SizedBox(height: 8),
+                          const _PreviewResult(),
                         ],
-                      ),
-                      const SizedBox(height: 14),
-                      _SocialAuthButton(
-                        key: const Key('auth-google'),
-                        provider: 'Google',
-                        label: _isLogin ? '使用 Google 登录' : '使用 Google 注册',
-                        onPressed: () => _previewSocialAuth('Google'),
-                      ),
-                      const SizedBox(height: 10),
-                      _SocialAuthButton(
-                        key: const Key('auth-apple'),
-                        provider: 'Apple',
-                        label: _isLogin ? '使用 Apple 登录' : '使用 Apple 注册',
-                        onPressed: () => _previewSocialAuth('Apple'),
-                      ),
-                    ],
+                        SizedBox(height: 16),
+                        _GradientSubmitButton(
+                          key: Key('auth-submit'),
+                          onPressed: _submit,
+                          label: _isLogin ? '登录' : '注册并登录',
+                        ),
+                        const SizedBox(height: 16),
+                        const _AuthDivider(),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _SocialAuthButton(
+                                key: const Key('auth-google'),
+                                provider: 'Google',
+                                onPressed: () => _previewSocialAuth('Google'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _SocialAuthButton(
+                                key: const Key('auth-apple'),
+                                provider: 'Apple',
+                                onPressed: () => _previewSocialAuth('Apple'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ],
+            ),
           ),
         ),
       ],
     );
   }
+
+  BoxDecoration _authPanelDecoration() => BoxDecoration(
+    gradient: LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: AppColors.isDark
+          ? const [Color(0xE30A1238), Color(0xE30A102D), Color(0xE31B1758)]
+          : const [Color(0xF2FFFFFF), Color(0xE8F7F9FF), Color(0xE1F0ECFF)],
+    ),
+    borderRadius: BorderRadius.circular(28),
+    border: Border.all(
+      color: AppColors.isDark
+          ? const Color(0x6B6578DD)
+          : const Color(0xE8DFE6FF),
+    ),
+    boxShadow: [
+      BoxShadow(
+        color: AppColors.isDark
+            ? const Color(0x52040715)
+            : const Color(0x337787C9),
+        blurRadius: 54,
+        offset: const Offset(0, 22),
+      ),
+    ],
+  );
 }
 
 class _BrandMark extends StatelessWidget {
@@ -364,30 +289,220 @@ class _BrandMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 46,
-          height: 46,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(15),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [AppColors.cyan, AppColors.violet],
+    return MediaQuery.withClampedTextScaling(
+      maxScaleFactor: 1.3,
+      child: Row(
+        children: [
+          Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [AppColors.violet, AppColors.cyan],
+              ),
+            ),
+            child: const Icon(
+              Icons.credit_card_rounded,
+              color: Colors.white,
+              size: 30,
             ),
           ),
-          child: Icon(Icons.style_rounded, color: Colors.white),
+          const SizedBox(width: 14),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '集卡',
+                  style: TextStyle(
+                    color: AppColors.text,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: -0.8,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  'card.lengziyu.cn',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HomeButton extends StatelessWidget {
+  const _HomeButton({required this.onPressed, super.key});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return MediaQuery.withClampedTextScaling(
+      maxScaleFactor: 1.35,
+      child: OutlinedButton.icon(
+        onPressed: onPressed,
+        icon: const Icon(Icons.home_outlined, size: 18),
+        label: const Text('返回首页'),
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size(0, 46),
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          foregroundColor: AppColors.text,
+          backgroundColor: AppColors.isDark
+              ? const Color(0x75111C46)
+              : const Color(0xD6FFFFFF),
+          side: BorderSide(color: AppColors.line),
+          shape: const StadiumBorder(),
+          textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
         ),
-        SizedBox(width: 12),
-        Text(
-          '集卡',
-          style: TextStyle(
-            color: AppColors.text,
-            fontSize: 20,
-            fontWeight: FontWeight.w800,
+      ),
+    );
+  }
+}
+
+class _AuthOptions extends StatelessWidget {
+  const _AuthOptions({
+    required this.compact,
+    required this.isLogin,
+    required this.onModeChanged,
+  });
+
+  final bool compact;
+  final bool isLogin;
+  final VoidCallback onModeChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final leading = isLogin
+        ? const SizedBox.shrink()
+        : TextButton(
+            onPressed: onModeChanged,
+            style: TextButton.styleFrom(
+              padding: EdgeInsets.zero,
+              foregroundColor: AppColors.textMuted,
+            ),
+            child: const Text('返回'),
+          );
+    final trailing = TextButton(
+      key: Key(isLogin ? 'switch-to-register' : 'switch-to-login'),
+      onPressed: onModeChanged,
+      style: TextButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        foregroundColor: AppColors.cyan,
+        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900),
+      ),
+      child: Text(isLogin ? '创建账号' : '已有账号'),
+    );
+    return MediaQuery.withClampedTextScaling(
+      maxScaleFactor: 1.3,
+      child: compact
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                leading,
+                Align(alignment: Alignment.centerRight, child: trailing),
+              ],
+            )
+          : Row(children: [leading, const Spacer(), trailing]),
+    );
+  }
+}
+
+class _GradientSubmitButton extends StatelessWidget {
+  const _GradientSubmitButton({
+    required this.label,
+    required this.onPressed,
+    super.key,
+  });
+
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: AppColors.isDark
+              ? const [Color(0xFF9A63FF), Color(0xFF5D73FF), Color(0xFF3476FF)]
+              : const [Color(0xFF7D66FF), Color(0xFF5C5DFF), Color(0xFF5D39FF)],
+        ),
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x3D5F5DFF),
+            blurRadius: 28,
+            offset: Offset(0, 14),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(14),
+          child: SizedBox(
+            height: 56,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Icon(
+                  Icons.arrow_forward_rounded,
+                  color: Colors.white,
+                  size: 22,
+                ),
+              ],
+            ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _AuthDivider extends StatelessWidget {
+  const _AuthDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(child: Divider(color: AppColors.line)),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          child: Text(
+            '或',
+            style: TextStyle(
+              color: AppColors.text,
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        Expanded(child: Divider(color: AppColors.line)),
       ],
     );
   }
@@ -396,86 +511,63 @@ class _BrandMark extends StatelessWidget {
 class _SocialAuthButton extends StatelessWidget {
   const _SocialAuthButton({
     required this.provider,
-    required this.label,
     required this.onPressed,
     super.key,
   });
 
   final String provider;
-  final String label;
   final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
     final isApple = provider == 'Apple';
-    return OutlinedButton(
-      onPressed: onPressed,
-      style: OutlinedButton.styleFrom(
-        minimumSize: const Size.fromHeight(52),
-        foregroundColor: AppColors.text,
-        backgroundColor: AppColors.glassStrong,
-        side: BorderSide(color: AppColors.line),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      ),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: SizedBox(
-              width: 28,
+    return MediaQuery.withClampedTextScaling(
+      maxScaleFactor: 1.2,
+      child: OutlinedButton(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size.fromHeight(48),
+          foregroundColor: AppColors.text,
+          backgroundColor: AppColors.isDark
+              ? const Color(0x5C161F48)
+              : const Color(0xB8FFFFFF),
+          side: BorderSide(color: AppColors.line),
+          padding: EdgeInsets.zero,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 20,
               child: isApple
-                  ? Icon(Icons.apple, color: AppColors.text, size: 23)
+                  ? Icon(Icons.apple, color: AppColors.text, size: 22)
                   : const Text(
                       'G',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: Color(0xFF4285F4),
-                        fontSize: 20,
+                        fontSize: 17,
                         fontWeight: FontWeight.w900,
                       ),
                     ),
             ),
-          ),
-          Text(
-            label,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ServiceNotice extends StatelessWidget {
-  const _ServiceNotice();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      key: Key('auth-service-notice'),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.cyan.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.cyan.withValues(alpha: 0.28)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.shield_outlined, color: AppColors.cyan, size: 21),
-          SizedBox(width: 11),
-          Expanded(
-            child: Text(
-              '账号安全服务升级中。当前表单仅供界面预览，输入内容不会发送或保存。',
-              style: TextStyle(
-                color: AppColors.textMuted,
-                fontSize: 13,
-                height: 1.45,
+            const SizedBox(width: 3),
+            Flexible(
+              child: Text(
+                provider,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -490,13 +582,17 @@ class _PreviewResult extends StatelessWidget {
       key: Key('auth-preview-result'),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.mint.withValues(alpha: 0.1),
+        color: AppColors.violet.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.mint.withValues(alpha: 0.28)),
+        border: Border.all(color: AppColors.violet.withValues(alpha: 0.28)),
       ),
       child: Text(
-        '界面校验已完成。密码已清空，未创建会话或账号。',
-        style: TextStyle(color: AppColors.mint, fontSize: 12.5, height: 1.4),
+        '登录服务正在进行安全升级，暂不能提交账号或创建会话。',
+        style: TextStyle(
+          color: AppColors.textMuted,
+          fontSize: 12.5,
+          height: 1.4,
+        ),
       ),
     );
   }

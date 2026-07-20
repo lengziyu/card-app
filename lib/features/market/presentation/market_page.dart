@@ -1,4 +1,5 @@
 import 'package:card_app/core/theme/app_colors.dart';
+import 'package:card_app/core/widgets/app_feedback.dart';
 import 'package:card_app/features/catalog/domain/card_summary.dart';
 import 'package:card_app/features/catalog/widgets/catalog_card_row.dart';
 import 'package:card_app/features/shell/widgets/animated_glass_segment.dart';
@@ -13,12 +14,14 @@ class MarketPage extends StatefulWidget {
     required this.repository,
     required this.onSearch,
     required this.onOpenCard,
+    this.onOpenCanvas,
     super.key,
   });
 
   final CardCatalogRepository repository;
   final VoidCallback onSearch;
   final ValueChanged<CardSummary> onOpenCard;
+  final VoidCallback? onOpenCanvas;
 
   @override
   State<MarketPage> createState() => _MarketPageState();
@@ -37,15 +40,19 @@ class _MarketPageState extends State<MarketPage> {
     _loadCards();
   }
 
-  Future<void> _loadCards({bool force = false}) async {
+  Future<void> _loadCards({
+    bool force = false,
+    bool rethrowOnError = false,
+  }) async {
     setState(() => _error = null);
     try {
       final cards = await widget.repository.loadCards(force: force);
       if (!mounted) return;
       setState(() => _cards = cards);
-    } catch (error) {
+    } catch (error, stackTrace) {
       if (!mounted) return;
       setState(() => _error = error);
+      if (rethrowOnError) Error.throwWithStackTrace(error, stackTrace);
     }
   }
 
@@ -73,10 +80,8 @@ class _MarketPageState extends State<MarketPage> {
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
     return Material(
       color: Colors.transparent,
-      child: RefreshIndicator(
-        onRefresh: () => _loadCards(force: true),
-        color: AppColors.violet,
-        backgroundColor: AppColors.glassStrong,
+      child: AppPullToRefresh(
+        onRefresh: () => _loadCards(force: true, rethrowOnError: true),
         child: CustomScrollView(
           key: const Key('market-page'),
           physics: AlwaysScrollableScrollPhysics(
@@ -86,7 +91,10 @@ class _MarketPageState extends State<MarketPage> {
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(24, 18, 24, 14),
               sliver: SliverToBoxAdapter(
-                child: _MarketHeader(onSearch: widget.onSearch),
+                child: _MarketHeader(
+                  onSearch: widget.onSearch,
+                  onOpenCanvas: widget.onOpenCanvas,
+                ),
               ),
             ),
             SliverPadding(
@@ -205,9 +213,10 @@ class _MarketPageState extends State<MarketPage> {
 }
 
 class _MarketHeader extends StatelessWidget {
-  const _MarketHeader({required this.onSearch});
+  const _MarketHeader({required this.onSearch, this.onOpenCanvas});
 
   final VoidCallback onSearch;
+  final VoidCallback? onOpenCanvas;
 
   @override
   Widget build(BuildContext context) {
@@ -228,30 +237,61 @@ class _MarketHeader extends StatelessWidget {
             ],
           ),
         ),
-        SizedBox(width: 16),
-        Material(
-          color: Colors.transparent,
-          child: InkWell(
-            key: Key('market-search-button'),
-            onTap: onSearch,
-            customBorder: CircleBorder(),
-            child: Ink(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: AppColors.glassStrong,
-                shape: BoxShape.circle,
-                border: Border.all(color: AppColors.line),
-              ),
-              child: Icon(
-                Icons.search_rounded,
-                color: AppColors.text,
-                size: 22,
-              ),
-            ),
+        SizedBox(width: 12),
+        if (onOpenCanvas != null) ...[
+          _MarketHeaderAction(
+            key: const Key('market-canvas-button'),
+            icon: Icons.grid_view_rounded,
+            semanticLabel: '打开卡片画布',
+            onTap: onOpenCanvas!,
           ),
+          const SizedBox(width: 8),
+        ],
+        _MarketHeaderAction(
+          key: const Key('market-search-button'),
+          icon: Icons.search_rounded,
+          semanticLabel: '搜索卡片',
+          onTap: onSearch,
         ),
       ],
+    );
+  }
+}
+
+class _MarketHeaderAction extends StatelessWidget {
+  const _MarketHeaderAction({
+    required this.icon,
+    required this.semanticLabel,
+    required this.onTap,
+    super.key,
+  });
+
+  final IconData icon;
+  final String semanticLabel;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: semanticLabel,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          customBorder: const CircleBorder(),
+          child: Ink(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: AppColors.glassStrong,
+              shape: BoxShape.circle,
+              border: Border.all(color: AppColors.line),
+            ),
+            child: Icon(icon, color: AppColors.text, size: 22),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -331,16 +371,18 @@ class _MarketSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: List.generate(
-        4,
-        (index) => Container(
-          height: 88,
-          margin: EdgeInsets.only(bottom: index == 3 ? 0 : 12),
-          decoration: BoxDecoration(
-            color: AppColors.glass,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.line),
+    return AppShimmer(
+      child: Column(
+        children: List.generate(
+          4,
+          (index) => Container(
+            height: 88,
+            margin: EdgeInsets.only(bottom: index == 3 ? 0 : 12),
+            decoration: BoxDecoration(
+              color: AppColors.glass,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.line),
+            ),
           ),
         ),
       ),

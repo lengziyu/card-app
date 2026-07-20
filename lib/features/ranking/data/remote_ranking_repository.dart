@@ -54,6 +54,12 @@ class RemoteRankingRepository {
               marketCap: item['marketCap']?.toString() ?? '—',
               dominance: (item['dominancePct'] as num?)?.toDouble() ?? 0,
               color: _parseColor(item['color']?.toString()),
+              change: (item['change'] as num?)?.toDouble() ?? 0,
+              imageUrl: _optionalResolvedUrl(item['image']),
+              chains: jsonList(
+                item['chains'] ?? const [],
+                label: '稳定币网络',
+              ).map((value) => value.toString()).toList(growable: false),
             );
           })
           .toList(growable: false),
@@ -64,6 +70,10 @@ class RemoteRankingRepository {
               name: item['name']?.toString() ?? '',
               value: item['value']?.toString() ?? '—',
               share: (item['share'] as num?)?.toDouble() ?? 0,
+              imageUrl: _optionalResolvedUrl(item['image']),
+              color: item['color'] == null
+                  ? null
+                  : _parseColor(item['color']?.toString()),
             );
           })
           .toList(growable: false),
@@ -84,6 +94,7 @@ class RemoteRankingRepository {
               name: item['name']?.toString() ?? '',
               cardId: item['cardId']?.toString(),
               logoText: item['logoText']?.toString() ?? '',
+              logo: item['logo']?.toString() ?? '',
               sevenDay: item['sevenDayDepositVolume'] as num? ?? 0,
               thirtyDay: item['thirtyDayDepositVolume'] as num? ?? 0,
               total: item['totalDepositVolume'] as num? ?? 0,
@@ -132,15 +143,24 @@ class RemoteRankingRepository {
   ArticleFeedItem _articleFromJson(Map<String, dynamic> json) {
     final slug = json['slug']?.toString() ?? '';
     final raw = json['rawContent']?.toString() ?? '';
-    final paragraphs = raw
+    final bodyHtml = json['bodyHtml']?.toString() ?? '';
+    final markdown = bodyHtml.trim().isNotEmpty
+        ? _htmlToMarkdown(bodyHtml)
+        : raw.trim();
+    final paragraphs = markdown
         .split(RegExp(r'\n\s*\n'))
         .map((value) => value.trim())
         .where((value) => value.isNotEmpty)
         .toList(growable: false);
-    final category = switch (json['category']?.toString()) {
-      'news' => '行业资讯',
-      'benefit' => '权益指南',
-      _ => '开卡攻略',
+    final feedCategory = switch (json['category']?.toString()) {
+      'benefit' => ArticleFeedCategory.benefit,
+      'open-card' => ArticleFeedCategory.openCard,
+      _ => ArticleFeedCategory.news,
+    };
+    final category = switch (feedCategory) {
+      ArticleFeedCategory.news => '行业资讯',
+      ArticleFeedCategory.benefit => '权益指南',
+      ArticleFeedCategory.openCard => '开卡攻略',
     };
     final coverPath = json['coverImageUrl']?.toString() ?? '';
     return ArticleFeedItem(
@@ -166,7 +186,7 @@ class RemoteRankingRepository {
         coverImageUrl: coverPath.isEmpty
             ? null
             : _apiClient.resolve(coverPath).toString(),
-        markdown: raw.isEmpty ? null : raw,
+        markdown: markdown.isEmpty ? null : markdown,
         inviteCode: _nullableText(json['inviteCode']),
         inviteUrl: _nullableText(json['inviteUrl']),
         author: _nullableText(json['author']),
@@ -176,8 +196,88 @@ class RemoteRankingRepository {
           : _apiClient.resolve(coverPath).toString(),
       viewCount: (json['viewCount'] as num?)?.toInt() ?? 0,
       likeCount: (json['likeCount'] as num?)?.toInt() ?? 0,
+      category: feedCategory,
     );
   }
+
+  String _htmlToMarkdown(String source) {
+    var value = source;
+    value = value.replaceAllMapped(
+      RegExp(
+        r'<img\b[^>]*?src=["\u0027]([^"\u0027]+)["\u0027][^>]*?(?:alt=["\u0027]([^"\u0027]*)["\u0027])?[^>]*?/?>',
+        caseSensitive: false,
+      ),
+      (match) {
+        final url = _apiClient.resolve(match.group(1) ?? '').toString();
+        final alt = _decodeHtml(match.group(2) ?? '文章图片');
+        return '\n\n![$alt]($url)\n\n';
+      },
+    );
+    value = value.replaceAllMapped(
+      RegExp(
+        r'<a\b[^>]*?href=["\u0027]([^"\u0027]+)["\u0027][^>]*>(.*?)</a>',
+        caseSensitive: false,
+        dotAll: true,
+      ),
+      (match) {
+        final label = _plainHtml(match.group(2) ?? '').trim();
+        return '[$label](${_decodeHtml(match.group(1) ?? '')})';
+      },
+    );
+    value = value.replaceAllMapped(
+      RegExp(r'<h([1-6])\b[^>]*>', caseSensitive: false),
+      (match) => '\n\n${'#' * int.parse(match.group(1)!)} ',
+    );
+    value = value.replaceAll(
+      RegExp(r'</h[1-6]>', caseSensitive: false),
+      '\n\n',
+    );
+    value = value.replaceAll(
+      RegExp(r'<blockquote\b[^>]*>', caseSensitive: false),
+      '\n\n> ',
+    );
+    value = value.replaceAll(
+      RegExp(r'</blockquote>', caseSensitive: false),
+      '\n\n',
+    );
+    value = value.replaceAll(
+      RegExp(r'<li\b[^>]*>', caseSensitive: false),
+      '\n- ',
+    );
+    value = value.replaceAll(RegExp(r'</li>', caseSensitive: false), '');
+    value = value.replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n');
+    value = value.replaceAll(RegExp(r'</p>', caseSensitive: false), '\n\n');
+    value = value.replaceAll(RegExp(r'<p\b[^>]*>', caseSensitive: false), '');
+    value = value.replaceAll(
+      RegExp(r'<(strong|b)\b[^>]*>', caseSensitive: false),
+      '**',
+    );
+    value = value.replaceAll(
+      RegExp(r'</(strong|b)>', caseSensitive: false),
+      '**',
+    );
+    value = value.replaceAll(
+      RegExp(r'<(em|i)\b[^>]*>', caseSensitive: false),
+      '*',
+    );
+    value = value.replaceAll(RegExp(r'</(em|i)>', caseSensitive: false), '*');
+    value = value.replaceAll(RegExp(r'<[^>]+>'), '');
+    value = _decodeHtml(value);
+    value = value.replaceAll(RegExp(r'[ \t]+\n'), '\n');
+    value = value.replaceAll(RegExp(r'\n{3,}'), '\n\n');
+    return value.trim();
+  }
+
+  String _plainHtml(String source) =>
+      _decodeHtml(source.replaceAll(RegExp(r'<[^>]+>'), ''));
+
+  String _decodeHtml(String source) => source
+      .replaceAll('&nbsp;', ' ')
+      .replaceAll('&amp;', '&')
+      .replaceAll('&lt;', '<')
+      .replaceAll('&gt;', '>')
+      .replaceAll('&quot;', '"')
+      .replaceAll('&#39;', "'");
 
   String _dateLabel(String? source) {
     final date = DateTime.tryParse(source ?? '')?.toLocal();
@@ -188,6 +288,11 @@ class RemoteRankingRepository {
   String? _nullableText(Object? value) {
     final text = value?.toString().trim() ?? '';
     return text.isEmpty ? null : text;
+  }
+
+  String? _optionalResolvedUrl(Object? value) {
+    final source = value?.toString().trim() ?? '';
+    return source.isEmpty ? null : _apiClient.resolve(source).toString();
   }
 
   int _parseColor(String? source) {

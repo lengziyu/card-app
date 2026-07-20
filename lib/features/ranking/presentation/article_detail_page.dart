@@ -1,8 +1,10 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:card_app/core/theme/app_colors.dart';
+import 'package:card_app/core/widgets/app_feedback.dart';
 import 'package:card_app/features/catalog/domain/card_summary.dart';
 import 'package:card_app/features/catalog/widgets/catalog_card_row.dart';
 import 'package:card_app/features/ranking/domain/local_article.dart';
+import 'package:card_app/features/shell/widgets/sticky_page_header.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -40,7 +42,13 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
     setState(() => _liking = true);
     try {
       await widget.onLike?.call();
-      if (mounted) setState(() => _liked = true);
+      if (!mounted) return;
+      setState(() => _liked = true);
+      AppNotice.success(context, '感谢你的认可，点赞已经记录。', title: '点赞成功');
+    } catch (_) {
+      if (mounted) {
+        AppNotice.error(context, '这次没有点赞成功，请稍后再试。', title: '网络开小差了');
+      }
     } finally {
       if (mounted) setState(() => _liking = false);
     }
@@ -49,14 +57,7 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
   Future<void> _copy(String value, String label) async {
     await Clipboard.setData(ClipboardData(text: value));
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text('$label已复制：$value'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+    AppNotice.success(context, '$label已复制：$value', title: '复制成功');
   }
 
   String get _markdown => widget.article.markdown?.trim().isNotEmpty == true
@@ -70,6 +71,7 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
         .where((card) => article.relatedCardIds.contains(card.id))
         .toList();
     final bottomInset = MediaQuery.paddingOf(context).bottom;
+    final topInset = MediaQuery.paddingOf(context).top;
     final markdownStyle = MarkdownStyleSheet.fromTheme(Theme.of(context))
         .copyWith(
           p: TextStyle(color: AppColors.text, fontSize: 14, height: 1.78),
@@ -114,153 +116,226 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
           listBullet: TextStyle(color: AppColors.violet, fontSize: 15),
         );
 
-    return ListView(
+    return Stack(
       key: const Key('article-detail-page'),
-      physics: const BouncingScrollPhysics(),
-      padding: EdgeInsets.fromLTRB(20, 12, 20, 28 + bottomInset),
       children: [
-        _ArticleNavigation(onBack: widget.onBack),
-        const SizedBox(height: 18),
-        if (article.coverImageUrl case final cover?) ...[
-          ClipRRect(
-            borderRadius: BorderRadius.circular(14),
-            child: AspectRatio(
-              aspectRatio: 16 / 9,
-              child: CachedNetworkImage(
-                imageUrl: cover,
-                fit: BoxFit.cover,
-                memCacheWidth: 1200,
-                maxWidthDiskCache: 1400,
-                fadeInDuration: const Duration(milliseconds: 150),
-                placeholder: (_, _) =>
-                    ColoredBox(color: AppColors.violet.withValues(alpha: 0.08)),
-                errorWidget: (_, _, _) => const SizedBox.shrink(),
+        _ArticleTopFadedScroll(
+          topInset: topInset,
+          child: ListView(
+            physics: const BouncingScrollPhysics(),
+            padding: EdgeInsets.fromLTRB(
+              20,
+              88 + topInset,
+              20,
+              28 + bottomInset,
+            ),
+            children: [
+              if (article.coverImageUrl case final cover?) ...[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: AspectRatio(
+                    aspectRatio: 16 / 9,
+                    child: CachedNetworkImage(
+                      imageUrl: cover,
+                      fit: BoxFit.cover,
+                      memCacheWidth: 1200,
+                      maxWidthDiskCache: 1400,
+                      fadeInDuration: const Duration(milliseconds: 150),
+                      placeholder: (_, _) => AppShimmer(
+                        child: ColoredBox(
+                          color: AppColors.violet.withValues(alpha: 0.08),
+                        ),
+                      ),
+                      errorWidget: (_, _, _) => const SizedBox.shrink(),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+              ],
+              Row(
+                children: [
+                  _MetaPill(label: article.category),
+                  const Spacer(),
+                  Text(
+                    article.publishedLabel,
+                    style: TextStyle(color: AppColors.textMuted, fontSize: 11),
+                  ),
+                  if (article.author?.isNotEmpty == true) ...[
+                    const SizedBox(width: 10),
+                    Text(
+                      article.author!,
+                      style: TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ],
               ),
-            ),
-          ),
-          const SizedBox(height: 18),
-        ],
-        Row(
-          children: [
-            _MetaPill(label: article.category),
-            const Spacer(),
-            Text(
-              article.publishedLabel,
-              style: TextStyle(color: AppColors.textMuted, fontSize: 11),
-            ),
-            if (article.author?.isNotEmpty == true) ...[
-              const SizedBox(width: 10),
+              const SizedBox(height: 14),
               Text(
-                article.author!,
-                style: TextStyle(color: AppColors.textMuted, fontSize: 11),
+                article.title,
+                style: Theme.of(context).textTheme.headlineMedium,
+              ),
+              if (article.summary.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text(
+                  article.summary,
+                  style: TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 14,
+                    height: 1.7,
+                  ),
+                ),
+              ],
+              if (article.inviteCode?.isNotEmpty == true) ...[
+                const SizedBox(height: 14),
+                _InviteRow(
+                  label: '邀请码',
+                  value: article.inviteCode!,
+                  onCopy: () => _copy(article.inviteCode!, '邀请码'),
+                ),
+              ],
+              if (article.inviteUrl?.isNotEmpty == true) ...[
+                const SizedBox(height: 10),
+                _InviteRow(
+                  label: '邀请链接',
+                  value: article.inviteUrl!,
+                  onCopy: () => _copy(article.inviteUrl!, '邀请链接'),
+                ),
+              ],
+              if (article.tags.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final tag in article.tags) _MetaPill(label: tag),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 24),
+              MarkdownBody(data: _markdown, styleSheet: markdownStyle),
+              const SizedBox(height: 22),
+              Text(
+                '本文仅整理公开信息，不构成金融建议。',
+                style: TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 11.5,
+                  height: 1.5,
+                ),
+              ),
+              if (relatedCards.isNotEmpty) ...[
+                const SizedBox(height: 26),
+                Text(
+                  '关联卡片',
+                  style: TextStyle(
+                    color: AppColors.text,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '文章里提到的卡片可以直接点进去查看详情。',
+                  style: TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 12,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                for (final card in relatedCards) ...[
+                  CatalogCardRow(
+                    card: card,
+                    onTap: () => widget.onOpenCard(card),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+              ],
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Expanded(
+                    child: _ActionPill(
+                      key: const Key('article-like'),
+                      icon: _liked
+                          ? Icons.thumb_up_rounded
+                          : Icons.thumb_up_outlined,
+                      label: _liking ? '点赞中…' : (_liked ? '已点赞' : '点赞'),
+                      loading: _liking,
+                      onTap: _liking ? null : _toggleLike,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _ActionPill(
+                      key: const Key('article-favorite'),
+                      icon: widget.favorite
+                          ? Icons.star_rounded
+                          : Icons.star_border_rounded,
+                      label: widget.favorite ? '已收藏' : '收藏',
+                      active: widget.favorite,
+                      onTap: () => widget.onFavoriteChanged(!widget.favorite),
+                    ),
+                  ),
+                  if (article.inviteCode?.isNotEmpty == true) ...[
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _ActionPill(
+                        key: const Key('article-copy-invite'),
+                        icon: Icons.copy_rounded,
+                        label: '复制邀请码',
+                        onTap: () => _copy(article.inviteCode!, '邀请码'),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ],
-          ],
-        ),
-        const SizedBox(height: 14),
-        Text(article.title, style: Theme.of(context).textTheme.headlineMedium),
-        if (article.summary.isNotEmpty) ...[
-          const SizedBox(height: 10),
-          Text(
-            article.summary,
-            style: TextStyle(
-              color: AppColors.textMuted,
-              fontSize: 14,
-              height: 1.7,
-            ),
-          ),
-        ],
-        if (article.inviteCode?.isNotEmpty == true) ...[
-          const SizedBox(height: 14),
-          _InviteRow(
-            label: '邀请码',
-            value: article.inviteCode!,
-            onCopy: () => _copy(article.inviteCode!, '邀请码'),
-          ),
-        ],
-        if (article.inviteUrl?.isNotEmpty == true) ...[
-          const SizedBox(height: 10),
-          _InviteRow(
-            label: '邀请链接',
-            value: article.inviteUrl!,
-            onCopy: () => _copy(article.inviteUrl!, '邀请链接'),
-          ),
-        ],
-        if (article.tags.isNotEmpty) ...[
-          const SizedBox(height: 14),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [for (final tag in article.tags) _MetaPill(label: tag)],
-          ),
-        ],
-        const SizedBox(height: 24),
-        MarkdownBody(data: _markdown, styleSheet: markdownStyle),
-        const SizedBox(height: 22),
-        Text(
-          '本文仅整理公开信息，不构成金融建议。',
-          style: TextStyle(
-            color: AppColors.textMuted,
-            fontSize: 11.5,
-            height: 1.5,
           ),
         ),
-        if (relatedCards.isNotEmpty) ...[
-          const SizedBox(height: 26),
-          Text(
-            '关联卡片',
-            style: TextStyle(
-              color: AppColors.text,
-              fontSize: 17,
-              fontWeight: FontWeight.w900,
+        Align(
+          alignment: Alignment.topCenter,
+          child: FrostedHeaderFade(
+            height: 80 + topInset,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(20, 8 + topInset, 20, 24),
+              child: _ArticleNavigation(onBack: widget.onBack),
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            '文章里提到的卡片可以直接点进去查看详情。',
-            style: TextStyle(
-              color: AppColors.textMuted,
-              fontSize: 12,
-              height: 1.5,
-            ),
-          ),
-          const SizedBox(height: 12),
-          for (final card in relatedCards) ...[
-            CatalogCardRow(card: card, onTap: () => widget.onOpenCard(card)),
-            const SizedBox(height: 10),
-          ],
-        ],
-        const SizedBox(height: 18),
-        Wrap(
-          alignment: WrapAlignment.center,
-          spacing: 10,
-          runSpacing: 10,
-          children: [
-            _ActionPill(
-              key: const Key('article-like'),
-              icon: _liked ? Icons.thumb_up_rounded : Icons.thumb_up_outlined,
-              label: _liking ? '点赞中…' : (_liked ? '已点赞' : '点赞'),
-              onTap: _liking ? null : _toggleLike,
-            ),
-            _ActionPill(
-              key: const Key('article-favorite'),
-              icon: widget.favorite
-                  ? Icons.star_rounded
-                  : Icons.star_border_rounded,
-              label: widget.favorite ? '取消收藏' : '收藏文章',
-              active: widget.favorite,
-              onTap: () => widget.onFavoriteChanged(!widget.favorite),
-            ),
-            if (article.inviteCode?.isNotEmpty == true)
-              _ActionPill(
-                key: const Key('article-copy-invite'),
-                icon: Icons.copy_rounded,
-                label: '复制邀请码',
-                onTap: () => _copy(article.inviteCode!, '邀请码'),
-              ),
-          ],
         ),
       ],
+    );
+  }
+}
+
+class _ArticleTopFadedScroll extends StatelessWidget {
+  const _ArticleTopFadedScroll({required this.topInset, required this.child});
+
+  final double topInset;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return ShaderMask(
+      blendMode: BlendMode.dstIn,
+      shaderCallback: (bounds) {
+        final hold = (topInset * .55 / bounds.height).clamp(0.0, .18);
+        final fadeEnd = ((topInset + 72) / bounds.height).clamp(.05, .26);
+        return LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: const [
+            Colors.transparent,
+            Colors.transparent,
+            Colors.black,
+            Colors.black,
+          ],
+          stops: [0, hold, fadeEnd, 1],
+        ).createShader(bounds);
+      },
+      child: child,
     );
   }
 }
@@ -377,19 +452,24 @@ class _ActionPill extends StatelessWidget {
     required this.label,
     required this.onTap,
     this.active = false,
+    this.loading = false,
     super.key,
   });
   final IconData icon;
   final String label;
   final VoidCallback? onTap;
   final bool active;
+  final bool loading;
 
   @override
   Widget build(BuildContext context) => OutlinedButton.icon(
     onPressed: onTap,
-    icon: Icon(icon, size: 17),
+    icon: loading ? const AppLoadingIndicator(size: 17) : Icon(icon, size: 17),
     label: Text(label),
     style: OutlinedButton.styleFrom(
+      padding: const EdgeInsets.symmetric(horizontal: 7),
+      minimumSize: const Size(0, 42),
+      textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
       foregroundColor: active ? AppColors.violet : AppColors.text,
       side: BorderSide(
         color: active

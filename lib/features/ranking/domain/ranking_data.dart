@@ -22,6 +22,9 @@ class StablecoinAsset {
     required this.marketCap,
     required this.dominance,
     required this.color,
+    this.change = 0,
+    this.chains = const [],
+    this.imageUrl,
   });
 
   final String id;
@@ -30,6 +33,9 @@ class StablecoinAsset {
   final String marketCap;
   final double dominance;
   final int color;
+  final double change;
+  final List<String> chains;
+  final String? imageUrl;
 }
 
 class StablecoinDetail {
@@ -53,11 +59,15 @@ class StablecoinChain {
     required this.name,
     required this.value,
     required this.share,
+    this.imageUrl,
+    this.color,
   });
 
   final String name;
   final String value;
   final double share;
+  final String? imageUrl;
+  final int? color;
 }
 
 class StablecoinDashboard {
@@ -93,6 +103,7 @@ class CardMetric {
     required this.name,
     required this.cardId,
     required this.logoText,
+    this.logo = '',
     required this.sevenDay,
     required this.thirtyDay,
     required this.total,
@@ -104,6 +115,7 @@ class CardMetric {
   final String name;
   final String? cardId;
   final String logoText;
+  final String logo;
   final num sevenDay;
   final num thirtyDay;
   final num total;
@@ -132,6 +144,7 @@ class ArticleFeedItem {
     required this.coverImageUrl,
     required this.viewCount,
     required this.likeCount,
+    this.category = ArticleFeedCategory.news,
   });
 
   final String slug;
@@ -139,4 +152,7 @@ class ArticleFeedItem {
   final String? coverImageUrl;
   final int viewCount;
   final int likeCount;
+  final ArticleFeedCategory category;
 }
+
+enum ArticleFeedCategory { news, benefit, openCard }

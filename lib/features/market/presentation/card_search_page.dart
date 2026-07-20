@@ -1,4 +1,5 @@
 import 'package:card_app/core/theme/app_colors.dart';
+import 'package:card_app/core/widgets/app_feedback.dart';
 import 'package:card_app/features/catalog/domain/card_summary.dart';
 import 'package:card_app/features/catalog/widgets/catalog_card_row.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +12,7 @@ class CardSearchPage extends StatefulWidget {
     required this.cards,
     required this.addedCardIds,
     required this.onBack,
+    required this.onRefresh,
     required this.onOpenCard,
     required this.onCardChanged,
     super.key,
@@ -20,6 +22,7 @@ class CardSearchPage extends StatefulWidget {
   final List<CardSummary> cards;
   final Set<String> addedCardIds;
   final VoidCallback onBack;
+  final Future<void> Function() onRefresh;
   final ValueChanged<CardSummary> onOpenCard;
   final void Function(CardSummary card, bool added) onCardChanged;
 
@@ -44,12 +47,13 @@ class _CardSearchPageState extends State<CardSearchPage> {
   @override
   Widget build(BuildContext context) {
     final isAddMode = widget.mode == CardSearchMode.add;
+    final topInset = MediaQuery.paddingOf(context).top;
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     return Column(
       key: Key('card-search-page'),
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+          padding: EdgeInsets.fromLTRB(20, topInset + 14, 20, 0),
           child: Row(
             children: [
               _BackButton(onPressed: widget.onBack),
@@ -121,33 +125,48 @@ class _CardSearchPageState extends State<CardSearchPage> {
           ),
         ),
         Expanded(
-          child: _results.isEmpty
-              ? const _SearchEmpty()
-              : ListView.separated(
-                  key: Key('search-results'),
-                  physics: BouncingScrollPhysics(),
-                  padding: EdgeInsets.fromLTRB(20, 4, 20, 24 + bottomInset),
-                  itemCount: _results.length,
-                  separatorBuilder: (_, _) => SizedBox(height: 12),
-                  itemBuilder: (context, index) {
-                    final card = _results[index];
-                    final added = widget.addedCardIds.contains(card.id);
-                    return CatalogCardRow(
-                      card: card,
-                      added: isAddMode ? added : null,
-                      onToggleAdded: isAddMode
-                          ? (value) => widget.onCardChanged(card, value)
-                          : null,
-                      onTap: () {
-                        if (isAddMode && !added) {
-                          widget.onCardChanged(card, true);
-                          return;
-                        }
-                        widget.onOpenCard(card);
-                      },
-                    );
-                  },
-                ),
+          child: AppPullToRefresh(
+            onRefresh: widget.onRefresh,
+            child: _results.isEmpty
+                ? const CustomScrollView(
+                    physics: AlwaysScrollableScrollPhysics(
+                      parent: BouncingScrollPhysics(),
+                    ),
+                    slivers: [
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: _SearchEmpty(),
+                      ),
+                    ],
+                  )
+                : ListView.separated(
+                    key: const Key('search-results'),
+                    physics: const AlwaysScrollableScrollPhysics(
+                      parent: BouncingScrollPhysics(),
+                    ),
+                    padding: EdgeInsets.fromLTRB(20, 4, 20, 24 + bottomInset),
+                    itemCount: _results.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 12),
+                    itemBuilder: (context, index) {
+                      final card = _results[index];
+                      final added = widget.addedCardIds.contains(card.id);
+                      return CatalogCardRow(
+                        card: card,
+                        added: isAddMode ? added : null,
+                        onToggleAdded: isAddMode
+                            ? (value) => widget.onCardChanged(card, value)
+                            : null,
+                        onTap: () {
+                          if (isAddMode && !added) {
+                            widget.onCardChanged(card, true);
+                            return;
+                          }
+                          widget.onOpenCard(card);
+                        },
+                      );
+                    },
+                  ),
+          ),
         ),
       ],
     );
