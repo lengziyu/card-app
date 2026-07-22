@@ -111,18 +111,29 @@ enum AppLanguage {
     orElse: () => AppLanguage.system,
   );
 
+  /// Languages reviewed for the first public release. Other translations stay
+  /// in the source catalog for future work, but are deliberately not exposed
+  /// until a complete visual and copy review is finished.
+  static const releaseLanguages = <AppLanguage>[
+    AppLanguage.system,
+    AppLanguage.simplifiedChinese,
+    AppLanguage.traditionalChinese,
+    AppLanguage.english,
+  ];
+
+  static Locale resolveDeviceLocale(Locale? deviceLocale) {
+    if (deviceLocale?.languageCode == 'zh') {
+      const traditionalRegions = {'HK', 'MO', 'TW'};
+      return traditionalRegions.contains(deviceLocale?.countryCode)
+          ? const Locale('zh', 'HK')
+          : const Locale('zh', 'CN');
+    }
+    return const Locale('en', 'US');
+  }
+
   static const supportedLocales = <Locale>[
     Locale('zh', 'CN'),
     Locale('zh', 'HK'),
     Locale('en', 'US'),
-    Locale('ja', 'JP'),
-    Locale('ko', 'KR'),
-    Locale('vi', 'VN'),
-    Locale('ru', 'RU'),
-    Locale('es', 'ES'),
-    Locale('fr', 'FR'),
-    Locale('de', 'DE'),
-    Locale('pt', 'BR'),
-    Locale('tr', 'TR'),
   ];
 }

@@ -30,32 +30,51 @@ class ApiClient {
     );
   }
 
-  Future<Object?> get(String path, {Map<String, Object?>? query}) =>
-      _send('GET', path, query: query);
+  Future<Object?> get(
+    String path, {
+    Map<String, Object?>? query,
+    Map<String, String>? headers,
+  }) => _send('GET', path, query: query, headers: headers);
 
-  Future<Object?> post(String path, {Object? body}) =>
-      _send('POST', path, body: body);
+  Future<Object?> post(
+    String path, {
+    Object? body,
+    Map<String, String>? headers,
+    Duration? timeout,
+  }) => _send('POST', path, body: body, headers: headers, timeout: timeout);
 
-  Future<Object?> delete(String path, {Object? body}) =>
-      _send('DELETE', path, body: body);
+  Future<Object?> put(
+    String path, {
+    Object? body,
+    Map<String, String>? headers,
+  }) => _send('PUT', path, body: body, headers: headers);
+
+  Future<Object?> delete(
+    String path, {
+    Object? body,
+    Map<String, String>? headers,
+  }) => _send('DELETE', path, body: body, headers: headers);
 
   Future<Object?> _send(
     String method,
     String path, {
     Map<String, Object?>? query,
     Object? body,
+    Map<String, String>? headers,
+    Duration? timeout,
   }) async {
     final uri = resolve(path, query);
     try {
       final request = http.Request(method, uri)
         ..headers['accept'] = 'application/json';
+      if (headers != null) request.headers.addAll(headers);
       if (body != null) {
         request.headers['content-type'] = 'application/json';
         request.body = jsonEncode(body);
       }
       final streamed = await _client
           .send(request)
-          .timeout(method == 'GET' ? _readTimeout : _writeTimeout);
+          .timeout(timeout ?? (method == 'GET' ? _readTimeout : _writeTimeout));
       final response = await http.Response.fromStream(streamed);
       final decoded = _decode(response.body);
       if (response.statusCode < 200 || response.statusCode >= 300) {

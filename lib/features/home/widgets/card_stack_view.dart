@@ -1,14 +1,18 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
+import 'package:card_app/core/motion/app_haptics.dart';
 import 'package:card_app/features/catalog/domain/card_summary.dart';
+import 'package:card_app/features/catalog/widgets/catalog_card_row.dart';
 import 'package:card_app/features/home/controllers/card_stack_controller.dart';
 import 'package:card_app/features/home/domain/card_layout_calculator.dart';
 import 'package:card_app/features/home/domain/card_transform_state.dart';
 import 'package:card_app/features/home/domain/home_card_layout.dart';
 import 'package:card_app/features/home/widgets/wallet_card_item.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+
+typedef HomeCardOpenTransition =
+    void Function(CardSummary card, CatalogCardSourceGeometry geometry);
 
 class CardStackView extends StatefulWidget {
   const CardStackView({
@@ -19,6 +23,8 @@ class CardStackView extends StatefulWidget {
     required this.onHeightScaleChanged,
     required this.onReorderCards,
     required this.onOpenCard,
+    this.onOpenCardTransition,
+    this.transitioningCardId,
     super.key,
   });
 
@@ -29,6 +35,8 @@ class CardStackView extends StatefulWidget {
   final ValueChanged<double> onHeightScaleChanged;
   final ValueChanged<List<String>> onReorderCards;
   final ValueChanged<CardSummary> onOpenCard;
+  final HomeCardOpenTransition? onOpenCardTransition;
+  final String? transitioningCardId;
 
   @override
   State<CardStackView> createState() => _CardStackViewState();
@@ -120,6 +128,10 @@ class _CardStackViewState extends State<CardStackView> {
                       onLongPressEnd: _onCardLongPressEnd,
                       onLongPressCancel: _onCardLongPressCancel,
                       onTap: () => _onCardTap(card),
+                      onTapWithGeometry: (geometry) =>
+                          _onCardTap(card, geometry: geometry),
+                      sharedContentHidden:
+                          widget.transitioningCardId == card.id,
                     ),
               if (mode == CardStackMode.focus)
                 const Positioned.fill(child: _FocusEdgeSofteners()),
@@ -155,19 +167,28 @@ class _CardStackViewState extends State<CardStackView> {
     );
   }
 
-  void _onCardTap(CardSummary card) {
+  void _onCardTap(CardSummary card, {CatalogCardSourceGeometry? geometry}) {
     if (widget.controller.isReordering) return;
     if (widget.controller.mode == CardStackMode.wallet) {
-      HapticFeedback.lightImpact();
-      widget.onOpenCard(card);
+      AppHaptics.lightImpact();
+      _openCard(card, geometry);
       return;
     }
     if (widget.controller.selectCard(card.id)) {
-      HapticFeedback.lightImpact();
-      widget.onOpenCard(card);
+      AppHaptics.lightImpact();
+      _openCard(card, geometry);
       return;
     }
-    HapticFeedback.selectionClick();
+    AppHaptics.selection();
+  }
+
+  void _openCard(CardSummary card, CatalogCardSourceGeometry? geometry) {
+    final transition = widget.onOpenCardTransition;
+    if (transition != null && geometry != null) {
+      transition(card, geometry);
+      return;
+    }
+    widget.onOpenCard(card);
   }
 
   void _onCardLongPressStart(CardSummary card, LongPressStartDetails details) {
@@ -175,7 +196,7 @@ class _CardStackViewState extends State<CardStackView> {
     if (!widget.controller.startWalletReorder(card.id)) return;
     _dragging = false;
     _pinching = false;
-    HapticFeedback.mediumImpact();
+    AppHaptics.mediumImpact();
   }
 
   void _onCardLongPressMoveUpdate(LongPressMoveUpdateDetails details) {
@@ -185,14 +206,14 @@ class _CardStackViewState extends State<CardStackView> {
     );
     if (!changed) return;
     widget.onReorderCards(widget.controller.cardIds);
-    HapticFeedback.selectionClick();
+    AppHaptics.selection();
   }
 
   void _onCardLongPressEnd(LongPressEndDetails details) {
     if (!widget.controller.isReordering) return;
     final order = widget.controller.endWalletReorder();
     widget.onReorderCards(order);
-    HapticFeedback.lightImpact();
+    AppHaptics.lightImpact();
   }
 
   void _onCardLongPressCancel() {
@@ -232,7 +253,7 @@ class _CardStackViewState extends State<CardStackView> {
       );
       return;
     }
-    if (_pinching || widget.controller.mode == CardStackMode.stack) return;
+    if (_pinching) return;
     final delta = details.focalPointDelta.dy;
     _dragDistance += delta;
     if (!_dragging && _dragDistance.abs() > 2) {
@@ -247,7 +268,7 @@ class _CardStackViewState extends State<CardStackView> {
       final nextHeightScale = _pendingHeightScale;
       if (nextHeightScale != null) {
         widget.onHeightScaleChanged(nextHeightScale);
-        HapticFeedback.selectionClick();
+        AppHaptics.selection();
       }
       _pinching = false;
       _pendingHeightScale = null;
@@ -258,7 +279,7 @@ class _CardStackViewState extends State<CardStackView> {
     final nextIndex = widget.controller.endDrag(
       velocity: details.velocity.pixelsPerSecond.dy,
     );
-    if (nextIndex != previousIndex) HapticFeedback.lightImpact();
+    if (nextIndex != previousIndex) AppHaptics.cardSwipe();
     _dragging = false;
   }
 
@@ -303,7 +324,7 @@ class _CardStackViewState extends State<CardStackView> {
     _pendingHeightScale = null;
     if (nextHeightScale == null) return;
     widget.onHeightScaleChanged(nextHeightScale);
-    HapticFeedback.selectionClick();
+    AppHaptics.selection();
   }
 }
 
@@ -317,7 +338,7 @@ class _FocusEdgeSofteners extends StatelessWidget {
         clipBehavior: Clip.none,
         children: const [
           Positioned(
-            top: -38,
+            top: 0,
             left: 0,
             right: 0,
             child: _FocusEdgeFade(top: true),
@@ -365,6 +386,8 @@ class _PositionedWalletCard extends StatelessWidget {
     required this.onLongPressEnd,
     required this.onLongPressCancel,
     required this.onTap,
+    required this.onTapWithGeometry,
+    required this.sharedContentHidden,
     super.key,
   });
 
@@ -378,6 +401,8 @@ class _PositionedWalletCard extends StatelessWidget {
   final GestureLongPressEndCallback onLongPressEnd;
   final VoidCallback onLongPressCancel;
   final VoidCallback onTap;
+  final ValueChanged<CatalogCardSourceGeometry> onTapWithGeometry;
+  final bool sharedContentHidden;
 
   @override
   Widget build(BuildContext context) {
@@ -407,6 +432,8 @@ class _PositionedWalletCard extends StatelessWidget {
                 onLongPressEnd: onLongPressEnd,
                 onLongPressCancel: onLongPressCancel,
                 onTap: onTap,
+                onTapWithGeometry: onTapWithGeometry,
+                sharedContentHidden: sharedContentHidden,
               ),
             ),
           ),
@@ -416,8 +443,11 @@ class _PositionedWalletCard extends StatelessWidget {
   }
 
   double _visualDepthFor(CardTransformState state) {
-    if (selected || mode == CardStackMode.wallet) return 0;
+    if (mode == CardStackMode.wallet) return 0;
     final scaleStep = mode == CardStackMode.focus ? .07 : .012;
-    return ((1 - state.scale) / scaleStep).clamp(1.0, 4.0).toDouble();
+    // Derive the treatment from the animated geometry instead of switching
+    // it immediately with `selected`. This lets blur, colour lift and the
+    // white veil cross-fade while the next card naturally comes forward.
+    return ((1 - state.scale) / scaleStep).clamp(0.0, 4.0).toDouble();
   }
 }

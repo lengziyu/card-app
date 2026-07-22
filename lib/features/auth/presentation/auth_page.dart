@@ -1,11 +1,16 @@
+import 'dart:async';
+
 import 'package:card_app/core/theme/app_colors.dart';
 import 'package:card_app/core/widgets/app_feedback.dart';
-import 'package:flutter/material.dart';
+import 'package:card_app/features/auth/data/auth_controller.dart';
+import 'package:card_app/core/localization/localized_text.dart';
+import 'package:flutter/material.dart' hide Text;
 
 enum AuthMode { login, register }
 
 class AuthPage extends StatefulWidget {
   const AuthPage({
+    required this.controller,
     required this.mode,
     required this.onBack,
     required this.onModeChanged,
@@ -13,6 +18,7 @@ class AuthPage extends StatefulWidget {
   });
 
   final AuthMode mode;
+  final AuthController controller;
   final VoidCallback onBack;
   final ValueChanged<AuthMode> onModeChanged;
 
@@ -25,54 +31,100 @@ class _AuthPageState extends State<AuthPage> {
   final _accountController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _passwordVisible = false;
-  bool _submittedPreview = false;
-
   bool get _isLogin => widget.mode == AuthMode.login;
 
   @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_handleControllerChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant AuthPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller == widget.controller) return;
+    oldWidget.controller.removeListener(_handleControllerChanged);
+    widget.controller.addListener(_handleControllerChanged);
+  }
+
+  @override
   void dispose() {
+    widget.controller.removeListener(_handleControllerChanged);
     _accountController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
-  void _submit() {
-    setState(() => _submittedPreview = false);
+  void _handleControllerChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
     FocusScope.of(context).unfocus();
-    _passwordController.clear();
-    setState(() {
-      _passwordVisible = false;
-      _submittedPreview = true;
-    });
+    final email = _accountController.text.trim();
+    final password = _passwordController.text;
+    final awaitingEmailVerification =
+        widget.controller.user?.emailVerified == false;
+    if (awaitingEmailVerification) {
+      await widget.controller.confirmEmailVerification(
+        email: email,
+        password: password,
+      );
+    } else if (_isLogin) {
+      await widget.controller.signIn(email: email, password: password);
+    } else {
+      await widget.controller.register(email: email, password: password);
+    }
+    if (widget.controller.isVerified) _passwordController.clear();
+    if (mounted) setState(() => _passwordVisible = false);
   }
 
-  void _previewSocialAuth(String provider) {
+  Future<void> _checkEmailVerification() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
     FocusScope.of(context).unfocus();
-    AppNotice.info(
-      context,
-      '$provider 授权入口已就绪，服务端 OAuth 配置完成后即可正式使用。',
-      title: '授权预览',
+    await widget.controller.confirmEmailVerification(
+      email: _accountController.text.trim(),
+      password: _passwordController.text,
     );
+    if (widget.controller.isVerified) _passwordController.clear();
+    if (mounted) setState(() => _passwordVisible = false);
+  }
+
+  Future<void> _switchMode() async {
+    FocusScope.of(context).unfocus();
+    await widget.controller.resetAuthenticationFlow();
+    _formKey.currentState?.reset();
+    _accountController.clear();
+    _passwordController.clear();
+    if (!mounted) return;
+    setState(() => _passwordVisible = false);
+    widget.onModeChanged(_isLogin ? AuthMode.register : AuthMode.login);
+  }
+
+  Future<void> _resetPassword() async {
+    final emailError = _validateAccount(_accountController.text);
+    if (emailError != null) {
+      AppNotice.info(context, emailError, title: '重置密码');
+      return;
+    }
+    FocusScope.of(context).unfocus();
+    await widget.controller.resetPassword(_accountController.text.trim());
   }
 
   String? _validateAccount(String? value) {
     final account = value?.trim() ?? '';
-    if (account.isEmpty) return '请输入用户名或邮箱';
-    if (account.contains('@')) {
-      final emailPattern = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
-      if (!emailPattern.hasMatch(account)) return '请输入有效的邮箱地址';
-    } else if (!RegExp(r'^[A-Za-z0-9_]{3,18}$').hasMatch(account)) {
-      return '用户名需为 3–18 位字母、数字或下划线';
-    }
+    if (account.isEmpty) return '请输入邮箱地址';
+    final emailPattern = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
+    if (!emailPattern.hasMatch(account)) return '请输入有效的邮箱地址';
     return null;
   }
 
   String? _validatePassword(String? value) {
     final password = value ?? '';
     if (password.isEmpty) return '请输入密码';
-    if (!_isLogin && password.length < 6) return '密码至少需要 6 位';
+    if (!_isLogin && password.length < 8) return '密码至少需要 8 位';
     return null;
   }
 
@@ -114,6 +166,8 @@ class _AuthPageState extends State<AuthPage> {
     final compactLayout =
         MediaQuery.textScalerOf(context).scale(1) > 1.35 ||
         MediaQuery.sizeOf(context).width < 340;
+    final awaitingEmailVerification =
+        widget.controller.user?.emailVerified == false;
     return CustomScrollView(
       key: Key(_isLogin ? 'login-page' : 'register-page'),
       physics: const BouncingScrollPhysics(),
@@ -192,9 +246,11 @@ class _AuthPageState extends State<AuthPage> {
                           autocorrect: false,
                           enableSuggestions: false,
                           obscureText: !_passwordVisible,
-                          onFieldSubmitted: _isLogin ? (_) => _submit() : null,
+                          onFieldSubmitted: _isLogin
+                              ? (_) => unawaited(_submit())
+                              : null,
                           decoration: _decoration(
-                            hint: _isLogin ? '密码' : '至少 6 位',
+                            hint: _isLogin ? '密码' : '至少 8 位',
                             icon: Icons.lock_outline_rounded,
                             suffixIcon: _VisibilityButton(
                               key: Key('password-visibility'),
@@ -210,41 +266,51 @@ class _AuthPageState extends State<AuthPage> {
                         _AuthOptions(
                           compact: compactLayout,
                           isLogin: _isLogin,
-                          onModeChanged: () => widget.onModeChanged(
-                            _isLogin ? AuthMode.register : AuthMode.login,
-                          ),
+                          onForgotPassword: _resetPassword,
+                          onModeChanged: () => unawaited(_switchMode()),
                         ),
-                        if (_submittedPreview) ...[
-                          SizedBox(height: 8),
-                          const _PreviewResult(),
+                        if (widget.controller.message case final message?) ...[
+                          const SizedBox(height: 8),
+                          _AuthStatusCard(message: message),
                         ],
-                        SizedBox(height: 16),
+                        if (widget.controller.user case final user?
+                            when !user.emailVerified) ...[
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _VerificationSecondaryButton(
+                                  key: const Key('auth-resend-verification'),
+                                  onPressed: widget.controller.loading
+                                      ? null
+                                      : widget.controller.resendVerification,
+                                  label: '重发验证邮件',
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: _VerificationPrimaryButton(
+                                  key: const Key('auth-refresh-verification'),
+                                  onPressed: widget.controller.loading
+                                      ? null
+                                      : _checkEmailVerification,
+                                  label: '我已完成验证',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                        const SizedBox(height: 16),
                         _GradientSubmitButton(
                           key: Key('auth-submit'),
-                          onPressed: _submit,
-                          label: _isLogin ? '登录' : '注册并登录',
-                        ),
-                        const SizedBox(height: 16),
-                        const _AuthDivider(),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _SocialAuthButton(
-                                key: const Key('auth-google'),
-                                provider: 'Google',
-                                onPressed: () => _previewSocialAuth('Google'),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _SocialAuthButton(
-                                key: const Key('auth-apple'),
-                                provider: 'Apple',
-                                onPressed: () => _previewSocialAuth('Apple'),
-                              ),
-                            ),
-                          ],
+                          onPressed: widget.controller.loading ? null : _submit,
+                          label: widget.controller.loading
+                              ? '请稍候…'
+                              : awaitingEmailVerification
+                              ? '检查验证并登录'
+                              : _isLogin
+                              ? '登录'
+                              : '注册并验证邮箱',
                         ),
                       ],
                     ),
@@ -379,16 +445,26 @@ class _AuthOptions extends StatelessWidget {
     required this.compact,
     required this.isLogin,
     required this.onModeChanged,
+    required this.onForgotPassword,
   });
 
   final bool compact;
   final bool isLogin;
   final VoidCallback onModeChanged;
+  final VoidCallback onForgotPassword;
 
   @override
   Widget build(BuildContext context) {
     final leading = isLogin
-        ? const SizedBox.shrink()
+        ? TextButton(
+            key: const Key('auth-forgot-password'),
+            onPressed: onForgotPassword,
+            style: TextButton.styleFrom(
+              padding: EdgeInsets.zero,
+              foregroundColor: AppColors.textMuted,
+            ),
+            child: const Text('忘记密码'),
+          )
         : TextButton(
             onPressed: onModeChanged,
             style: TextButton.styleFrom(
@@ -430,51 +506,87 @@ class _GradientSubmitButton extends StatelessWidget {
   });
 
   final String label;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: AppColors.isDark
-              ? const [Color(0xFF9A63FF), Color(0xFF5D73FF), Color(0xFF3476FF)]
-              : const [Color(0xFF7D66FF), Color(0xFF5C5DFF), Color(0xFF5D39FF)],
-        ),
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x3D5F5DFF),
-            blurRadius: 28,
-            offset: Offset(0, 14),
+    final enabled = onPressed != null;
+    return Opacity(
+      opacity: enabled ? 1 : .52,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: AppColors.isDark
+                ? const [
+                    Color(0xFFA276FF),
+                    Color(0xFF6C72FF),
+                    Color(0xFF3C65E8),
+                  ]
+                : const [
+                    Color(0xFF8A6CFF),
+                    Color(0xFF625FFF),
+                    Color(0xFF5136E8),
+                  ],
           ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onPressed,
-          borderRadius: BorderRadius.circular(14),
-          child: SizedBox(
-            height: 56,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  label,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w900,
+          borderRadius: BorderRadius.circular(17),
+          border: Border.all(color: Colors.white.withValues(alpha: .24)),
+          boxShadow: [
+            const BoxShadow(
+              color: Color(0x485A5FFF),
+              blurRadius: 28,
+              offset: Offset(0, 15),
+            ),
+            BoxShadow(
+              color: Colors.white.withValues(
+                alpha: AppColors.isDark ? .03 : .42,
+              ),
+              blurRadius: 2,
+              offset: const Offset(0, -1),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onPressed,
+            borderRadius: BorderRadius.circular(17),
+            child: SizedBox(
+              height: 58,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                      shadows: const [
+                        Shadow(
+                          color: Color(0x450E145C),
+                          blurRadius: 5,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                const Icon(
-                  Icons.arrow_forward_rounded,
-                  color: Colors.white,
-                  size: 22,
-                ),
-              ],
+                  const SizedBox(width: 12),
+                  const Icon(
+                    Icons.arrow_forward_rounded,
+                    color: Colors.white,
+                    size: 22,
+                    shadows: [
+                      Shadow(
+                        color: Color(0x450E145C),
+                        blurRadius: 5,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -483,116 +595,173 @@ class _GradientSubmitButton extends StatelessWidget {
   }
 }
 
-class _AuthDivider extends StatelessWidget {
-  const _AuthDivider();
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(child: Divider(color: AppColors.line)),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          child: Text(
-            '或',
-            style: TextStyle(
-              color: AppColors.text,
-              fontSize: 14,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ),
-        Expanded(child: Divider(color: AppColors.line)),
-      ],
-    );
-  }
-}
-
-class _SocialAuthButton extends StatelessWidget {
-  const _SocialAuthButton({
-    required this.provider,
+class _VerificationSecondaryButton extends StatelessWidget {
+  const _VerificationSecondaryButton({
+    required this.label,
     required this.onPressed,
     super.key,
   });
 
-  final String provider;
-  final VoidCallback onPressed;
+  final String label;
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
-    final isApple = provider == 'Apple';
-    return MediaQuery.withClampedTextScaling(
-      maxScaleFactor: 1.2,
-      child: OutlinedButton(
-        onPressed: onPressed,
-        style: OutlinedButton.styleFrom(
-          minimumSize: const Size.fromHeight(48),
-          foregroundColor: AppColors.text,
-          backgroundColor: AppColors.isDark
-              ? const Color(0x5C161F48)
-              : const Color(0xB8FFFFFF),
-          side: BorderSide(color: AppColors.line),
-          padding: EdgeInsets.zero,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
+    return OutlinedButton.icon(
+      onPressed: onPressed,
+      icon: const Icon(Icons.mark_email_read_outlined, size: 17),
+      label: Text(label),
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size.fromHeight(52),
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        foregroundColor: AppColors.isDark
+            ? const Color(0xFFE7E9FF)
+            : const Color(0xFF5667D4),
+        backgroundColor: AppColors.isDark
+            ? const Color(0x4D1D294F)
+            : const Color(0xCFFFFFFF),
+        side: BorderSide(
+          color: AppColors.isDark
+              ? const Color(0x806E7DF0)
+              : const Color(0xA08E96FF),
+          width: 1.25,
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            SizedBox(
-              width: 20,
-              child: isApple
-                  ? Icon(Icons.apple, color: AppColors.text, size: 22)
-                  : const Text(
-                      'G',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Color(0xFF4285F4),
-                        fontSize: 17,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-            ),
-            const SizedBox(width: 3),
-            Flexible(
-              child: Text(
-                provider,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900),
+        elevation: 0,
+        shadowColor: const Color(0x305A68B8),
+      ),
+    );
+  }
+}
+
+class _VerificationPrimaryButton extends StatelessWidget {
+  const _VerificationPrimaryButton({
+    required this.label,
+    required this.onPressed,
+    super.key,
+  });
+
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onPressed != null;
+    return Opacity(
+      opacity: enabled ? 1 : .5,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: AppColors.isDark
+                ? const [Color(0xFF777BFF), Color(0xFF515BB7)]
+                : const [Color(0xFF6E78F3), Color(0xFF535DB6)],
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white.withValues(alpha: .2)),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x42535DCD),
+              blurRadius: 18,
+              offset: Offset(0, 10),
             ),
           ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onPressed,
+            borderRadius: BorderRadius.circular(16),
+            child: SizedBox(
+              height: 52,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.verified_rounded,
+                    color: Colors.white,
+                    size: 17,
+                  ),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                        shadows: [
+                          Shadow(
+                            color: Color(0x500D174F),
+                            blurRadius: 5,
+                            offset: Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );
   }
 }
 
-class _PreviewResult extends StatelessWidget {
-  const _PreviewResult();
+class _AuthStatusCard extends StatelessWidget {
+  const _AuthStatusCard({required this.message});
+
+  final String message;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      key: Key('auth-preview-result'),
+      key: const Key('auth-status-message'),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.violet.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.violet.withValues(alpha: 0.28)),
-      ),
-      child: Text(
-        '登录服务正在进行安全升级，暂不能提交账号或创建会话。',
-        style: TextStyle(
-          color: AppColors.textMuted,
-          fontSize: 12.5,
-          height: 1.4,
+        gradient: LinearGradient(
+          colors: [
+            AppColors.violet.withValues(alpha: AppColors.isDark ? .20 : .13),
+            AppColors.cyan.withValues(alpha: AppColors.isDark ? .12 : .08),
+          ],
         ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.violet.withValues(alpha: .34)),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.violet.withValues(alpha: .09),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.mark_email_unread_outlined,
+            color: AppColors.violet,
+            size: 19,
+          ),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(
+                color: AppColors.isDark
+                    ? const Color(0xFFD6DBF5)
+                    : const Color(0xFF626D89),
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                height: 1.42,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

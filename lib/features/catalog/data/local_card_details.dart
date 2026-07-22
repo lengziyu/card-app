@@ -17,7 +17,37 @@ const _defaultFees = <FeeLine>[
   FeeLine(label: 'ATM 取现', value: '以官网为准'),
 ];
 
-const _details = <String, CardDetail>{
+final _details = <String, CardDetail>{
+  'wise-account': CardDetail(
+    cardId: 'wise-account',
+    tags: ['全球账户', '多币种', '个人账户', '已核验'],
+    region: '按注册居住地开放；中国大陆列为可持有账户地区',
+    funding: '银行转账、支持的本地方式（因地区而异）',
+    availability: '中国大陆可申请；具体功能与币种因居住地而异',
+    features: [
+      DetailFeature(icon: DetailFeatureIcon.wallet, text: '持有与管理多种货币'),
+      DetailFeature(icon: DetailFeatureIcon.globe, text: '可按币种取得收款账户信息'),
+      DetailFeature(icon: DetailFeatureIcon.payments, text: '支持跨境汇款与换汇'),
+      DetailFeature(icon: DetailFeatureIcon.shield, text: '开户及功能启用均需官方核验'),
+    ],
+    fees: [
+      FeeLine(label: '账户月费', value: '以中国地区官方定价为准'),
+      FeeLine(label: '换汇与汇款', value: '按币种、金额与路径实时计算'),
+      FeeLine(label: '收款账户信息', value: '按币种与居住地开放情况'),
+      FeeLine(label: 'USD 收款信息', value: '中国地址不可用'),
+    ],
+    kycNote: '全球账户的中国大陆资格请看下方专门说明；不要仅凭身份证或护照标签判断。',
+    paymentChannels: const <PaymentChannel>{},
+    sourceLabel: 'Wise 官方帮助中心 · 2026-07-22 核验',
+    note: '本页仅整理公开资料，不提供开户、换汇或转账服务；申请、证件与可用功能均以 Wise 实时流程为准。',
+    chinaKyc: ChinaKycInfo(
+      status: ChinaKycStatus.available,
+      documentSummary: '公开页未提供固定的大陆证件清单；以申请流程实际要求为准',
+      note: '中国大陆居住地可持有 Wise 账户，但功能按居住地和币种变化；中国地址不能取得 USD 收款账户信息。',
+      sourceUrl: 'https://wise.com/cn/availability/',
+      checkedAt: DateTime(2026, 7, 22),
+    ),
+  ),
   'etherfi-core': CardDetail(
     cardId: 'etherfi-core',
     tags: ['U 卡', 'DeFi', 'Visa', '演示资料'],

@@ -1,0 +1,7 @@
+{
+  "ENABLE_SUPABASE_AUTH": false,
+  "SUPABASE_URL": "https://YOUR_PROJECT_REF.supabase.co",
+  "SUPABASE_PUBLISHABLE_KEY": "",
+  "SUPABASE_EMAIL_REDIRECT_URL": "cn.lengziyu.cardapp://auth-callback",
+  "AUTH_ACCOUNT_PATH": "/api/auth/account"
+}

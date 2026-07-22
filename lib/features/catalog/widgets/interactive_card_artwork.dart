@@ -118,7 +118,7 @@ class _InteractiveCardArtworkState extends State<InteractiveCardArtwork>
       return;
     }
     if (!_glassSweepController.isAnimating) {
-      _glassSweepController.repeat();
+      _glassSweepController.forward(from: 0);
     }
   }
 
@@ -129,6 +129,7 @@ class _InteractiveCardArtworkState extends State<InteractiveCardArtwork>
       return;
     }
     _entranceController.forward(from: 0);
+    _glassSweepController.forward(from: 0);
     if (widget.effect == CardVisualEffect.flame &&
         !_idleController.isAnimating) {
       _idleController
@@ -140,11 +141,15 @@ class _InteractiveCardArtworkState extends State<InteractiveCardArtwork>
   ImageProvider<Object>? _imageProvider() {
     final imageUrl = widget.card.imageUrl;
     if (imageUrl != null && imageUrl.isNotEmpty) {
-      return CachedNetworkImageProvider(imageUrl);
+      return ResizeImage.resizeIfNeeded(
+        480,
+        null,
+        CachedNetworkImageProvider(imageUrl),
+      );
     }
     final assetPath = widget.card.assetPath;
     if (assetPath != null && assetPath.isNotEmpty) {
-      return AssetImage(assetPath);
+      return ResizeImage.resizeIfNeeded(480, null, AssetImage(assetPath));
     }
     return null;
   }

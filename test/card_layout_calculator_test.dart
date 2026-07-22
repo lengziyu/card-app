@@ -100,6 +100,44 @@ void main() {
     expect(dragging[3].top, lessThan(resting[3].top));
   });
 
+  test('stack and focus keep their module anchors while selection changes', () {
+    final stackResting = CardLayoutCalculator.calculate(
+      mode: CardStackMode.stack,
+      selectedIndex: 2,
+      dragOffset: 0,
+      screenSize: screenSize,
+      cardSize: cardSize,
+      itemCount: 6,
+    );
+    final stackDragging = CardLayoutCalculator.calculate(
+      mode: CardStackMode.stack,
+      selectedIndex: 2,
+      dragOffset: -70,
+      screenSize: screenSize,
+      cardSize: cardSize,
+      itemCount: 6,
+    );
+    expect(stackDragging[2].top, lessThan(stackResting[2].top));
+    for (var index = 0; index < stackResting.length; index++) {
+      if (index == 2) continue;
+      expect(stackDragging[index].top, stackResting[index].top);
+    }
+
+    final focusTops = <double>[];
+    for (var selectedIndex = 0; selectedIndex < 6; selectedIndex++) {
+      final states = CardLayoutCalculator.calculate(
+        mode: CardStackMode.focus,
+        selectedIndex: selectedIndex,
+        dragOffset: 0,
+        screenSize: screenSize,
+        cardSize: cardSize,
+        itemCount: 6,
+      );
+      focusTops.add(states[selectedIndex].top);
+    }
+    expect(focusTops.toSet(), hasLength(1));
+  });
+
   test('expanded modes stay inside an iPhone-width viewport', () {
     for (final mode in [CardStackMode.stack, CardStackMode.focus]) {
       final states = CardLayoutCalculator.calculate(
@@ -238,5 +276,23 @@ void main() {
       expect(controller.selectedId, 'd');
       expect(controller.selectedIndex, 3);
     }
+  });
+
+  test('stack drag changes selection while preserving order and position', () {
+    final controller = CardStackController(
+      vsync: const TestVSync(),
+      cardIds: const ['a', 'b', 'c', 'd', 'e'],
+      initialMode: CardStackMode.stack,
+    );
+    addTearDown(controller.dispose);
+    controller.configureLayout(screenSize: screenSize, cardSize: cardSize);
+
+    final firstTop = controller.transformFor('a').top;
+    controller.startDrag();
+    controller.updateDrag(-80);
+    expect(controller.endDrag(velocity: -600), 3);
+    expect(controller.selectedId, 'd');
+    expect(controller.cardIds, const ['a', 'b', 'c', 'd', 'e']);
+    expect(controller.transformFor('a').top, firstTop);
   });
 }

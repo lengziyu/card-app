@@ -1,20 +1,27 @@
 import 'dart:math' as math;
 
+import 'package:card_app/core/motion/app_bottom_sheet.dart';
+import 'package:card_app/core/motion/app_haptics.dart';
+import 'package:card_app/core/motion/motion_widgets.dart';
 import 'package:card_app/core/theme/app_colors.dart';
 import 'package:card_app/core/widgets/app_feedback.dart';
 import 'package:card_app/features/catalog/domain/card_summary.dart';
-import 'package:card_app/features/catalog/widgets/card_artwork.dart';
+import 'package:card_app/features/catalog/widgets/global_account_catalog_card.dart';
 import 'package:card_app/features/ranking/data/remote_ranking_repository.dart';
 import 'package:card_app/features/ranking/domain/local_article.dart';
 import 'package:card_app/features/ranking/domain/ranking_data.dart';
+import 'package:card_app/features/pro/widgets/pro_crown_badge.dart';
 import 'package:card_app/features/shell/widgets/animated_glass_segment.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter/material.dart';
+import 'package:card_app/core/localization/localized_text.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:flutter_svg/flutter_svg.dart';
 
-enum RankingTab { ranking, charts, metrics, articles }
+enum RankingTab { ranking, users, metrics, articles }
 
-enum ArticleTab { news, benefit, openCard }
+enum _UserRankingRange { monthly, contribution }
+
+enum ArticleTab { news, globalAccount, openCard }
 
 const _metricCollapseDuration = Duration(milliseconds: 280);
 const _metricCollapseCurve = Cubic(0.22, 0.82, 0.28, 1);
@@ -46,6 +53,24 @@ const _stablecoinIconBySymbol = <String, String>{
       'https://coin-images.coingecko.com/coins/images/54558/large/ff_200_X_200.png?1740741076',
   'U':
       'https://coin-images.coingecko.com/coins/images/71157/large/united-stables-logo.jpg?1766061640',
+};
+
+/// Bundled first so stablecoin marks remain recognisable on networks where
+/// CoinGecko's image CDN is unavailable.  Runtime images are still used for
+/// newly listed assets that are not part of this curated set.
+const _stablecoinAssetBySymbol = <String, String>{
+  'USDT': 'assets/stablecoins/usdt.png',
+  'USDC': 'assets/stablecoins/usdc.png',
+  'USDS': 'assets/stablecoins/usds.png',
+  'DAI': 'assets/stablecoins/dai.png',
+  'USD1': 'assets/stablecoins/usd1.png',
+  'USDE': 'assets/stablecoins/usde.png',
+  'USDG': 'assets/stablecoins/usdg.png',
+  'PYUSD': 'assets/stablecoins/pyusd.png',
+  'USDY': 'assets/stablecoins/usdy.png',
+  'RLUSD': 'assets/stablecoins/rlusd.png',
+  'USDD': 'assets/stablecoins/usdd.png',
+  'USDF': 'assets/stablecoins/usdf.png',
 };
 
 const _chainIconByName = <String, String>{
@@ -99,6 +124,49 @@ final _testMetricsDashboard = CardMetricsDashboard(
   ],
 );
 
+final _testUserRankingDashboard = UserRankingDashboard(
+  periodLabel: '本月',
+  methodology: '贡献 40% · 有效活跃 25% · 社区反馈 20% · 持续参与 15%',
+  updatedAt: null,
+  isPreview: true,
+  items: const [
+    UserRankingEntry(
+      id: 'demo-1',
+      displayName: '风暴卡友',
+      monthlyActivityScore: 96,
+      totalContributionScore: 1380,
+      acceptedContributions: 28,
+      activeDays: 24,
+      isPro: true,
+    ),
+    UserRankingEntry(
+      id: 'demo-2',
+      displayName: 'GlobalRay',
+      monthlyActivityScore: 91,
+      totalContributionScore: 1260,
+      acceptedContributions: 25,
+      activeDays: 22,
+    ),
+    UserRankingEntry(
+      id: 'demo-3',
+      displayName: '卡片观察员',
+      monthlyActivityScore: 88,
+      totalContributionScore: 1195,
+      acceptedContributions: 21,
+      activeDays: 25,
+      isPro: true,
+    ),
+    UserRankingEntry(
+      id: 'demo-4',
+      displayName: 'MintLab',
+      monthlyActivityScore: 82,
+      totalContributionScore: 1040,
+      acceptedContributions: 19,
+      activeDays: 19,
+    ),
+  ],
+);
+
 class RankingPage extends StatefulWidget {
   const RankingPage({
     required this.cards,
@@ -106,6 +174,8 @@ class RankingPage extends StatefulWidget {
     required this.onOpenArticle,
     required this.repository,
     required this.enableRemoteData,
+    this.isPro = false,
+    this.onOpenPro,
     super.key,
   });
 
@@ -114,6 +184,8 @@ class RankingPage extends StatefulWidget {
   final ValueChanged<LocalArticle> onOpenArticle;
   final RemoteRankingRepository repository;
   final bool enableRemoteData;
+  final bool isPro;
+  final VoidCallback? onOpenPro;
 
   @override
   State<RankingPage> createState() => _RankingPageState();
@@ -123,11 +195,15 @@ class _RankingPageState extends State<RankingPage> {
   RankingTab _tab = RankingTab.ranking;
   List<RankingGroup>? _groups;
   StablecoinDashboard? _stablecoins;
+  UserRankingDashboard? _users;
   CardMetricsDashboard? _metrics;
   List<ArticleFeedItem>? _articles;
   final Set<RankingTab> _failed = {};
+  bool _stablecoinsFailed = false;
   int _contentDirection = 1;
   ArticleTab _articleTab = ArticleTab.news;
+  String _stablecoinRange = '30d';
+  _UserRankingRange _userRange = _UserRankingRange.monthly;
 
   @override
   void initState() {
@@ -135,6 +211,7 @@ class _RankingPageState extends State<RankingPage> {
     if (!widget.enableRemoteData) {
       _failed.addAll([RankingTab.ranking, RankingTab.articles]);
       _stablecoins = _testStablecoinDashboard;
+      _users = _testUserRankingDashboard;
       _metrics = _testMetricsDashboard;
     } else {
       _loadAll();
@@ -148,10 +225,11 @@ class _RankingPageState extends State<RankingPage> {
         widget.repository.loadRankings,
         (value) => _groups = value,
       ),
+      _loadStablecoins(),
       _load(
-        RankingTab.charts,
-        widget.repository.loadStablecoins,
-        (value) => _stablecoins = value,
+        RankingTab.users,
+        widget.repository.loadUserRankings,
+        (value) => _users = value,
       ),
       _load(
         RankingTab.metrics,
@@ -164,6 +242,19 @@ class _RankingPageState extends State<RankingPage> {
         (value) => _articles = value,
       ),
     ]);
+  }
+
+  Future<void> _loadStablecoins() async {
+    try {
+      final value = await widget.repository.loadStablecoins();
+      if (!mounted) return;
+      setState(() {
+        _stablecoins = value;
+        _stablecoinsFailed = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _stablecoinsFailed = true);
+    }
   }
 
   Future<void> _load<T>(
@@ -198,9 +289,9 @@ class _RankingPageState extends State<RankingPage> {
           SliverPersistentHeader(
             pinned: true,
             delegate: PinnedGlassHeaderDelegate(
-              height: 66,
+              height: 56,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 10),
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
                 child: _RankingTabs(selected: _tab, onChanged: _selectTab),
               ),
             ),
@@ -208,7 +299,7 @@ class _RankingPageState extends State<RankingPage> {
           SliverPadding(
             padding: EdgeInsets.fromLTRB(
               20,
-              _tab == RankingTab.ranking ? 22 : 10,
+              _tab == RankingTab.ranking ? 14 : 4,
               20,
               132 + bottomInset,
             ),
@@ -234,7 +325,7 @@ class _RankingPageState extends State<RankingPage> {
                     key: ValueKey(_tab),
                     child: switch (_tab) {
                       RankingTab.ranking => _rankingContent(),
-                      RankingTab.charts => _stablecoinContent(),
+                      RankingTab.users => _userRankingContent(),
                       RankingTab.metrics => _metricsContent(),
                       RankingTab.articles => _articleContent(),
                     },
@@ -292,8 +383,8 @@ class _RankingPageState extends State<RankingPage> {
     );
   }
 
-  Widget _stablecoinContent() {
-    if (_failed.contains(RankingTab.charts)) {
+  Widget _stablecoinContent({BuildContext? sheetContext}) {
+    if (_stablecoinsFailed) {
       return const _H5EmptyState(title: '稳定币数据暂时不可用', description: '稍后刷新看看。');
     }
     if (_stablecoins == null) return const _LoadingPanel();
@@ -302,6 +393,35 @@ class _RankingPageState extends State<RankingPage> {
       dashboard: _stablecoins!,
       repository: widget.repository,
       enableRemoteData: widget.enableRemoteData,
+      range: _stablecoinRange,
+      values: _stablecoins!.historyFor(_stablecoinRange),
+      intervalChange: _stablecoins!.intervalChangeFor(_stablecoinRange),
+      isPro: widget.isPro,
+      onRangeChanged: (range) {
+        final proRange = range == '90d' || range == 'all';
+        if (proRange && !widget.isPro) {
+          if (sheetContext != null) Navigator.pop(sheetContext);
+          widget.onOpenPro?.call();
+          return;
+        }
+        setState(() => _stablecoinRange = range);
+      },
+    );
+  }
+
+  Widget _userRankingContent() {
+    if (_failed.contains(RankingTab.users)) {
+      return const _H5EmptyState(
+        key: ValueKey('user-ranking-unavailable'),
+        title: '卡友榜正在准备中',
+        description: '公开昵称、贡献计分与会员身份核验完成后，这里会展示榜单。',
+      );
+    }
+    if (_users == null) return const _LoadingPanel();
+    return _UserRankingPanel(
+      dashboard: _users!,
+      range: _userRange,
+      onRangeChanged: (range) => setState(() => _userRange = range),
     );
   }
 
@@ -313,9 +433,15 @@ class _RankingPageState extends State<RankingPage> {
       );
     }
     final articles = _articles;
-    final visibleItems = articles
-        ?.where((item) => item.category == _articleTab.feedCategory)
+    final globalAccounts = widget.cards
+        .where((card) => card.isGlobalAccount)
         .toList(growable: false);
+    final feedCategory = _articleTab.feedCategory;
+    final visibleItems = feedCategory == null
+        ? null
+        : articles
+              ?.where((item) => item.category == feedCategory)
+              .toList(growable: false);
     return Column(
       key: const Key('article-content'),
       children: [
@@ -323,8 +449,19 @@ class _RankingPageState extends State<RankingPage> {
           selected: _articleTab,
           onChanged: (tab) => setState(() => _articleTab = tab),
         ),
-        const SizedBox(height: 14),
-        if (visibleItems == null)
+        const SizedBox(height: 6),
+        if (_articleTab == ArticleTab.globalAccount)
+          if (globalAccounts.isEmpty)
+            _ArticleEmptyState(
+              title: _articleTab.emptyTitle,
+              description: _articleTab.emptyDescription,
+            )
+          else
+            _GlobalAccountArticleList(
+              cards: globalAccounts,
+              onOpen: widget.onOpenCard,
+            )
+        else if (visibleItems == null)
           const _ArticleListSkeleton()
         else if (visibleItems.isEmpty)
           _ArticleEmptyState(
@@ -347,34 +484,107 @@ class _RankingPageState extends State<RankingPage> {
       dashboard: _metrics!,
       cards: widget.cards,
       onOpenCard: widget.onOpenCard,
+      stablecoins: _stablecoins,
+      onOpenStablecoins: _showStablecoins,
+    );
+  }
+
+  void _showStablecoins() {
+    AppHaptics.selection();
+    showAppDraggableSheet<void>(
+      context: context,
+      initialSize: .9,
+      minSize: .58,
+      maxSize: .96,
+      builder: (sheetContext, scrollController) => Container(
+        margin: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 20),
+        decoration: BoxDecoration(
+          color: AppColors.isDark
+              ? const Color(0xF21C2030)
+              : const Color(0xF7F8FAFF),
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: AppColors.line),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x40000000),
+              blurRadius: 36,
+              offset: Offset(0, 18),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Container(
+              width: 42,
+              height: 5,
+              decoration: BoxDecoration(
+                color: AppColors.textMuted.withValues(alpha: .4),
+                borderRadius: BorderRadius.circular(99),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: SingleChildScrollView(
+                controller: scrollController,
+                physics: const BouncingScrollPhysics(),
+                child: _stablecoinContent(sheetContext: sheetContext),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
 
 extension on ArticleTab {
-  ArticleFeedCategory get feedCategory => switch (this) {
+  ArticleFeedCategory? get feedCategory => switch (this) {
     ArticleTab.news => ArticleFeedCategory.news,
-    ArticleTab.benefit => ArticleFeedCategory.benefit,
+    ArticleTab.globalAccount => null,
     ArticleTab.openCard => ArticleFeedCategory.openCard,
   };
 
   String get label => switch (this) {
     ArticleTab.news => '资讯',
-    ArticleTab.benefit => '福利',
+    ArticleTab.globalAccount => '全球账户',
     ArticleTab.openCard => '开卡',
   };
 
   String get emptyTitle => switch (this) {
     ArticleTab.news => '暂无资讯',
-    ArticleTab.benefit => '暂无福利',
+    ArticleTab.globalAccount => '暂无全球账户',
     ArticleTab.openCard => '暂无开卡内容',
   };
 
   String get emptyDescription => switch (this) {
     ArticleTab.news => '后台发布资讯后，这里会展示最新内容。',
-    ArticleTab.benefit => '后台发布福利后，这里会展示最新内容。',
+    ArticleTab.globalAccount => '全球账户资料发布后，这里会展示最新内容。',
     ArticleTab.openCard => '后台发布开卡文章后，这里会展示最新内容。',
   };
+}
+
+class _GlobalAccountArticleList extends StatelessWidget {
+  const _GlobalAccountArticleList({required this.cards, required this.onOpen});
+
+  final List<CardSummary> cards;
+  final ValueChanged<CardSummary> onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      key: const Key('article-global-account-list'),
+      children: [
+        for (var index = 0; index < cards.length; index++) ...[
+          GlobalAccountCatalogCard(
+            card: cards[index],
+            onTap: () => onOpen(cards[index]),
+          ),
+          if (index != cards.length - 1) const SizedBox(height: 12),
+        ],
+      ],
+    );
+  }
 }
 
 class _LoadingPanel extends StatelessWidget {
@@ -407,49 +617,11 @@ class _LiveTierList extends StatelessWidget {
       children: [
         for (var groupIndex = 0; groupIndex < groups.length; groupIndex++) ...[
           _TierRow(
-            label: _tierLabel(groupIndex),
+            label: _tierLabel(context, groupIndex),
             color: _tierColor(groupIndex),
-            child: Wrap(
-              spacing: 7,
-              runSpacing: 9,
-              alignment: WrapAlignment.start,
-              children: [
-                for (final id in groups[groupIndex].cardIds)
-                  if (byId[id] case final card?)
-                    InkWell(
-                      key: Key('rank-card-${card.id}'),
-                      onTap: () => onOpenCard(card),
-                      borderRadius: BorderRadius.circular(9),
-                      child: SizedBox(
-                        width: 62,
-                        child: Column(
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(7),
-                              child: AspectRatio(
-                                aspectRatio: 1.586,
-                                child: CardArtwork(
-                                  card: card,
-                                  showGeneratedLabels: false,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              card.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: AppColors.text,
-                                fontSize: 8.5,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-              ],
+            child: _RankingLogoGrid(
+              cards: [for (final id in groups[groupIndex].cardIds) ?byId[id]],
+              onOpenCard: onOpenCard,
             ),
           ),
           const SizedBox(height: 8),
@@ -458,7 +630,11 @@ class _LiveTierList extends StatelessWidget {
     );
   }
 
-  String _tierLabel(int index) => const ['S', 'A', 'B', 'C', 'D'][index % 5];
+  String _tierLabel(BuildContext context, int index) {
+    final isChinese = Localizations.localeOf(context).languageCode == 'zh';
+    if (isChinese) return groups[index].name;
+    return const ['S', 'A', 'B', 'C', 'D'][index % 5];
+  }
 
   List<Color> _tierColor(int index) => switch (index % 5) {
     0 => const [Color(0xFFFF1524), Color(0xFFE10614)],
@@ -467,6 +643,287 @@ class _LiveTierList extends StatelessWidget {
     3 => const [Color(0xFF36A5FF), Color(0xFF1D83EE)],
     _ => const [Color(0xFFB7BECE), Color(0xFF9BA4B8)],
   };
+}
+
+class _RankingLogoGrid extends StatelessWidget {
+  const _RankingLogoGrid({required this.cards, required this.onOpenCard});
+
+  static const _columns = 4;
+
+  final List<CardSummary> cards;
+  final ValueChanged<CardSummary> onOpenCard;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        for (
+          var rowStart = 0;
+          rowStart < cards.length;
+          rowStart += _columns
+        ) ...[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var column = 0; column < _columns; column++)
+                Expanded(
+                  child: rowStart + column < cards.length
+                      ? _RankingLogoItem(
+                          card: cards[rowStart + column],
+                          onTap: () => onOpenCard(cards[rowStart + column]),
+                        )
+                      : const SizedBox.shrink(),
+                ),
+            ],
+          ),
+          if (rowStart + _columns < cards.length) const SizedBox(height: 9),
+        ],
+      ],
+    );
+  }
+}
+
+class _RankingLogoItem extends StatelessWidget {
+  const _RankingLogoItem({required this.card, required this.onTap});
+
+  final CardSummary card;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      key: Key('rank-card-${card.id}'),
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: Column(
+          children: [
+            _RankingBrandLogo(card: card),
+            const SizedBox(height: 6),
+            Text(
+              _rankingDisplayName(card.name),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: AppColors.text,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The leaderboard already establishes that every item is a card. Removing
+/// this redundant suffix gives brand names more usable room on narrow screens.
+String _rankingDisplayName(String name) {
+  final trimmed = name.trim();
+  final withoutCard = trimmed.replaceFirst(
+    RegExp(r'\s+card$', caseSensitive: false),
+    '',
+  );
+  return withoutCard.isEmpty ? trimmed : withoutCard;
+}
+
+class _RankingBrandLogo extends StatelessWidget {
+  const _RankingBrandLogo({required this.card});
+
+  final CardSummary card;
+
+  @override
+  Widget build(BuildContext context) {
+    final brandKey = _brandKey;
+    final assetFile = brandKey == null ? null : _brandLogoFiles[brandKey];
+    final networkSource = card.logoImageUrl?.trim();
+    final fallback = Center(
+      child: Text(
+        _fallbackText,
+        maxLines: 1,
+        overflow: TextOverflow.clip,
+        style: TextStyle(
+          color: _fallbackForeground(brandKey),
+          fontSize: _fallbackText.length > 3 ? 8 : 12,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+    return Semantics(
+      image: true,
+      label: '${card.issuer.isEmpty ? card.name : card.issuer} 品牌 Logo',
+      child: Container(
+        key: Key('rank-logo-${card.id}'),
+        width: 48,
+        height: 48,
+        // Most bundled brand icons already include their own app-icon shape.
+        // Let them fill the tile so the official background color is not
+        // surrounded by a mismatched neutral frame.
+        padding: assetFile != null || (networkSource?.isNotEmpty ?? false)
+            ? EdgeInsets.zero
+            : const EdgeInsets.all(5),
+        clipBehavior: Clip.antiAlias,
+        decoration: _rankingBrandDecoration(brandKey),
+        child: assetFile != null
+            ? _assetLogo('assets/brand-logos/$assetFile', fallback)
+            : networkSource != null && networkSource.isNotEmpty
+            ? _networkLogo(networkSource, fallback)
+            : fallback,
+      ),
+    );
+  }
+
+  String? get _brandKey {
+    final source = '${card.id} ${card.name} ${card.issuer}'
+        .toLowerCase()
+        .replaceAll('.', '')
+        .replaceAll('-', ' ');
+    const aliases = <String, String>{
+      'mexc ether fi': 'mexc',
+      'ether fi': 'etherfi',
+      'redot': 'redotpay',
+      'meta mask': 'metamask',
+      'crypto com': 'crypto',
+      'bitget wallet': 'bitget',
+      'safe pal': 'safepal',
+      'starry blu': 'starryblu',
+      'gnosis pay': 'gnosis',
+      'phantom cash': 'phantom',
+    };
+    for (final entry in aliases.entries) {
+      if (source.contains(entry.key)) return entry.value;
+    }
+    for (final key in _brandLogoFiles.keys) {
+      if (source.contains(key)) return key;
+    }
+    return null;
+  }
+
+  String get _fallbackText {
+    final source = card.issuer.trim().isEmpty
+        ? card.name.trim()
+        : card.issuer.trim();
+    final words = source
+        .split(RegExp(r'[^A-Za-z0-9]+'))
+        .where((word) => word.isNotEmpty)
+        .toList(growable: false);
+    if (words.isEmpty) return '?';
+    if (words.length == 1) {
+      return words.first
+          .substring(0, math.min(3, words.first.length))
+          .toUpperCase();
+    }
+    return words.take(3).map((word) => word[0]).join().toUpperCase();
+  }
+
+  Widget _assetLogo(String source, Widget fallback) {
+    if (source.endsWith('.svg')) {
+      return SvgPicture.asset(
+        source,
+        fit: BoxFit.contain,
+        placeholderBuilder: (_) => fallback,
+      );
+    }
+    return Image.asset(
+      source,
+      fit: BoxFit.contain,
+      errorBuilder: (_, _, _) => fallback,
+    );
+  }
+
+  Widget _networkLogo(String source, Widget fallback) {
+    if (Uri.tryParse(source)?.path.toLowerCase().endsWith('.svg') ?? false) {
+      return SvgPicture.network(
+        source,
+        fit: BoxFit.contain,
+        placeholderBuilder: (_) => fallback,
+      );
+    }
+    return CachedNetworkImage(
+      imageUrl: source,
+      fit: BoxFit.contain,
+      memCacheWidth: 96,
+      memCacheHeight: 96,
+      placeholder: (_, _) => fallback,
+      errorWidget: (_, _, _) => fallback,
+    );
+  }
+
+  Color _fallbackForeground(String? key) {
+    if (key == null) {
+      return AppColors.isDark
+          ? const Color(0xFFF2F5FF)
+          : const Color(0xFF283247);
+    }
+    return switch (key) {
+      'holyheld' ||
+      'exa' ||
+      'solayer' ||
+      'gnosis' ||
+      'ready' ||
+      'avalanche' ||
+      'phantom' ||
+      'solflare' ||
+      'kast' ||
+      'tria' ||
+      'karta' ||
+      'safepal' ||
+      'hyperbeat' => Colors.white,
+      _ => const Color(0xFF10131B),
+    };
+  }
+}
+
+BoxDecoration _rankingBrandDecoration(String? key) {
+  final colors = switch (key) {
+    'bybit' || 'okx' || '1inch' => const [Color(0xFF050507), Color(0xFF050507)],
+    'crypto' => const [Color(0xFF0B2D68), Color(0xFF0B2D68)],
+    'savo' => const [Color(0xFF5513B7), Color(0xFF5513B7)],
+    'tuyo' => const [Color(0xFFA9EC52), Color(0xFFA9EC52)],
+    'holyheld' => const [Color(0xFF16171B), Color(0xFF2A2D33)],
+    'exa' => const [Color(0xFF26302D), Color(0xFF3A4541)],
+    'solayer' => const [Color(0xFF0D4B40), Color(0xFF1B6A58)],
+    'gnosis' => const [Color(0xFF111827), Color(0xFF1B2940)],
+    'ready' => const [Color(0xFF20283A), Color(0xFF3A4356)],
+    'avalanche' => const [Color(0xFFF04652), Color(0xFFC12639)],
+    'phantom' => const [Color(0xFF7B5CFF), Color(0xFFB45CFF)],
+    'solflare' => const [Color(0xFFFF8A2B), Color(0xFFFF5F45)],
+    'kast' || 'tria' || 'karta' => const [Color(0xFF050507), Color(0xFF232733)],
+    'bitget' => const [Color(0xFF11D9DE), Color(0xFF11D9DE)],
+    'safepal' => const [Color(0xFF0A0537), Color(0xFF2A1175)],
+    'hyperbeat' => const [
+      Color(0xFF111827),
+      Color(0xFF2457FF),
+      Color(0xFF1DF2CF),
+    ],
+    'plasma' || 'bfinance' => const [Color(0xFFF8FAFC), Color(0xFFF8FAFC)],
+    null =>
+      AppColors.isDark
+          ? const [Color(0xFF151B2A), Color(0xFF202A3D)]
+          : const [Color(0xFFFCFDFF), Color(0xFFF0F3F9)],
+    _ => const [Colors.white, Colors.white],
+  };
+  return BoxDecoration(
+    gradient: LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: colors,
+    ),
+    borderRadius: BorderRadius.circular(12),
+    border: Border.all(color: AppColors.line),
+    boxShadow: [
+      BoxShadow(
+        color: const Color(
+          0xFF1C2446,
+        ).withValues(alpha: AppColors.isDark ? .24 : .1),
+        blurRadius: 14,
+        offset: const Offset(0, 6),
+      ),
+    ],
+  );
 }
 
 class _TierRow extends StatelessWidget {
@@ -504,12 +961,19 @@ class _TierRow extends StatelessWidget {
               ),
             ],
           ),
-          child: Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 22,
-              fontWeight: FontWeight.w900,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                label,
+                maxLines: 1,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
             ),
           ),
         ),
@@ -824,6 +1288,407 @@ class _ArticleTabs extends StatelessWidget {
   }
 }
 
+class _UserRankingPanel extends StatelessWidget {
+  const _UserRankingPanel({
+    required this.dashboard,
+    required this.range,
+    required this.onRangeChanged,
+  });
+
+  final UserRankingDashboard dashboard;
+  final _UserRankingRange range;
+  final ValueChanged<_UserRankingRange> onRangeChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = [...dashboard.items]
+      ..sort((left, right) => _score(right).compareTo(_score(left)));
+    return Container(
+      key: const Key('user-ranking-panel'),
+      padding: const EdgeInsets.fromLTRB(14, 16, 14, 14),
+      decoration: _panelDecoration(radius: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          '卡友贡献活跃榜',
+                          style: TextStyle(
+                            color: AppColors.text,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        if (dashboard.isPreview) ...[
+                          const SizedBox(width: 8),
+                          _PreviewBadge(),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${dashboard.periodLabel} · 会员身份不参与计分',
+                      style: TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Tooltip(
+                message: dashboard.methodology,
+                child: Container(
+                  width: 44,
+                  height: 44,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: AppColors.glassStrong,
+                    borderRadius: BorderRadius.circular(15),
+                    border: Border.all(color: AppColors.line),
+                  ),
+                  child: Icon(
+                    Icons.info_outline_rounded,
+                    color: AppColors.textMuted,
+                    size: 20,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          AnimatedPillSegment<_UserRankingRange>(
+            height: 34,
+            gap: 10,
+            fontSize: 11,
+            items: const [
+              GlassSegmentItem(
+                value: _UserRankingRange.monthly,
+                label: '本月活跃',
+                key: Key('user-ranking-monthly'),
+              ),
+              GlassSegmentItem(
+                value: _UserRankingRange.contribution,
+                label: '贡献总榜',
+                key: Key('user-ranking-contribution'),
+              ),
+            ],
+            selected: range,
+            onChanged: onRangeChanged,
+          ),
+          const SizedBox(height: 13),
+          if (items.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 30),
+              child: Center(child: Text('暂无公开排行')),
+            )
+          else
+            AnimatedSwitcher(
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : const Duration(milliseconds: 240),
+              child: Column(
+                key: ValueKey(range),
+                children: [
+                  for (var index = 0; index < items.length; index++) ...[
+                    _UserRankingRow(
+                      rank: index + 1,
+                      entry: items[index],
+                      score: _score(items[index]),
+                      contributionMode: range == _UserRankingRange.contribution,
+                    ),
+                    if (index != items.length - 1)
+                      Divider(height: 1, color: AppColors.line),
+                  ],
+                ],
+              ),
+            ),
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.violet.withValues(alpha: .07),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: AppColors.violet.withValues(alpha: .14),
+              ),
+            ),
+            child: Text(
+              dashboard.methodology,
+              style: TextStyle(
+                color: AppColors.textMuted,
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700,
+                height: 1.5,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  int _score(UserRankingEntry entry) => switch (range) {
+    _UserRankingRange.monthly => entry.monthlyActivityScore,
+    _UserRankingRange.contribution => entry.totalContributionScore,
+  };
+}
+
+class _PreviewBadge extends StatelessWidget {
+  const _PreviewBadge();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    key: const Key('user-ranking-preview-badge'),
+    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+    decoration: BoxDecoration(
+      color: AppColors.cyan.withValues(alpha: .10),
+      borderRadius: BorderRadius.circular(999),
+      border: Border.all(color: AppColors.cyan.withValues(alpha: .22)),
+    ),
+    child: Text(
+      '预览',
+      style: TextStyle(
+        color: AppColors.isDark
+            ? const Color(0xFF87DFFF)
+            : const Color(0xFF287D9A),
+        fontSize: 9,
+        fontWeight: FontWeight.w900,
+      ),
+    ),
+  );
+}
+
+class _UserRankingRow extends StatelessWidget {
+  const _UserRankingRow({
+    required this.rank,
+    required this.entry,
+    required this.score,
+    required this.contributionMode,
+  });
+
+  final int rank;
+  final UserRankingEntry entry;
+  final int score;
+  final bool contributionMode;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label:
+        '第 $rank 名，${entry.displayName}${entry.isPro ? '，Pro 会员' : ''}，$score 分',
+    child: Container(
+      key: Key('user-ranking-${entry.id}'),
+      constraints: const BoxConstraints(minHeight: 72),
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        children: [
+          _RankNumber(rank: rank),
+          const SizedBox(width: 10),
+          _UserAvatar(entry: entry),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        entry.displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: AppColors.text,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    if (entry.isCurrentUser) ...[
+                      const SizedBox(width: 6),
+                      _CurrentUserBadge(),
+                    ],
+                    if (entry.isPro) ...[
+                      const SizedBox(width: 7),
+                      const ProCrownBadge(showLabel: true),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  contributionMode
+                      ? '已采纳 ${entry.acceptedContributions} 条贡献'
+                      : '活跃 ${entry.activeDays} 天 · 采纳 ${entry.acceptedContributions} 条',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 9),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '$score',
+                style: TextStyle(
+                  color: rank <= 3 ? AppColors.violet : AppColors.text,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                contributionMode ? '贡献分' : '活跃分',
+                style: TextStyle(color: AppColors.textMuted, fontSize: 9),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _RankNumber extends StatelessWidget {
+  const _RankNumber({required this.rank});
+
+  final int rank;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = switch (rank) {
+      1 => const [Color(0xFFFFD66B), Color(0xFFF2A51A)],
+      2 => const [Color(0xFFDDE4F2), Color(0xFF9BA8BE)],
+      3 => const [Color(0xFFE4A071), Color(0xFFB96A3E)],
+      _ =>
+        AppColors.isDark
+            ? const [Color(0xFF2A3041), Color(0xFF202638)]
+            : const [Color(0xFFF2F4FA), Color(0xFFE6EAF3)],
+    };
+    return Container(
+      width: 30,
+      height: 30,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: colors,
+        ),
+        shape: BoxShape.circle,
+        boxShadow: rank <= 3
+            ? [
+                BoxShadow(
+                  color: colors.last.withValues(alpha: .24),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ]
+            : null,
+      ),
+      child: Text(
+        '$rank',
+        style: TextStyle(
+          color: rank <= 3 ? Colors.white : AppColors.textMuted,
+          fontSize: 12,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+}
+
+class _UserAvatar extends StatelessWidget {
+  const _UserAvatar({required this.entry});
+
+  final UserRankingEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final source = entry.avatarUrl?.trim();
+    final fallback = Center(
+      child: Text(
+        entry.displayName.trim().isEmpty
+            ? '?'
+            : entry.displayName.trim().substring(0, 1).toUpperCase(),
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 16,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+    return Container(
+      width: 44,
+      height: 44,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF7F8CFF), Color(0xFF50C8E8)],
+        ),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: AppColors.line),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.violet.withValues(alpha: .14),
+            blurRadius: 13,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: source != null && source.isNotEmpty
+          ? CachedNetworkImage(
+              imageUrl: source,
+              fit: BoxFit.cover,
+              memCacheWidth: 132,
+              memCacheHeight: 132,
+              placeholder: (_, _) => fallback,
+              errorWidget: (_, _, _) => fallback,
+            )
+          : fallback,
+    );
+  }
+}
+
+class _CurrentUserBadge extends StatelessWidget {
+  const _CurrentUserBadge();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+    decoration: BoxDecoration(
+      color: AppColors.violet.withValues(alpha: .1),
+      borderRadius: BorderRadius.circular(999),
+    ),
+    child: Text(
+      '我',
+      style: TextStyle(
+        color: AppColors.violet,
+        fontSize: 9,
+        fontWeight: FontWeight.w900,
+      ),
+    ),
+  );
+}
+
 class _RankingTabs extends StatelessWidget {
   const _RankingTabs({required this.selected, required this.onChanged});
 
@@ -832,7 +1697,7 @@ class _RankingTabs extends StatelessWidget {
 
   static const labels = <RankingTab, String>{
     RankingTab.ranking: '热门榜',
-    RankingTab.charts: '稳定币数据',
+    RankingTab.users: '卡友榜',
     RankingTab.metrics: '数据榜',
     RankingTab.articles: '资讯',
   };
@@ -840,6 +1705,9 @@ class _RankingTabs extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AnimatedGlassSegment<RankingTab>(
+      height: 44,
+      padding: 4,
+      radius: 22,
       items: [
         for (final tab in RankingTab.values)
           GlassSegmentItem(
@@ -904,23 +1772,169 @@ class _H5EmptyState extends StatelessWidget {
   }
 }
 
+class _StablecoinRangeSelector extends StatelessWidget {
+  const _StablecoinRangeSelector({
+    required this.selected,
+    required this.onChanged,
+    required this.isPro,
+  });
+
+  final String selected;
+  final ValueChanged<String> onChanged;
+  final bool isPro;
+
+  @override
+  Widget build(BuildContext context) {
+    const ranges = [
+      ('7d', '7D'),
+      ('30d', '30D'),
+      ('90d', '90D'),
+      ('all', 'All'),
+    ];
+    return Row(
+      children: [
+        for (var index = 0; index < ranges.length; index++) ...[
+          if (index > 0) const SizedBox(width: 10),
+          Expanded(
+            child: _StablecoinRangeChip(
+              range: ranges[index].$1,
+              label: ranges[index].$2,
+              selected: selected == ranges[index].$1,
+              isPro: isPro,
+              onTap: () => onChanged(ranges[index].$1),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _StablecoinRangeChip extends StatelessWidget {
+  const _StablecoinRangeChip({
+    required this.range,
+    required this.label,
+    required this.selected,
+    required this.isPro,
+    required this.onTap,
+  });
+
+  final String range;
+  final String label;
+  final bool selected;
+  final bool isPro;
+  final VoidCallback onTap;
+
+  bool get _requiresPro => range == '90d' || range == 'all';
+
+  @override
+  Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: _requiresPro && !isPro ? '$label，Pro 会员功能' : label,
+      child: GestureDetector(
+        key: Key('stablecoin-range-$range'),
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          AppHaptics.selection();
+          onTap();
+        },
+        child: SizedBox(
+          height: 44,
+          child: Center(
+            child: AnimatedContainer(
+              duration: reduceMotion
+                  ? Duration.zero
+                  : const Duration(milliseconds: 180),
+              curve: Curves.easeOutCubic,
+              height: 30,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: selected
+                    ? (AppColors.isDark
+                          ? const Color(0x706771C2)
+                          : const Color(0xFAFFFFFF))
+                    : (AppColors.isDark
+                          ? const Color(0x24FFFFFF)
+                          : const Color(0x94FFFFFF)),
+                borderRadius: BorderRadius.circular(15),
+                border: Border.all(
+                  color: selected
+                      ? (AppColors.isDark
+                            ? const Color(0x57AAB2FF)
+                            : const Color(0x2E5E79FF))
+                      : (AppColors.isDark
+                            ? const Color(0x29FFFFFF)
+                            : const Color(0xBDFFFFFF)),
+                ),
+              ),
+              child: Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.center,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: selected
+                          ? (AppColors.isDark
+                                ? const Color(0xFFEDF2FF)
+                                : const Color(0xFF6070FF))
+                          : AppColors.textMuted,
+                      fontSize: 11,
+                      fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
+                    ),
+                  ),
+                  if (_requiresPro && !isPro)
+                    const Positioned(
+                      right: 2,
+                      top: -11,
+                      child: ProCrownBadge(),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _StablecoinPanel extends StatelessWidget {
   const _StablecoinPanel({
     required this.dashboard,
     required this.repository,
     required this.enableRemoteData,
+    required this.range,
+    required this.values,
+    required this.intervalChange,
+    required this.onRangeChanged,
+    required this.isPro,
     super.key,
   });
 
   final StablecoinDashboard dashboard;
   final RemoteRankingRepository repository;
   final bool enableRemoteData;
+  final String range;
+  final List<double> values;
+  final double intervalChange;
+  final ValueChanged<String> onRangeChanged;
+  final bool isPro;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       key: const Key('stablecoin-market-overview'),
       children: [
+        _StablecoinRangeSelector(
+          selected: range,
+          onChanged: onRangeChanged,
+          isPro: isPro,
+        ),
+        const SizedBox(height: 9),
         Container(
           width: double.infinity,
           padding: const EdgeInsets.fromLTRB(18, 30, 18, 16),
@@ -968,7 +1982,7 @@ class _StablecoinPanel extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    _percent(dashboard.intervalChange),
+                    _percent(intervalChange),
                     style: const TextStyle(
                       color: Color(0xFF47A87D),
                       fontSize: 11,
@@ -981,9 +1995,7 @@ class _StablecoinPanel extends StatelessWidget {
               SizedBox(
                 height: 42,
                 width: double.infinity,
-                child: CustomPaint(
-                  painter: _MiniTrendPainter(dashboard.history),
-                ),
+                child: CustomPaint(painter: _MiniTrendPainter(values)),
               ),
             ],
           ),
@@ -994,7 +2006,7 @@ class _StablecoinPanel extends StatelessWidget {
             Expanded(
               child: _SummaryMetric(
                 label: '区间增长',
-                value: _percent(dashboard.intervalChange),
+                value: _percent(intervalChange),
               ),
             ),
             SizedBox(width: 9),
@@ -1047,7 +2059,12 @@ class _StablecoinPanel extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 12),
-        _TrendChart(values: dashboard.history),
+        _TrendChart(
+          values: values,
+          range: range,
+          isPro: isPro,
+          onRangeChanged: onRangeChanged,
+        ),
         const SizedBox(height: 12),
         IntrinsicHeight(
           child: Row(
@@ -1094,10 +2111,9 @@ class _StablecoinPanel extends StatelessWidget {
   }
 
   void _showStablecoinDetail(BuildContext context, StablecoinAsset asset) {
-    showModalBottomSheet<void>(
+    showAppBottomSheet<void>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      barrierAlpha: .34,
       builder: (context) => _StablecoinDetailSheet(
         asset: asset,
         request: repository.loadStablecoinDetail(asset.id),
@@ -1281,13 +2297,13 @@ class _StablecoinTableHeader extends StatelessWidget {
     padding: const EdgeInsets.fromLTRB(4, 0, 4, 7),
     child: Row(
       children: [
-        Expanded(child: Text('资产', style: _stablecoinTableLabelStyle)),
+        Expanded(child: Text('资产', style: _stablecoinTableLabelStyle(context))),
         SizedBox(
           width: 64,
           child: Text(
             '市值',
             textAlign: TextAlign.right,
-            style: _stablecoinTableLabelStyle,
+            style: _stablecoinTableLabelStyle(context),
           ),
         ),
         SizedBox(
@@ -1295,7 +2311,7 @@ class _StablecoinTableHeader extends StatelessWidget {
           child: Text(
             '24H',
             textAlign: TextAlign.right,
-            style: _stablecoinTableLabelStyle,
+            style: _stablecoinTableLabelStyle(context),
           ),
         ),
         SizedBox(
@@ -1303,7 +2319,7 @@ class _StablecoinTableHeader extends StatelessWidget {
           child: Text(
             '网络',
             textAlign: TextAlign.right,
-            style: _stablecoinTableLabelStyle,
+            style: _stablecoinTableLabelStyle(context),
           ),
         ),
       ],
@@ -1311,8 +2327,10 @@ class _StablecoinTableHeader extends StatelessWidget {
   );
 }
 
-final _stablecoinTableLabelStyle = TextStyle(
-  color: AppColors.textMuted,
+TextStyle _stablecoinTableLabelStyle(BuildContext context) => TextStyle(
+  color: Theme.of(context).brightness == Brightness.dark
+      ? const Color(0xFF9DA5B8)
+      : const Color(0xFF667085),
   fontSize: 10,
   fontWeight: FontWeight.w800,
 );
@@ -1325,8 +2343,9 @@ class _StablecoinMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final iconUrl =
-        asset.imageUrl ?? _stablecoinIconBySymbol[asset.symbol.toUpperCase()];
+    final symbol = asset.symbol.toUpperCase();
+    final assetPath = _stablecoinAssetBySymbol[symbol];
+    final iconUrl = asset.imageUrl ?? _stablecoinIconBySymbol[symbol];
     final fallback = Center(
       child: Text(
         asset.symbol.isEmpty ? '?' : asset.symbol.substring(0, 1),
@@ -1353,7 +2372,13 @@ class _StablecoinMark extends StatelessWidget {
           ),
         ],
       ),
-      child: iconUrl == null
+      child: assetPath != null
+          ? Image.asset(
+              assetPath,
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => fallback,
+            )
+          : iconUrl == null
           ? fallback
           : CachedNetworkImage(
               imageUrl: iconUrl,
@@ -1685,9 +2710,17 @@ class _SummaryMetric extends StatelessWidget {
 }
 
 class _TrendChart extends StatelessWidget {
-  const _TrendChart({required this.values});
+  const _TrendChart({
+    required this.values,
+    required this.range,
+    required this.isPro,
+    required this.onRangeChanged,
+  });
 
   final List<double> values;
+  final String range;
+  final bool isPro;
+  final ValueChanged<String> onRangeChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -1725,7 +2758,11 @@ class _TrendChart extends StatelessWidget {
                   ],
                 ),
               ),
-              const _PeriodSelector(),
+              _PeriodSelector(
+                selected: range,
+                isPro: isPro,
+                onChanged: onRangeChanged,
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -1742,7 +2779,15 @@ class _TrendChart extends StatelessWidget {
 }
 
 class _PeriodSelector extends StatelessWidget {
-  const _PeriodSelector();
+  const _PeriodSelector({
+    required this.selected,
+    required this.isPro,
+    required this.onChanged,
+  });
+
+  final String selected;
+  final bool isPro;
+  final ValueChanged<String> onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -1754,19 +2799,50 @@ class _PeriodSelector extends StatelessWidget {
       ),
       child: Row(
         children: [
-          for (final label in const ['7D', '30D', '90D', '全部'])
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              decoration: BoxDecoration(
-                color: label == '30D' ? AppColors.cyan : Colors.transparent,
-                borderRadius: BorderRadius.circular(9),
-              ),
-              child: Text(
-                label,
-                style: TextStyle(
-                  color: label == '30D' ? Colors.white : AppColors.textMuted,
-                  fontSize: 9,
-                  fontWeight: FontWeight.w800,
+          for (final item in const [
+            ('7d', '7D'),
+            ('30d', '30D'),
+            ('90d', '90D'),
+            ('all', 'All'),
+          ])
+            GestureDetector(
+              key: Key('stablecoin-trend-range-${item.$1}'),
+              behavior: HitTestBehavior.opaque,
+              onTap: () {
+                AppHaptics.selection();
+                onChanged(item.$1);
+              },
+              child: Container(
+                width: 43,
+                height: 28,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: selected == item.$1
+                      ? AppColors.cyan
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  alignment: Alignment.center,
+                  children: [
+                    Text(
+                      item.$2,
+                      style: TextStyle(
+                        color: selected == item.$1
+                            ? Colors.white
+                            : AppColors.textMuted,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    if ((item.$1 == '90d' || item.$1 == 'all') && !isPro)
+                      const Positioned(
+                        right: 0,
+                        top: -8,
+                        child: ProCrownBadge(),
+                      ),
+                  ],
                 ),
               ),
             ),
@@ -1952,12 +3028,16 @@ class _MetricsTable extends StatelessWidget {
     required this.dashboard,
     required this.cards,
     required this.onOpenCard,
+    required this.stablecoins,
+    required this.onOpenStablecoins,
     super.key,
   });
 
   final CardMetricsDashboard dashboard;
   final List<CardSummary> cards;
   final ValueChanged<CardSummary> onOpenCard;
+  final StablecoinDashboard? stablecoins;
+  final VoidCallback onOpenStablecoins;
 
   List<_MetricDisplayRow> get rows => dashboard.items
       .map(
@@ -2012,29 +3092,10 @@ class _MetricsTable extends StatelessWidget {
                   ],
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 7,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFC45D).withValues(alpha: .16),
-                  borderRadius: BorderRadius.circular(99),
-                ),
-                child: Text(
-                  '● ${dashboard.source}',
-                  style: const TextStyle(
-                    color: Color(0xFFD89528),
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Icon(
-                Icons.arrow_forward_rounded,
-                color: AppColors.cyan,
-                size: 20,
+              const SizedBox(width: 10),
+              _StablecoinShortcut(
+                dashboard: stablecoins,
+                onTap: onOpenStablecoins,
               ),
             ],
           ),
@@ -2072,6 +3133,109 @@ class _MetricsTable extends StatelessWidget {
     final local = value.toLocal();
     return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
   }
+}
+
+class _StablecoinShortcut extends StatelessWidget {
+  const _StablecoinShortcut({required this.dashboard, required this.onTap});
+
+  final StablecoinDashboard? dashboard;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => MotionPressEffect(
+    scale: .97,
+    child: Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(15),
+      child: InkWell(
+        key: const Key('metrics-stablecoin-shortcut'),
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(15),
+        child: Ink(
+          width: 104,
+          height: 48,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: AppColors.isDark
+                  ? const [Color(0xFF2B3047), Color(0xFF1D2538)]
+                  : const [Color(0xFFFDFDFF), Color(0xFFEFF2FF)],
+            ),
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(
+              color: AppColors.violet.withValues(
+                alpha: AppColors.isDark ? .3 : .18,
+              ),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.violet.withValues(
+                  alpha: AppColors.isDark ? .14 : .1,
+                ),
+                blurRadius: 14,
+                spreadRadius: -4,
+                offset: const Offset(0, 7),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 25,
+                height: 25,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: AppColors.mint.withValues(alpha: .14),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.pie_chart_outline_rounded,
+                  size: 15,
+                  color: AppColors.mint,
+                ),
+              ),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '稳定币',
+                      maxLines: 1,
+                      style: TextStyle(
+                        color: AppColors.text,
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      dashboard?.totalMarketCap ?? '加载中',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 8.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 16,
+                color: AppColors.textMuted,
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 class _MetricDisplayRow {
@@ -2363,6 +3527,11 @@ class _CardBrandMark extends StatelessWidget {
   }
 
   Color _fallbackForeground(String? key) => switch (key) {
+    'bybit' ||
+    'crypto' ||
+    'savo' ||
+    'okx' ||
+    '1inch' ||
     'holyheld' ||
     'exa' ||
     'solayer' ||
@@ -2425,6 +3594,11 @@ class _CardBrandMark extends StatelessWidget {
   }
 }
 
+Color _metricsTableSurface(BuildContext context, {int? index}) {
+  if (Theme.of(context).brightness != Brightness.dark) return Colors.white;
+  return index == null || index.isOdd ? AppColors.glassStrong : AppColors.glass;
+}
+
 class _MetricIdentityHeader extends StatelessWidget {
   const _MetricIdentityHeader({required this.collapsed});
 
@@ -2438,7 +3612,7 @@ class _MetricIdentityHeader extends StatelessWidget {
     return Container(
       key: const Key('metrics-fixed-header'),
       height: 46,
-      color: AppColors.glassStrong,
+      color: _metricsTableSurface(context),
       alignment: Alignment.center,
       child: AnimatedSlide(
         duration: duration,
@@ -2471,7 +3645,7 @@ class _MetricValuesHeader extends StatelessWidget {
     return Container(
       key: const Key('metrics-values-header'),
       height: 46,
-      color: AppColors.glassStrong,
+      color: _metricsTableSurface(context),
       child: const Row(
         children: [
           _TableCell(width: 144, text: '7 天充值量', header: true),
@@ -2506,7 +3680,7 @@ class _MetricIdentityRow extends StatelessWidget {
         ? Duration.zero
         : _metricCollapseDuration;
     return Material(
-      color: index.isEven ? AppColors.glass : AppColors.glassStrong,
+      color: _metricsTableSurface(context, index: index),
       child: InkWell(
         key: Key(
           'metric-row-${row.item.name.toLowerCase().replaceAll(' ', '-')}',
@@ -2615,7 +3789,7 @@ class _MetricValuesRow extends StatelessWidget {
     final max = 67520000.0;
     final current = double.tryParse(row.sevenDay.replaceAll(',', '')) ?? 0;
     return Material(
-      color: index.isEven ? AppColors.glass : AppColors.glassStrong,
+      color: _metricsTableSurface(context, index: index),
       child: SizedBox(
         height: 50,
         child: Row(

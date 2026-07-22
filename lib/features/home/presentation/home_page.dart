@@ -1,13 +1,18 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
+import 'package:card_app/core/motion/app_haptics.dart';
+import 'package:card_app/core/motion/motion_tokens.dart';
+import 'package:card_app/core/motion/motion_widgets.dart';
+import 'package:card_app/core/localization/app_localizations.dart';
 import 'package:card_app/core/theme/app_colors.dart';
 import 'package:card_app/features/catalog/domain/card_summary.dart';
 import 'package:card_app/features/home/controllers/card_stack_controller.dart';
 import 'package:card_app/features/home/domain/home_card_layout.dart';
 import 'package:card_app/features/home/widgets/card_stack_view.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:card_app/features/pro/widgets/pro_crown_badge.dart';
+import 'package:card_app/core/localization/localized_text.dart';
+import 'package:flutter/material.dart' hide Text;
 
 class HomePage extends StatefulWidget {
   const HomePage({
@@ -16,9 +21,13 @@ class HomePage extends StatefulWidget {
     required this.displayMode,
     required this.onAddCard,
     required this.onOpenCard,
+    this.onOpenCardTransition,
+    this.transitioningCardId,
     required this.onCardHeightScaleChanged,
     required this.onReorderCards,
     required this.onDisplayModeChanged,
+    required this.isPro,
+    required this.onOpenPro,
     required this.onToggleNavigation,
     super.key,
   });
@@ -28,9 +37,13 @@ class HomePage extends StatefulWidget {
   final HomeCardDisplayMode displayMode;
   final VoidCallback onAddCard;
   final ValueChanged<CardSummary> onOpenCard;
+  final HomeCardOpenTransition? onOpenCardTransition;
+  final String? transitioningCardId;
   final ValueChanged<double> onCardHeightScaleChanged;
   final ValueChanged<List<String>> onReorderCards;
   final ValueChanged<HomeCardDisplayMode> onDisplayModeChanged;
+  final bool isPro;
+  final VoidCallback onOpenPro;
   final VoidCallback onToggleNavigation;
 
   @override
@@ -83,7 +96,7 @@ class _HomePageState extends State<HomePage>
         // Every display mode remains inside the regular home surface. Keep a
         // generous gap below the fixed header and always reserve the shell's
         // bottom navigation area.
-        const cardSceneTop = 116.0;
+        const cardSceneTop = 96.0;
         final navigationClearance = 96.0 + bottomInset;
         final availableHeight = math.max(
           280.0,
@@ -94,7 +107,9 @@ class _HomePageState extends State<HomePage>
             Positioned.fill(
               child: CustomScrollView(
                 key: const Key('home-card-scroll-view'),
-                physics: const BouncingScrollPhysics(),
+                physics: _cardController.mode == CardStackMode.wallet
+                    ? const BouncingScrollPhysics()
+                    : const NeverScrollableScrollPhysics(),
                 slivers: [
                   SliverPadding(
                     padding: EdgeInsets.fromLTRB(
@@ -105,9 +120,14 @@ class _HomePageState extends State<HomePage>
                     ),
                     sliver: SliverToBoxAdapter(
                       child: widget.cards.isEmpty
-                          ? const Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 18),
-                              child: _EmptyState(key: ValueKey('empty-state')),
+                          ? Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 18,
+                              ),
+                              child: _EmptyState(
+                                key: const ValueKey('empty-state'),
+                                onAddCard: widget.onAddCard,
+                              ),
                             )
                           : CardStackView(
                               cards: widget.cards,
@@ -118,6 +138,8 @@ class _HomePageState extends State<HomePage>
                                   widget.onCardHeightScaleChanged,
                               onReorderCards: widget.onReorderCards,
                               onOpenCard: widget.onOpenCard,
+                              onOpenCardTransition: widget.onOpenCardTransition,
+                              transitioningCardId: widget.transitioningCardId,
                             ),
                     ),
                   ),
@@ -154,6 +176,7 @@ class _HomePageState extends State<HomePage>
                     width: 196,
                     child: _ModeMenu(
                       selected: _cardController.mode,
+                      isPro: widget.isPro,
                       onSelected: _selectMode,
                     ),
                   ),
@@ -168,9 +191,14 @@ class _HomePageState extends State<HomePage>
 
   void _selectMode(HomeCardDisplayMode mode) {
     setState(() => _modeMenuOpen = false);
+    if (mode.requiresPro && !widget.isPro) {
+      AppHaptics.selection();
+      widget.onOpenPro();
+      return;
+    }
     if (mode == _cardController.mode) return;
     _cardController.setMode(mode);
-    HapticFeedback.mediumImpact();
+    AppHaptics.mediumImpact();
     widget.onDisplayModeChanged(mode);
   }
 }
@@ -195,7 +223,7 @@ class _HomeHeader extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 350;
-        final actionSize = compact ? 40.0 : 44.0;
+        const actionSize = 44.0;
         final gap = compact ? 5.0 : 7.0;
         return Row(
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -203,7 +231,7 @@ class _HomeHeader extends StatelessWidget {
             Expanded(
               child: Semantics(
                 button: true,
-                label: '切换底部导航显示',
+                label: context.tr('隐藏或显示底部导航栏'),
                 child: GestureDetector(
                   key: const Key('home-title-toggle'),
                   behavior: HitTestBehavior.opaque,
@@ -220,7 +248,7 @@ class _HomeHeader extends StatelessWidget {
             const SizedBox(width: 8),
             _HeaderAction(
               key: const Key('home-mode-button'),
-              tooltip: '切换卡片模式，当前${displayMode.label}',
+              tooltip: context.tr('切换卡片模式，当前${displayMode.label}'),
               selected: menuOpen,
               onTap: onModePressed,
               size: actionSize,
@@ -229,7 +257,7 @@ class _HomeHeader extends StatelessWidget {
             SizedBox(width: gap),
             _HeaderAction(
               key: const Key('home-add-button'),
-              tooltip: '添加卡片',
+              tooltip: context.tr('添加卡片'),
               onTap: onAddCard,
               size: actionSize,
               icon: const Icon(Icons.add_rounded),
@@ -243,7 +271,7 @@ class _HomeHeader extends StatelessWidget {
 
 IconData _modeIcon(CardStackMode mode) => switch (mode) {
   CardStackMode.stack => Icons.layers_outlined,
-  CardStackMode.focus => Icons.center_focus_strong_rounded,
+  CardStackMode.focus => Icons.view_day_outlined,
   CardStackMode.wallet => Icons.account_balance_wallet_outlined,
 };
 
@@ -286,18 +314,16 @@ class _HeaderActionState extends State<_HeaderAction> {
           onTapUp: (_) => setState(() => _pressed = false),
           onTap: widget.onTap,
           child: AnimatedScale(
-            scale: _pressed ? .92 : 1,
-            duration: reduceMotion
-                ? Duration.zero
-                : const Duration(milliseconds: 110),
-            curve: Curves.easeOutCubic,
+            scale: _pressed ? MotionTokens.compactPressedScale : 1,
+            duration: reduceMotion ? Duration.zero : MotionTokens.press,
+            curve: MotionTokens.standardEnter,
             child: ClipOval(
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
                 child: AnimatedContainer(
                   duration: reduceMotion
                       ? Duration.zero
-                      : const Duration(milliseconds: 220),
+                      : MotionTokens.stateChange,
                   width: widget.size,
                   height: widget.size,
                   decoration: BoxDecoration(
@@ -324,7 +350,7 @@ class _HeaderActionState extends State<_HeaderAction> {
                   ),
                   child: IconTheme(
                     data: IconThemeData(
-                      color: AppColors.text,
+                      color: widget.selected ? Colors.white : AppColors.text,
                       size: widget.size * .53,
                     ),
                     child: Center(child: widget.icon),
@@ -340,9 +366,14 @@ class _HeaderActionState extends State<_HeaderAction> {
 }
 
 class _ModeMenu extends StatelessWidget {
-  const _ModeMenu({required this.selected, required this.onSelected});
+  const _ModeMenu({
+    required this.selected,
+    required this.isPro,
+    required this.onSelected,
+  });
 
   final HomeCardDisplayMode selected;
+  final bool isPro;
   final ValueChanged<HomeCardDisplayMode> onSelected;
 
   @override
@@ -350,14 +381,14 @@ class _ModeMenu extends StatelessWidget {
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
-      duration: reduceMotion
-          ? Duration.zero
-          : const Duration(milliseconds: 260),
-      curve: Curves.easeOutBack,
+      duration: reduceMotion ? Duration.zero : MotionTokens.contentSwitch,
+      curve: MotionTokens.standardEnter,
       builder: (context, value, child) => Opacity(
         opacity: value.clamp(0, 1),
         child: Transform.scale(
-          scale: .92 + .08 * value,
+          scale:
+              MotionTokens.incomingScale +
+              (1 - MotionTokens.incomingScale) * value,
           alignment: Alignment.topCenter,
           child: child,
         ),
@@ -387,9 +418,9 @@ class _ModeMenu extends StatelessWidget {
                     : const Color(0x8CFFFFFF),
                 borderRadius: BorderRadius.circular(21),
                 border: Border.all(
-                  color: Colors.white.withValues(
-                    alpha: AppColors.isDark ? .2 : .68,
-                  ),
+                  color: AppColors.isDark
+                      ? Colors.white.withValues(alpha: .2)
+                      : const Color(0x265C73FF),
                 ),
               ),
               child: Padding(
@@ -401,6 +432,7 @@ class _ModeMenu extends StatelessWidget {
                       _ModeMenuRow(
                         mode: mode,
                         selected: selected == mode,
+                        proLocked: mode.requiresPro && !isPro,
                         onTap: () => onSelected(mode),
                       ),
                       if (mode != CardStackMode.values.last)
@@ -408,9 +440,9 @@ class _ModeMenu extends StatelessWidget {
                           height: 1,
                           indent: 43,
                           endIndent: 8,
-                          color: Colors.white.withValues(
-                            alpha: AppColors.isDark ? .09 : .42,
-                          ),
+                          color: AppColors.isDark
+                              ? Colors.white.withValues(alpha: .09)
+                              : const Color(0x2452617F),
                         ),
                     ],
                   ],
@@ -428,11 +460,13 @@ class _ModeMenuRow extends StatelessWidget {
   const _ModeMenuRow({
     required this.mode,
     required this.selected,
+    required this.proLocked,
     required this.onTap,
   });
 
   final HomeCardDisplayMode mode;
   final bool selected;
+  final bool proLocked;
   final VoidCallback onTap;
 
   @override
@@ -440,65 +474,86 @@ class _ModeMenuRow extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
-      label: mode.label,
-      child: InkWell(
-        key: Key('home-mode-${mode.name}'),
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(15),
-        child: AnimatedContainer(
-          height: 48,
-          duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(horizontal: 9),
-          decoration: BoxDecoration(
-            color: selected
-                ? AppColors.selectedWash.withValues(
-                    alpha: AppColors.isDark ? .28 : .2,
-                  )
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(15),
-          ),
-          child: Row(
-            children: [
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                width: 29,
-                height: 29,
-                decoration: BoxDecoration(
-                  color: selected
-                      ? AppColors.cyan.withValues(alpha: .16)
-                      : Colors.white.withValues(
-                          alpha: AppColors.isDark ? .055 : .4,
-                        ),
-                  borderRadius: BorderRadius.circular(9),
-                ),
-                child: Icon(
-                  _modeIcon(mode),
-                  color: selected ? AppColors.cyan : AppColors.textMuted,
-                  size: 18,
-                ),
-              ),
-              const SizedBox(width: 11),
-              Expanded(
-                child: Text(
-                  mode.label,
-                  style: TextStyle(
-                    color: AppColors.text,
-                    fontSize: 15.5,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -.2,
+      label: context.tr(proLocked ? '${mode.label}，Pro 会员功能' : mode.label),
+      child: MotionPressEffect(
+        child: InkWell(
+          key: Key('home-mode-${mode.name}'),
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(15),
+          child: AnimatedContainer(
+            height: 48,
+            duration: MotionTokens.stateChange,
+            padding: const EdgeInsets.symmetric(horizontal: 9),
+            decoration: BoxDecoration(
+              color: selected
+                  ? AppColors.selectedWash.withValues(
+                      alpha: AppColors.isDark ? .28 : .2,
+                    )
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(15),
+            ),
+            child: Row(
+              children: [
+                AnimatedContainer(
+                  duration: MotionTokens.stateChange,
+                  width: 29,
+                  height: 29,
+                  decoration: BoxDecoration(
+                    color: selected
+                        ? AppColors.cyan.withValues(
+                            alpha: AppColors.isDark ? .42 : .82,
+                          )
+                        : Colors.white.withValues(
+                            alpha: AppColors.isDark ? .055 : .4,
+                          ),
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Icon(
+                    _modeIcon(mode),
+                    color: selected ? Colors.white : AppColors.textMuted,
+                    size: 18,
                   ),
                 ),
-              ),
-              AnimatedOpacity(
-                opacity: selected ? 1 : 0,
-                duration: const Duration(milliseconds: 160),
-                child: Icon(
-                  Icons.check_rounded,
-                  color: AppColors.mint,
-                  size: 20,
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          mode.label,
+                          style: TextStyle(
+                            color: AppColors.text,
+                            fontSize: 15.5,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -.2,
+                          ),
+                        ),
+                      ),
+                      if (mode.requiresPro) ...[
+                        const SizedBox(width: 8),
+                        const ProCrownBadge(),
+                      ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
+                if (proLocked)
+                  Icon(
+                    Icons.lock_outline_rounded,
+                    color: AppColors.textMuted,
+                    size: 17,
+                  )
+                else
+                  AnimatedOpacity(
+                    opacity: selected ? 1 : 0,
+                    duration: MotionTokens.fast,
+                    child: Icon(
+                      Icons.check_rounded,
+                      color: AppColors.mint,
+                      size: 20,
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -507,7 +562,9 @@ class _ModeMenuRow extends StatelessWidget {
 }
 
 class _EmptyState extends StatelessWidget {
-  const _EmptyState({super.key});
+  const _EmptyState({required this.onAddCard, super.key});
+
+  final VoidCallback onAddCard;
 
   @override
   Widget build(BuildContext context) {
@@ -541,13 +598,20 @@ class _EmptyState extends StatelessWidget {
           ),
           const SizedBox(height: 7),
           Text(
-            '去市场或添加页选择第一张卡片',
+            '从公开目录选择第一张卡片，数据仅保存在本机',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: AppColors.textMuted,
               fontSize: 12,
               fontWeight: FontWeight.w700,
             ),
+          ),
+          const SizedBox(height: 18),
+          FilledButton.icon(
+            key: const Key('empty-add-card'),
+            onPressed: onAddCard,
+            icon: const Icon(Icons.add_card_rounded),
+            label: const Text('添加卡片'),
           ),
         ],
       ),

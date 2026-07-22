@@ -44,6 +44,13 @@ class RemoteRankingRepository {
           .whereType<num>()
           .map((value) => value.toDouble())
           .toList(growable: false),
+      histories: {
+        for (final range in const ['7d', '30d', '90d', 'all'])
+          range: jsonList(history[range] ?? const [], label: '$range 趋势')
+              .whereType<num>()
+              .map((value) => value.toDouble())
+              .toList(growable: false),
+      },
       assets: jsonList(json['assets'] ?? const [], label: '稳定币')
           .map((value) {
             final item = jsonObject(value, label: '稳定币');
@@ -74,6 +81,34 @@ class RemoteRankingRepository {
               color: item['color'] == null
                   ? null
                   : _parseColor(item['color']?.toString()),
+            );
+          })
+          .toList(growable: false),
+    );
+  }
+
+  Future<UserRankingDashboard> loadUserRankings() async {
+    final json = jsonObject(await _apiClient.get('/api/user-rankings'));
+    return UserRankingDashboard(
+      periodLabel: json['periodLabel']?.toString() ?? '本月',
+      methodology: json['methodology']?.toString() ?? '按贡献活跃度排序；会员身份不参与计分。',
+      updatedAt: DateTime.tryParse(json['updatedAt']?.toString() ?? ''),
+      items: jsonList(json['items'] ?? const [], label: '卡友榜')
+          .map((value) {
+            final item = jsonObject(value, label: '卡友排行项');
+            return UserRankingEntry(
+              id: item['id']?.toString() ?? '',
+              displayName: item['displayName']?.toString() ?? '匿名卡友',
+              avatarUrl: _optionalResolvedUrl(item['avatarUrl']),
+              monthlyActivityScore:
+                  (item['monthlyActivityScore'] as num?)?.round() ?? 0,
+              totalContributionScore:
+                  (item['totalContributionScore'] as num?)?.round() ?? 0,
+              acceptedContributions:
+                  (item['acceptedContributions'] as num?)?.round() ?? 0,
+              activeDays: (item['activeDays'] as num?)?.round() ?? 0,
+              isPro: item['membershipTier']?.toString().toLowerCase() == 'pro',
+              isCurrentUser: item['isCurrentUser'] == true,
             );
           })
           .toList(growable: false),

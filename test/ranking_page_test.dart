@@ -3,15 +3,64 @@ import 'dart:convert';
 
 import 'package:card_app/core/network/api_client.dart';
 import 'package:card_app/core/theme/app_colors.dart';
+import 'package:card_app/core/theme/app_theme.dart';
 import 'package:card_app/features/catalog/data/local_card_catalog.dart';
 import 'package:card_app/features/ranking/data/remote_ranking_repository.dart';
 import 'package:card_app/features/ranking/presentation/ranking_page.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 void main() {
+  testWidgets('user ranking and stablecoin shortcut support both themes', (
+    tester,
+  ) async {
+    final client = ApiClient(
+      baseUrl: 'https://example.test',
+      client: MockClient(
+        (_) async => throw StateError('Local preview should not request data'),
+      ),
+    );
+
+    for (final brightness in Brightness.values) {
+      AppColors.configure(brightness);
+      await tester.pumpWidget(
+        MaterialApp(
+          key: ValueKey(brightness),
+          theme: brightness == Brightness.light
+              ? AppTheme.light
+              : AppTheme.dark,
+          home: Scaffold(
+            body: RankingPage(
+              cards: localCardCatalog,
+              onOpenCard: (_) {},
+              onOpenArticle: (_) {},
+              repository: RemoteRankingRepository(client),
+              enableRemoteData: false,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('ranking-tab-users')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('user-ranking-panel')), findsOneWidget);
+      expect(find.text('PRO'), findsWidgets);
+
+      await tester.tap(find.byKey(const Key('ranking-tab-metrics')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('metrics-stablecoin-shortcut')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    }
+    client.close();
+  });
+
   testWidgets('renders live ranking groups without an unbounded height error', (
     tester,
   ) async {
@@ -25,7 +74,12 @@ void main() {
               {
                 'id': 'legendary',
                 'name': '夯',
-                'cardIds': ['etherfi', 'redotpay'],
+                'cardIds': [
+                  'etherfi',
+                  'redotpay',
+                  'metamask-card',
+                  'n26-standard',
+                ],
               },
             ],
           },
@@ -35,6 +89,21 @@ void main() {
             'chains': <Object?>[],
           },
           '/api/card-metrics' => {'items': <Object?>[]},
+          '/api/user-rankings' => {
+            'periodLabel': '本月',
+            'methodology': '贡献活跃度',
+            'items': [
+              {
+                'id': 'user-1',
+                'displayName': '测试卡友',
+                'monthlyActivityScore': 90,
+                'totalContributionScore': 1200,
+                'acceptedContributions': 12,
+                'activeDays': 20,
+                'membershipTier': 'pro',
+              },
+            ],
+          },
           '/api/articles' => {'items': <Object?>[]},
           _ => throw StateError('Unexpected request: ${request.url}'),
         };
@@ -46,44 +115,79 @@ void main() {
       }),
     );
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: RankingPage(
-            cards: localCardCatalog,
-            onOpenCard: (_) {},
-            onOpenArticle: (_) {},
-            repository: RemoteRankingRepository(client),
-            enableRemoteData: true,
-          ),
+    Widget buildApp(Locale locale) => MaterialApp(
+      locale: locale,
+      supportedLocales: const [Locale('zh', 'CN'), Locale('en', 'US')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      home: Scaffold(
+        body: RankingPage(
+          cards: localCardCatalog,
+          onOpenCard: (_) {},
+          onOpenArticle: (_) {},
+          repository: RemoteRankingRepository(client),
+          enableRemoteData: true,
         ),
       ),
     );
+
+    await tester.pumpWidget(buildApp(const Locale('zh', 'CN')));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('ranking-live')), findsOneWidget);
     expect(find.byKey(const Key('rank-card-etherfi-core')), findsOneWidget);
     expect(find.byKey(const Key('rank-card-redotpay')), findsOneWidget);
+    expect(find.byKey(const Key('rank-logo-etherfi-core')), findsOneWidget);
+    expect(find.byKey(const Key('rank-logo-redotpay')), findsOneWidget);
+    expect(find.text('夯'), findsOneWidget);
+    final logoCenters = [
+      'etherfi-core',
+      'redotpay',
+      'metamask-card',
+      'n26-standard',
+    ].map((id) => tester.getCenter(find.byKey(Key('rank-logo-$id')))).toList();
+    expect(
+      logoCenters[1].dx - logoCenters[0].dx,
+      closeTo(logoCenters[2].dx - logoCenters[1].dx, .1),
+    );
+    expect(
+      logoCenters[2].dx - logoCenters[1].dx,
+      closeTo(logoCenters[3].dx - logoCenters[2].dx, .1),
+    );
+
+    await tester.pumpWidget(buildApp(const Locale('en', 'US')));
+    await tester.pumpAndSettle();
+    expect(find.text('S'), findsOneWidget);
+    expect(find.text('夯'), findsNothing);
 
     await tester.tap(find.byKey(const Key('ranking-tab-articles')));
     await tester.pumpAndSettle();
     final newsTab = find.byKey(const Key('article-tab-news'));
-    final benefitTab = find.byKey(const Key('article-tab-benefit'));
+    final globalAccountTab = find.byKey(const Key('article-tab-globalAccount'));
     final openCardTab = find.byKey(const Key('article-tab-openCard'));
     expect(newsTab, findsOneWidget);
-    expect(benefitTab, findsOneWidget);
+    expect(globalAccountTab, findsOneWidget);
     expect(openCardTab, findsOneWidget);
-    expect(tester.getSize(newsTab).height, 30);
+    expect(tester.getSize(newsTab).height, 44);
     expect(
-      tester.getTopLeft(benefitTab).dx - tester.getTopRight(newsTab).dx,
+      tester.getTopLeft(globalAccountTab).dx - tester.getTopRight(newsTab).dx,
       closeTo(10, .1),
     );
 
-    await tester.tap(benefitTab);
+    await tester.tap(globalAccountTab);
     await tester.pumpAndSettle();
-    expect(find.text('暂无福利'), findsOneWidget);
-    expect(find.byKey(const Key('article-empty-state')), findsOneWidget);
-    expect(find.byKey(const Key('article-empty-glow')), findsOneWidget);
+    expect(find.text('全球账户'), findsWidgets);
+    expect(
+      find.byKey(const Key('article-global-account-list')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('global-account-card-wise-account')),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
     client.close();
   });
@@ -126,6 +230,7 @@ void main() {
             'chains': <Object?>[],
           },
           '/api/card-metrics' => {'items': <Object?>[]},
+          '/api/user-rankings' => {'items': <Object?>[]},
           _ => throw StateError('Unexpected request: ${request.url}'),
         };
         return http.Response(

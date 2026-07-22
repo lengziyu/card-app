@@ -28,6 +28,7 @@ abstract final class CardLayoutCalculator {
     return switch (mode) {
       CardStackMode.stack => _stack(
         selectedIndex: math.max(0, safeSelected),
+        dragOffset: dragOffset,
         screenSize: screenSize,
         cardSize: cardSize,
         itemCount: itemCount,
@@ -79,6 +80,57 @@ abstract final class CardLayoutCalculator {
   /// 堆叠模式：整副卡组锚定在场景顶部，以紧密卡头节奏向下展开。
   static List<CardTransformState> _stack({
     required int selectedIndex,
+    required double dragOffset,
+    required Size screenSize,
+    required Size cardSize,
+    required int itemCount,
+    required double revealScale,
+  }) {
+    final targetIndex = _dragTarget(
+      selectedIndex: selectedIndex,
+      dragOffset: dragOffset,
+      itemCount: itemCount,
+    );
+    final current = _stackBase(
+      selectedIndex: selectedIndex,
+      screenSize: screenSize,
+      cardSize: cardSize,
+      itemCount: itemCount,
+      revealScale: revealScale,
+    );
+    if (targetIndex == selectedIndex || dragOffset == 0) return current;
+    final target = _stackBase(
+      selectedIndex: targetIndex,
+      screenSize: screenSize,
+      cardSize: cardSize,
+      itemCount: itemCount,
+      revealScale: revealScale,
+    );
+    final progress = (dragOffset.abs() / _stackReveal(revealScale))
+        .clamp(0.0, 1.0)
+        .toDouble();
+    final trackedOffset = dragOffset
+        .clamp(
+          -_stackReveal(revealScale) * 1.12,
+          _stackReveal(revealScale) * 1.12,
+        )
+        .toDouble();
+    return List.generate(itemCount, (index) {
+      final state = CardTransformState.lerp(
+        current[index],
+        target[index],
+        progress,
+      );
+      if (index != selectedIndex) return state;
+      return state.copyWith(
+        top: current[index].top + trackedOffset,
+        rotation: state.rotation + trackedOffset.sign * .004 * progress,
+      );
+    });
+  }
+
+  static List<CardTransformState> _stackBase({
+    required int selectedIndex,
     required Size screenSize,
     required Size cardSize,
     required int itemCount,
@@ -86,7 +138,6 @@ abstract final class CardLayoutCalculator {
   }) {
     final centeredLeft = (screenSize.width - cardSize.width) / 2;
     final reveal = _stackReveal(revealScale);
-    final selectedTop = _contentInset + selectedIndex * reveal;
     return List.generate(itemCount, (index) {
       final distance = (index - selectedIndex).abs().toDouble();
       final selected = distance == 0;
@@ -95,7 +146,7 @@ abstract final class CardLayoutCalculator {
       // artwork remains behind the card directly above them. Combined with
       // proximity z-ordering, this leaves one clean card-edge strip per item
       // instead of exposing almost the entire first card below the selection.
-      final top = selectedTop + (index - selectedIndex) * reveal;
+      final top = _contentInset + index * reveal;
       final side = index.isEven ? -1.0 : 1.0;
       final scale = selected
           ? 1.0
@@ -169,10 +220,9 @@ abstract final class CardLayoutCalculator {
     final left = (screenSize.width - cardSize.width) / 2;
     final reveal = _focusReveal(revealScale);
     const leadingInset = 20.0;
-    final visiblePredecessors = math.min(selectedIndex, 2);
     final selectedTop = math
         .max(
-          leadingInset + visiblePredecessors * reveal,
+          leadingInset + 2 * reveal,
           (screenSize.height - cardSize.height) / 2 - 8,
         )
         .toDouble();

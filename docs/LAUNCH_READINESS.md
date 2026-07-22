@@ -1,21 +1,27 @@
 # 上线准备清单
 
-更新时间：2026-07-19
+更新时间：2026-07-21
 
 ## 已可验证
 
 - Flutter iOS Simulator 与 Android Debug 均可构建；`flutter analyze` 和完整测试通过。
+- Android Release APK 可使用当前测试签名构建，且 Release Manifest 已包含公开 API 所需的联网权限。
+- 游客卡包、收藏、历史与意见箱均为本机持久化状态，界面明确提示当前不会上传或跨设备同步。
 - 公开内容的推送采用“发布 → 待确认 → 人工发送 → 结果留存”流程。
 - 邀请码与邀请链接由服务端脱敏，默认不公开；管理端可按文章/卡片分别开启。
 - 公开邀请字段仅用于经人工确认的非商业信息；不得包含 Affiliate、CPA、返佣、推广追踪或隐藏跳转。
+- Pro 客户端购买、恢复、服务端预检、Apple/Google 验单和权益门控已实现；缺少正式账号或商店密钥时默认关闭，不会发起扣款。
+- Pro 端已实现聚焦/钱包模式、2–4 卡对比、费用情景估算与导出、长周期数据、规则关注、离线公开资料和工作区；云同步接口只保存关注项与对比方案。
 
 ## 发布前必须由运营完成
 
 1. 在部署环境填写 FCM 服务账号变量，并在 Firebase 上传 iOS APNs 密钥、配置 Android `google-services.json`。详见 `PUSH_NOTIFICATIONS_SETUP.md`。
 2. 配置可公开访问的隐私政策、用户协议、联系邮箱，以及（如开放账号）账号删除说明。
-3. 当前 Flutter 登录/注册仍是安全预览，不得宣称账号同步已上线；若要开放账号，需先完成 `APP_DEVELOPMENT_GUIDELINES.md` 第 4 节要求的密码哈希、会话安全、邮箱验证、重置、删除和安全存储。
+3. Flutter Firebase 邮箱登录、邮箱验证、重置、退出和账号删除代码已实现；生产环境仍需配置 Firebase Admin 凭据、公开删除说明并完成真机回归。详见 `FIREBASE_AUTH.md` 与 `RELEASE_CHECKLIST.md`。
 4. 用真实 iPhone 与一台中低端 Android 验证大字体、减少动态效果、深浅主题、冷启动、网络失败与推送点击跳转。
 5. 提供商店需要的最终图标、启动图、截图、隐私问卷、年龄分级、支持网址和审核说明。
+6. 如开放 Pro，按 `PRO_MVP.md` 和服务端 `docs/PRO_SUBSCRIPTIONS.md` 注入正式账号与商店密钥，配置 `PRO_TERMS_URL`、`PRO_PRIVACY_URL`，完成商店通知、会员协议和沙盒真机测试；未完成前同时保持 `ENABLE_PRO_BILLING=false` 与 `PRO_API_ENABLED=false`。
+7. 上线“规则变更提醒”前必须部署规则差异检测任务，并用正式账号映射关注项、通过已配置的推送服务定向发送；当前只可宣称“规则关注”，不能宣称实时提醒已上线。
 
 ## 发布操作顺序
 

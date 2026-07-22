@@ -1,4 +1,8 @@
-enum CardStackMode { stack, focus, wallet }
+enum CardStackMode { wallet, stack, focus }
+
+extension CardStackModeAccess on CardStackMode {
+  bool get requiresPro => this != CardStackMode.wallet;
+}
 
 extension CardStackModeCopy on CardStackMode {
   String get label => switch (this) {

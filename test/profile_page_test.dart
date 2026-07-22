@@ -4,11 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('profile avatar and animated membership card support dark mode', (
+  testWidgets('profile avatar and login level card support dark mode', (
     tester,
   ) async {
     AppColors.configure(Brightness.dark);
-    var loginRequested = false;
+    ProfileSection? openedSection;
+    var loginCount = 0;
 
     await tester.pumpWidget(
       MaterialApp(
@@ -17,12 +18,8 @@ void main() {
           data: const MediaQueryData(disableAnimations: true),
           child: Scaffold(
             body: ProfilePage(
-              cardCount: 0,
-              favoriteCount: 0,
-              historyCount: 0,
-              submissionCount: 0,
-              onOpenSection: (_) {},
-              onLogin: () => loginRequested = true,
+              onOpenSection: (section) => openedSection = section,
+              onLogin: () => loginCount++,
               isDarkMode: true,
               onToggleTheme: () {},
             ),
@@ -34,14 +31,38 @@ void main() {
 
     expect(find.byKey(const Key('profile-avatar')), findsOneWidget);
     expect(find.byKey(const Key('profile-membership-card')), findsOneWidget);
-    expect(
-      find.byKey(const Key('profile-membership-gradient')),
-      findsOneWidget,
+    expect(find.byKey(const Key('profile-menu-cards')), findsNothing);
+    expect(find.byKey(const Key('profile-menu-pro')), findsOneWidget);
+    expect(find.byKey(const Key('profile-menu-language')), findsOneWidget);
+    expect(find.byKey(const Key('profile-menu-settings')), findsOneWidget);
+    final languageBottom = tester.getBottomLeft(
+      find.byKey(const Key('profile-menu-language')),
     );
+    final settingsTop = tester.getTopLeft(
+      find.byKey(const Key('profile-menu-settings')),
+    );
+    expect(languageBottom.dy, settingsTop.dy);
+    expect(find.byKey(const Key('pro-crown-badge')), findsOneWidget);
+    expect(find.byKey(const Key('profile-login')), findsNothing);
+    expect(find.text('卡片等级'), findsOneWidget);
+    expect(find.text('未登录'), findsWidgets);
+    expect(find.text('质量分'), findsOneWidget);
+    expect(find.text('去登录'), findsOneWidget);
+    final loginChipSize = tester.getSize(
+      find.byKey(const Key('profile-login-chip')),
+    );
+    expect(loginChipSize.height, 36);
+    expect(loginChipSize.width, inInclusiveRange(90, 116));
     expect(tester.takeException(), isNull);
 
     await tester.tap(find.byKey(const Key('profile-membership-card')));
-    expect(loginRequested, isTrue);
+    expect(loginCount, 1);
+
+    await tester.tap(find.byKey(const Key('profile-menu-language')));
+    expect(openedSection, ProfileSection.language);
+
+    await tester.tap(find.byKey(const Key('profile-menu-pro')));
+    expect(openedSection, ProfileSection.pro);
   });
 
   testWidgets('profile visual treatment fits narrow screens and large text', (
@@ -63,10 +84,6 @@ void main() {
           ),
           child: Scaffold(
             body: ProfilePage(
-              cardCount: 0,
-              favoriteCount: 0,
-              historyCount: 0,
-              submissionCount: 0,
               onOpenSection: (_) {},
               onLogin: () {},
               isDarkMode: false,
@@ -82,4 +99,118 @@ void main() {
     expect(find.byKey(const Key('profile-membership-card')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('light profile avatar and level card match the H5 treatment', (
+    tester,
+  ) async {
+    AppColors.configure(Brightness.light);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: Scaffold(
+            body: ProfilePage(
+              onOpenSection: (_) {},
+              onLogin: () {},
+              isDarkMode: false,
+              onToggleTheme: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('B'), findsOneWidget);
+    expect(find.text('当前未登录 · 登录后同步卡片与收藏'), findsOneWidget);
+    final avatar = tester.widget<Container>(
+      find.byKey(const Key('profile-avatar')),
+    );
+    final avatarDecoration = avatar.decoration! as BoxDecoration;
+    expect(avatarDecoration.color, isNull);
+    expect(avatarDecoration.gradient, isA<LinearGradient>());
+    expect(avatarDecoration.shape, BoxShape.circle);
+
+    final surface = tester.widget<DecoratedBox>(
+      find.byKey(const Key('profile-membership-surface')),
+    );
+    final surfaceDecoration = surface.decoration as BoxDecoration;
+    expect(surfaceDecoration.borderRadius, BorderRadius.circular(14));
+    expect(surfaceDecoration.gradient, isA<LinearGradient>());
+    expect(find.text('卡片等级'), findsOneWidget);
+    expect(find.text('质量分'), findsOneWidget);
+    expect(find.text('去登录'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('theme switch refreshes profile glass colors immediately', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const _ThemeSwitchProfile());
+    await tester.pump();
+
+    BoxDecoration avatarDecoration() =>
+        tester
+                .widget<Container>(find.byKey(const Key('profile-avatar')))
+                .decoration!
+            as BoxDecoration;
+    BoxDecoration membershipDecoration() =>
+        tester
+                .widget<DecoratedBox>(
+                  find.byKey(const Key('profile-membership-surface')),
+                )
+                .decoration
+            as BoxDecoration;
+    TextStyle membershipStatusStyle() => tester
+        .widget<Text>(find.byKey(const Key('profile-membership-status')))
+        .style!;
+
+    final lightAvatar = avatarDecoration().gradient! as LinearGradient;
+    final lightMembership = membershipDecoration().gradient! as LinearGradient;
+    expect(lightAvatar.colors.last, const Color(0xEBF5FAFF));
+    expect(lightMembership.colors.last, const Color(0xEFF0F0FF));
+    expect(membershipStatusStyle().color, const Color(0xFF131C2F));
+
+    await tester.tap(find.byKey(const Key('profile-theme-toggle')));
+    await tester.pumpAndSettle();
+
+    final darkAvatar = avatarDecoration().gradient! as LinearGradient;
+    final darkMembership = membershipDecoration().gradient! as LinearGradient;
+    expect(darkAvatar.colors.last, const Color(0xFF252A40));
+    expect(darkMembership.colors.last, const Color(0xFF1D2544));
+    expect(membershipStatusStyle().color, Colors.white);
+    expect(tester.takeException(), isNull);
+  });
+}
+
+class _ThemeSwitchProfile extends StatefulWidget {
+  const _ThemeSwitchProfile();
+
+  @override
+  State<_ThemeSwitchProfile> createState() => _ThemeSwitchProfileState();
+}
+
+class _ThemeSwitchProfileState extends State<_ThemeSwitchProfile> {
+  bool _dark = false;
+
+  @override
+  Widget build(BuildContext context) {
+    AppColors.configure(_dark ? Brightness.dark : Brightness.light);
+    return MaterialApp(
+      theme: ThemeData.light(),
+      darkTheme: ThemeData.dark(),
+      themeMode: _dark ? ThemeMode.dark : ThemeMode.light,
+      home: MediaQuery(
+        data: const MediaQueryData(disableAnimations: true),
+        child: Scaffold(
+          body: ProfilePage(
+            onOpenSection: (_) {},
+            onLogin: () {},
+            isDarkMode: _dark,
+            onToggleTheme: () => setState(() => _dark = !_dark),
+          ),
+        ),
+      ),
+    );
+  }
 }

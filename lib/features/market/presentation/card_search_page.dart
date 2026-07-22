@@ -2,7 +2,8 @@ import 'package:card_app/core/theme/app_colors.dart';
 import 'package:card_app/core/widgets/app_feedback.dart';
 import 'package:card_app/features/catalog/domain/card_summary.dart';
 import 'package:card_app/features/catalog/widgets/catalog_card_row.dart';
-import 'package:flutter/material.dart';
+import 'package:card_app/core/localization/localized_text.dart';
+import 'package:flutter/material.dart' hide Text;
 
 enum CardSearchMode { market, add }
 
@@ -41,7 +42,11 @@ class _CardSearchPageState extends State<CardSearchPage> {
   }
 
   List<CardSummary> get _results => widget.cards
-      .where((card) => card.matches(_query))
+      .where(
+        (card) =>
+            card.matches(_query) &&
+            (widget.mode != CardSearchMode.add || card.isAddableToCardWallet),
+      )
       .toList(growable: false);
 
   @override
@@ -85,7 +90,7 @@ class _CardSearchPageState extends State<CardSearchPage> {
           child: TextField(
             key: Key('catalog-search-field'),
             controller: _controller,
-            autofocus: false,
+            autofocus: true,
             textInputAction: TextInputAction.search,
             onChanged: (value) => setState(() => _query = value),
             style: TextStyle(color: AppColors.text),

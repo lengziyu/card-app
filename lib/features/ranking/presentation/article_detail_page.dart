@@ -1,11 +1,16 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:card_app/core/motion/app_haptics.dart';
+import 'package:card_app/core/motion/motion_tokens.dart';
+import 'package:card_app/core/motion/motion_widgets.dart';
 import 'package:card_app/core/theme/app_colors.dart';
 import 'package:card_app/core/widgets/app_feedback.dart';
 import 'package:card_app/features/catalog/domain/card_summary.dart';
 import 'package:card_app/features/catalog/widgets/catalog_card_row.dart';
 import 'package:card_app/features/ranking/domain/local_article.dart';
 import 'package:card_app/features/shell/widgets/sticky_page_header.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:card_app/core/localization/localized_text.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
@@ -36,6 +41,30 @@ class ArticleDetailPage extends StatefulWidget {
 class _ArticleDetailPageState extends State<ArticleDetailPage> {
   bool _liked = false;
   bool _liking = false;
+  late final ScrollController _scrollController;
+  final ValueNotifier<double> _headerProgress = ValueNotifier(0);
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController()..addListener(_updateHeaderProgress);
+  }
+
+  void _updateHeaderProgress() {
+    final next = (_scrollController.offset / 150).clamp(0.0, 1.0);
+    if ((next - _headerProgress.value).abs() > .002) {
+      _headerProgress.value = next;
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController
+      ..removeListener(_updateHeaderProgress)
+      ..dispose();
+    _headerProgress.dispose();
+    super.dispose();
+  }
 
   Future<void> _toggleLike() async {
     if (_liked || _liking) return;
@@ -122,6 +151,7 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
         _ArticleTopFadedScroll(
           topInset: topInset,
           child: ListView(
+            controller: _scrollController,
             physics: const BouncingScrollPhysics(),
             padding: EdgeInsets.fromLTRB(
               20,
@@ -276,7 +306,10 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
                           : Icons.star_border_rounded,
                       label: widget.favorite ? '已收藏' : '收藏',
                       active: widget.favorite,
-                      onTap: () => widget.onFavoriteChanged(!widget.favorite),
+                      onTap: () {
+                        AppHaptics.selection();
+                        widget.onFavoriteChanged(!widget.favorite);
+                      },
                     ),
                   ),
                   if (article.inviteCode?.isNotEmpty == true) ...[
@@ -301,7 +334,11 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
             height: 80 + topInset,
             child: Padding(
               padding: EdgeInsets.fromLTRB(20, 8 + topInset, 20, 24),
-              child: _ArticleNavigation(onBack: widget.onBack),
+              child: _ArticleNavigation(
+                onBack: widget.onBack,
+                title: article.title,
+                progress: _headerProgress,
+              ),
             ),
           ),
         ),
@@ -341,29 +378,38 @@ class _ArticleTopFadedScroll extends StatelessWidget {
 }
 
 class _ArticleNavigation extends StatelessWidget {
-  const _ArticleNavigation({required this.onBack});
+  const _ArticleNavigation({
+    required this.onBack,
+    required this.title,
+    required this.progress,
+  });
   final VoidCallback onBack;
+  final String title;
+  final ValueListenable<double> progress;
 
   @override
   Widget build(BuildContext context) => Row(
     children: [
-      IconButton.filledTonal(
-        key: const Key('article-back'),
-        onPressed: onBack,
-        tooltip: '返回',
-        icon: const Icon(Icons.arrow_back_rounded),
-        style: IconButton.styleFrom(
-          minimumSize: const Size(48, 48),
-          foregroundColor: AppColors.text,
-          backgroundColor: AppColors.glassStrong,
-          side: BorderSide(color: AppColors.line),
+      MotionPressEffect(
+        child: IconButton.filledTonal(
+          key: const Key('article-back'),
+          onPressed: onBack,
+          tooltip: '返回',
+          icon: const Icon(Icons.arrow_back_rounded),
+          style: IconButton.styleFrom(
+            minimumSize: const Size(48, 48),
+            foregroundColor: AppColors.text,
+            backgroundColor: AppColors.glassStrong,
+            side: BorderSide(color: AppColors.line),
+          ),
         ),
       ),
-      const Expanded(
-        child: Center(
-          child: Text(
-            '文章详情',
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+      Expanded(
+        child: ValueListenableBuilder<double>(
+          valueListenable: progress,
+          builder: (context, value, _) => Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: CollapsingHeaderTitle(title: title, progress: value),
           ),
         ),
       ),
@@ -462,24 +508,34 @@ class _ActionPill extends StatelessWidget {
   final bool loading;
 
   @override
-  Widget build(BuildContext context) => OutlinedButton.icon(
-    onPressed: onTap,
-    icon: loading ? const AppLoadingIndicator(size: 17) : Icon(icon, size: 17),
-    label: Text(label),
-    style: OutlinedButton.styleFrom(
-      padding: const EdgeInsets.symmetric(horizontal: 7),
-      minimumSize: const Size(0, 42),
-      textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
-      foregroundColor: active ? AppColors.violet : AppColors.text,
-      side: BorderSide(
-        color: active
-            ? AppColors.violet.withValues(alpha: 0.35)
-            : AppColors.line,
+  Widget build(BuildContext context) => MotionPressEffect(
+    enabled: onTap != null,
+    child: OutlinedButton.icon(
+      onPressed: onTap,
+      icon: loading
+          ? const AppLoadingIndicator(size: 17)
+          : MotionStateIcon(stateKey: icon, child: Icon(icon, size: 17)),
+      label: AnimatedSwitcher(
+        duration: MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : MotionTokens.stateChange,
+        child: Text(label, key: ValueKey(label)),
       ),
-      backgroundColor: active
-          ? AppColors.violet.withValues(alpha: 0.1)
-          : AppColors.glassStrong,
-      shape: const StadiumBorder(),
+      style: OutlinedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 7),
+        minimumSize: const Size(0, 42),
+        textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+        foregroundColor: active ? AppColors.violet : AppColors.text,
+        side: BorderSide(
+          color: active
+              ? AppColors.violet.withValues(alpha: 0.35)
+              : AppColors.line,
+        ),
+        backgroundColor: active
+            ? AppColors.violet.withValues(alpha: 0.1)
+            : AppColors.glassStrong,
+        shape: const StadiumBorder(),
+      ),
     ),
   );
 }

@@ -1,3 +1,4 @@
+import 'package:card_app/core/motion/motion_tokens.dart';
 import 'package:flutter/material.dart';
 
 abstract final class AppTheme {
@@ -10,6 +11,13 @@ abstract final class AppTheme {
       seedColor: isDark ? const Color(0xFF8B91FF) : const Color(0xFF5C73FF),
       brightness: brightness,
       surface: isDark ? const Color(0xFF232737) : Colors.white,
+    );
+    final interactionStyle = ButtonStyle(
+      animationDuration: MotionTokens.stateChange,
+      overlayColor: WidgetStateProperty.resolveWith((states) {
+        if (!states.contains(WidgetState.pressed)) return null;
+        return scheme.primary.withValues(alpha: isDark ? .13 : .08);
+      }),
     );
     return ThemeData(
       useMaterial3: true,
@@ -26,6 +34,14 @@ abstract final class AppTheme {
         'Microsoft YaHei',
       ],
       splashFactory: InkSparkle.splashFactory,
+      filledButtonTheme: FilledButtonThemeData(style: interactionStyle),
+      outlinedButtonTheme: OutlinedButtonThemeData(style: interactionStyle),
+      textButtonTheme: TextButtonThemeData(style: interactionStyle),
+      iconButtonTheme: IconButtonThemeData(style: interactionStyle),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: Colors.transparent,
+        modalBackgroundColor: Colors.transparent,
+      ),
       textTheme: TextTheme(
         headlineMedium: TextStyle(
           color: isDark ? const Color(0xFFF2F5FF) : const Color(0xFF10131D),

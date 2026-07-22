@@ -13,6 +13,38 @@ enum PaymentChannel {
   final String label;
 }
 
+enum ChinaKycStatus {
+  available('可申请 · 需验证'),
+  restricted('受限 · 需个案核验'),
+  unavailable('暂不支持'),
+  unknown('暂未核验');
+
+  const ChinaKycStatus(this.label);
+
+  final String label;
+}
+
+/// Mainland-China onboarding facts for a global account.
+///
+/// This is deliberately separate from generic KYC documents: a provider can
+/// accept an applicant in China while imposing currency, transfer, or document
+/// restrictions that cannot be expressed by a simple passport/ID-card badge.
+class ChinaKycInfo {
+  const ChinaKycInfo({
+    required this.status,
+    required this.documentSummary,
+    required this.note,
+    required this.sourceUrl,
+    this.checkedAt,
+  });
+
+  final ChinaKycStatus status;
+  final String documentSummary;
+  final String note;
+  final String sourceUrl;
+  final DateTime? checkedAt;
+}
+
 class DetailFeature {
   const DetailFeature({required this.icon, required this.text});
 
@@ -40,6 +72,7 @@ class CardDetail {
     required this.paymentChannels,
     required this.sourceLabel,
     required this.note,
+    this.chinaKyc,
     this.inviteCode,
     this.inviteUrl,
   });
@@ -55,6 +88,7 @@ class CardDetail {
   final Set<PaymentChannel> paymentChannels;
   final String sourceLabel;
   final String note;
+  final ChinaKycInfo? chinaKyc;
   final String? inviteCode;
   final String? inviteUrl;
 }

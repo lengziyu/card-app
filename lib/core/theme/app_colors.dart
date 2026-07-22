@@ -26,7 +26,7 @@ abstract final class AppColors {
   static Color get text =>
       _dark ? const Color(0xFFF2F5FF) : const Color(0xFF10131D);
   static Color get textMuted =>
-      _dark ? const Color(0xFF9DA5B8) : const Color(0xFF8A92A5);
+      _dark ? const Color(0xFF9DA5B8) : const Color(0xFF667085);
   static Color get violet =>
       _dark ? const Color(0xFF8F73FF) : const Color(0xFF8B68FF);
   static Color get cyan =>

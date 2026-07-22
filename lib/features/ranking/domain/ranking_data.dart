@@ -78,6 +78,7 @@ class StablecoinDashboard {
     required this.totalVolume,
     required this.trackedAssets,
     required this.history,
+    this.histories = const {},
     required this.assets,
     required this.chains,
   });
@@ -88,6 +89,7 @@ class StablecoinDashboard {
   final String totalVolume;
   final int trackedAssets;
   final List<double> history;
+  final Map<String, List<double>> histories;
   final List<StablecoinAsset> assets;
   final List<StablecoinChain> chains;
 
@@ -95,6 +97,56 @@ class StablecoinDashboard {
     if (history.length < 2 || history.first == 0) return 0;
     return (history.last - history.first) / history.first * 100;
   }
+
+  List<double> historyFor(String range) => histories[range] ?? history;
+
+  double intervalChangeFor(String range) {
+    final values = historyFor(range);
+    if (values.length < 2 || values.first == 0) return 0;
+    return (values.last - values.first) / values.first * 100;
+  }
+}
+
+class UserRankingEntry {
+  const UserRankingEntry({
+    required this.id,
+    required this.displayName,
+    required this.monthlyActivityScore,
+    required this.totalContributionScore,
+    required this.acceptedContributions,
+    required this.activeDays,
+    this.avatarUrl,
+    this.isPro = false,
+    this.isCurrentUser = false,
+  });
+
+  final String id;
+  final String displayName;
+  final int monthlyActivityScore;
+  final int totalContributionScore;
+  final int acceptedContributions;
+  final int activeDays;
+  final String? avatarUrl;
+
+  /// Comes from server-verified entitlement data. It never changes the score.
+  final bool isPro;
+  final bool isCurrentUser;
+}
+
+class UserRankingDashboard {
+  const UserRankingDashboard({
+    required this.periodLabel,
+    required this.methodology,
+    required this.items,
+    this.updatedAt,
+    this.isPreview = false,
+  });
+
+  final String periodLabel;
+  final String methodology;
+  final List<UserRankingEntry> items;
+  final DateTime? updatedAt;
+  final bool isPreview;
 }
 
 class CardMetric {

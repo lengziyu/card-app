@@ -1,15 +1,29 @@
 import 'package:card_app/core/localization/app_language.dart';
+import 'package:card_app/core/localization/app_localizations.dart';
 import 'package:card_app/core/theme/app_colors.dart';
 import 'package:card_app/core/theme/app_theme.dart';
+import 'package:card_app/features/auth/data/auth_repository.dart';
+import 'package:card_app/features/pro/data/pro_controller.dart';
 import 'package:card_app/features/shell/presentation/app_shell.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class CardApp extends StatefulWidget {
-  const CardApp({this.enableRemoteData = false, super.key});
+  const CardApp({
+    this.enableRemoteData = false,
+    this.proUnlocked = false,
+    this.proAccessTokenProvider,
+    this.proApplicationUserNameProvider,
+    this.authRepository,
+    super.key,
+  });
 
   final bool enableRemoteData;
+  final bool proUnlocked;
+  final ProAccessTokenProvider? proAccessTokenProvider;
+  final ProApplicationUserNameProvider? proApplicationUserNameProvider;
+  final AuthRepository? authRepository;
 
   @override
   State<CardApp> createState() => _CardAppState();
@@ -30,9 +44,12 @@ class _CardAppState extends State<CardApp> {
 
   Future<void> _restoreLanguage() async {
     final preferences = await SharedPreferences.getInstance();
-    final savedLanguage = AppLanguage.fromStorage(
+    final storedLanguage = AppLanguage.fromStorage(
       preferences.getString(_languagePreferenceKey),
     );
+    final savedLanguage = AppLanguage.releaseLanguages.contains(storedLanguage)
+        ? storedLanguage
+        : AppLanguage.system;
     if (!mounted || savedLanguage == _language) return;
     setState(() => _language = savedLanguage);
   }
@@ -75,20 +92,29 @@ class _CardAppState extends State<CardApp> {
         : Brightness.light;
     AppColors.configure(brightness);
     return MaterialApp(
-      title: '集卡',
+      onGenerateTitle: (context) => context.tr('集卡'),
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: _themeMode,
       locale: _language.locale,
+      localeResolutionCallback: (deviceLocale, supportedLocales) {
+        if (_language != AppLanguage.system) return _language.locale;
+        return AppLanguage.resolveDeviceLocale(deviceLocale);
+      },
       supportedLocales: AppLanguage.supportedLocales,
       localizationsDelegates: const [
+        AppLocalizations.delegate,
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
       home: AppShell(
         enableRemoteData: widget.enableRemoteData,
+        proUnlocked: widget.proUnlocked,
+        proAccessTokenProvider: widget.proAccessTokenProvider,
+        proApplicationUserNameProvider: widget.proApplicationUserNameProvider,
+        authRepository: widget.authRepository,
         isDarkMode: _themeMode == ThemeMode.dark,
         onToggleTheme: _toggleTheme,
         selectedLanguage: _language,

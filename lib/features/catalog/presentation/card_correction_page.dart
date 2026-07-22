@@ -2,7 +2,8 @@ import 'package:card_app/core/theme/app_colors.dart';
 import 'package:card_app/features/catalog/domain/card_summary.dart';
 import 'package:card_app/features/profile/data/local_guest_state.dart';
 import 'package:card_app/features/shell/widgets/sticky_page_header.dart';
-import 'package:flutter/material.dart';
+import 'package:card_app/core/localization/localized_text.dart';
+import 'package:flutter/material.dart' hide Text;
 
 class CardCorrectionPage extends StatefulWidget {
   const CardCorrectionPage({
@@ -73,7 +74,7 @@ class _CardCorrectionPageState extends State<CardCorrectionPage> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    '请说明需要更新的字段，并尽量附上官方公开来源。登录后即可提交。',
+                    '请说明需要更新的字段，并尽量附上官方公开来源。内容会先保存到本机。',
                     style: TextStyle(
                       color: AppColors.textMuted,
                       fontSize: 13,

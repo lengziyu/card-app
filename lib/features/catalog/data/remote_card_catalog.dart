@@ -29,16 +29,20 @@ class RemoteCardCatalogRepository implements CardCatalogRepository {
         query: const {'offset': 0, 'limit': 500},
       ),
     );
-    final cards = jsonList(response['items'], label: '卡片列表')
+    final remoteCards = jsonList(response['items'], label: '卡片列表')
         .map((item) => _cardFromJson(jsonObject(item, label: '卡片')))
         .toList(growable: false);
-    _cache = cards;
-    return cards;
+    _cache = remoteCards;
+    return remoteCards;
   }
 
   CardSummary _cardFromJson(Map<String, dynamic> json) {
     final categoryLabel = json['category']?.toString() ?? '';
     final imagePath = json['cardImageSrc']?.toString() ?? '';
+    final coverPath =
+        json['coverImageSrc']?.toString() ??
+        json['accountCoverImageSrc']?.toString() ??
+        '';
     final logoPath = json['logoImageSrc']?.toString() ?? '';
     return CardSummary(
       id: json['id']?.toString() ?? '',
@@ -58,6 +62,9 @@ class RemoteCardCatalogRepository implements CardCatalogRepository {
       imageUrl: imagePath.isEmpty
           ? null
           : _apiClient.resolve(imagePath).toString(),
+      coverImageUrl: coverPath.isEmpty
+          ? null
+          : _apiClient.resolve(coverPath).toString(),
       logoImageUrl: logoPath.isEmpty
           ? null
           : _apiClient.resolve(logoPath).toString(),
@@ -73,7 +80,19 @@ class RemoteCardCatalogRepository implements CardCatalogRepository {
             KycDocument.idCard,
       },
       isNew: _isNew(json['launchTimestamp'], json['createdAt']),
+      kind: _kindFromJson(json['catalogKind'] ?? json['productKind']),
     );
+  }
+
+  CatalogItemKind _kindFromJson(Object? value) {
+    final normalized = value?.toString().trim().toLowerCase();
+    return switch (normalized) {
+      'globalaccount' ||
+      'global_account' ||
+      'global account' ||
+      '全球账户' => CatalogItemKind.globalAccount,
+      _ => CatalogItemKind.card,
+    };
   }
 
   int _parseColor(String? source) {

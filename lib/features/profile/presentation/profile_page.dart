@@ -1,10 +1,16 @@
 import 'dart:math' as math;
 
+import 'package:card_app/core/motion/app_haptics.dart';
+import 'package:card_app/core/motion/motion_tokens.dart';
+import 'package:card_app/core/motion/motion_widgets.dart';
 import 'package:card_app/core/theme/app_colors.dart';
-import 'package:flutter/material.dart';
+import 'package:card_app/features/auth/domain/auth_user.dart';
+import 'package:card_app/features/pro/widgets/pro_crown_badge.dart';
+import 'package:card_app/core/localization/localized_text.dart';
+import 'package:flutter/material.dart' hide Text;
 
 enum ProfileSection {
-  cards('我的卡片', Icons.credit_card_outlined),
+  pro('Pro 会员', Icons.workspace_premium_outlined),
   services('订阅与服务', Icons.auto_awesome_outlined),
   favorites('我的收藏', Icons.star_border_rounded),
   history('浏览记录', Icons.history_rounded),
@@ -15,6 +21,7 @@ enum ProfileSection {
   version('版本管理', Icons.system_update_alt_rounded),
   recommend('推荐卡片', Icons.credit_card_outlined),
   notifications('消息与反馈', Icons.notifications_none_rounded),
+  reminders('提醒配置', Icons.notifications_active_outlined),
   feedback('反馈', Icons.feedback_outlined);
 
   const ProfileSection(this.title, this.icon);
@@ -25,61 +32,81 @@ enum ProfileSection {
 
 class ProfilePage extends StatelessWidget {
   const ProfilePage({
-    required this.cardCount,
-    required this.favoriteCount,
-    required this.historyCount,
-    required this.submissionCount,
     required this.onOpenSection,
     required this.onLogin,
     required this.isDarkMode,
     required this.onToggleTheme,
+    this.isPro = false,
+    this.authUser,
+    this.cardCount = 0,
+    this.favoriteCount = 0,
     super.key,
   });
 
-  final int cardCount;
-  final int favoriteCount;
-  final int historyCount;
-  final int submissionCount;
   final ValueChanged<ProfileSection> onOpenSection;
   final VoidCallback onLogin;
   final bool isDarkMode;
   final VoidCallback onToggleTheme;
+  final bool isPro;
+  final AuthUser? authUser;
+  final int cardCount;
+  final int favoriteCount;
 
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.paddingOf(context).bottom;
+    void openSection(ProfileSection section) {
+      const accountSections = {
+        ProfileSection.favorites,
+        ProfileSection.history,
+        ProfileSection.notifications,
+      };
+      if (accountSections.contains(section) &&
+          authUser?.emailVerified != true) {
+        onLogin();
+        return;
+      }
+      onOpenSection(section);
+    }
+
     return CustomScrollView(
       key: const Key('profile-page'),
       physics: const BouncingScrollPhysics(),
       slivers: [
         SliverPadding(
-          padding: EdgeInsets.fromLTRB(24, 21, 24, 132 + bottomInset),
+          padding: EdgeInsets.fromLTRB(24, 16, 24, 132 + bottomInset),
           sliver: SliverList.list(
             children: [
               _ProfileTopbar(
                 isDarkMode: isDarkMode,
                 onToggleTheme: onToggleTheme,
-                onLogin: onLogin,
+                authUser: authUser,
               ),
               const SizedBox(height: 18),
               _MembershipCard(
+                authUser: authUser,
+                onTap: authUser?.emailVerified == true ? null : onLogin,
                 cardCount: cardCount,
                 favoriteCount: favoriteCount,
-                onTap: onLogin,
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 14),
               _MenuGroup(
                 sections: const [
-                  ProfileSection.language,
-                  ProfileSection.help,
-                  ProfileSection.about,
+                  ProfileSection.pro,
+                  ProfileSection.favorites,
+                  ProfileSection.history,
+                  ProfileSection.notifications,
                 ],
-                onOpenSection: onOpenSection,
+                onOpenSection: openSection,
+                proActive: isPro,
               ),
               const SizedBox(height: 12),
               _MenuGroup(
-                sections: const [ProfileSection.settings],
-                onOpenSection: onOpenSection,
+                sections: const [
+                  ProfileSection.language,
+                  ProfileSection.settings,
+                ],
+                onOpenSection: openSection,
               ),
             ],
           ),
@@ -93,15 +120,16 @@ class _ProfileTopbar extends StatelessWidget {
   const _ProfileTopbar({
     required this.isDarkMode,
     required this.onToggleTheme,
-    required this.onLogin,
+    required this.authUser,
   });
 
   final bool isDarkMode;
   final VoidCallback onToggleTheme;
-  final VoidCallback onLogin;
+  final AuthUser? authUser;
 
   @override
   Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
     return Row(
       children: [
         Expanded(
@@ -110,14 +138,14 @@ class _ProfileTopbar extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 3),
             child: Row(
               children: [
-                const _ProfileAvatar(),
+                _ProfileAvatar(initial: authUser?.initial ?? 'B'),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '未登录用户',
+                        authUser?.profileName ?? '未登录用户',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -129,23 +157,23 @@ class _ProfileTopbar extends StatelessWidget {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        '登录后可自定义卡片并同步数据',
+                        authUser == null
+                            ? '当前未登录 · 登录后同步卡片与收藏'
+                            : authUser!.emailVerified
+                            ? '${authUser!.handle} · 可管理卡片与收藏'
+                            : '${authUser!.handle} · 邮箱待验证',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          color: AppColors.textMuted,
+                          color: dark
+                              ? const Color(0xFFAEB7CB)
+                              : const Color(0xFF8A92A5),
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                     ],
                   ),
-                ),
-                const SizedBox(width: 10),
-                TextButton(
-                  key: const Key('profile-login'),
-                  onPressed: onLogin,
-                  child: const Text('去登录'),
                 ),
               ],
             ),
@@ -155,13 +183,25 @@ class _ProfileTopbar extends StatelessWidget {
         Semantics(
           button: true,
           label: isDarkMode ? '切换到浅色主题' : '切换到深色主题',
-          child: IconButton(
-            key: const Key('profile-theme-toggle'),
-            onPressed: onToggleTheme,
-            icon: Icon(
-              isDarkMode ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
-              color: AppColors.text,
-              size: 22,
+          child: MotionPressEffect(
+            child: IconButton(
+              key: const Key('profile-theme-toggle'),
+              onPressed: () {
+                AppHaptics.selection();
+                onToggleTheme();
+              },
+              icon: MotionStateIcon(
+                stateKey: isDarkMode,
+                child: Icon(
+                  isDarkMode
+                      ? Icons.light_mode_outlined
+                      : Icons.dark_mode_outlined,
+                  color: dark
+                      ? const Color(0xFFF5F7FF)
+                      : const Color(0xFF10131D),
+                  size: 22,
+                ),
+              ),
             ),
           ),
         ),
@@ -170,137 +210,51 @@ class _ProfileTopbar extends StatelessWidget {
   }
 }
 
-class _ProfileAvatar extends StatefulWidget {
-  const _ProfileAvatar();
+class _ProfileAvatar extends StatelessWidget {
+  const _ProfileAvatar({required this.initial});
 
-  @override
-  State<_ProfileAvatar> createState() => _ProfileAvatarState();
-}
-
-class _ProfileAvatarState extends State<_ProfileAvatar>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 5200),
-    );
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (MediaQuery.disableAnimationsOf(context)) {
-      _controller
-        ..stop()
-        ..value = .32;
-    } else if (!_controller.isAnimating && !_controller.isCompleted) {
-      _controller.forward();
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
+  final String initial;
 
   @override
   Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
     return RepaintBoundary(
-      child: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, _) {
-          final wave = math.sin(_controller.value * math.pi * 2);
-          return Transform.scale(
-            scale: 1 + wave * .012,
-            child: Container(
-              key: const Key('profile-avatar'),
-              width: 58,
-              height: 58,
-              padding: const EdgeInsets.all(1),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: AppColors.isDark
-                      ? const [Color(0xA8FFFFFF), Color(0x3D9DAAFF)]
-                      : const [Color(0xFFFFFFFF), Color(0x807786BB)],
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.violet.withValues(
-                      alpha: AppColors.isDark ? .20 + wave * .025 : .14,
-                    ),
-                    blurRadius: 21 + wave * 2,
-                    offset: const Offset(0, 9),
-                  ),
-                  const BoxShadow(
-                    color: Color(0x26000000),
-                    blurRadius: 12,
-                    offset: Offset(0, 5),
-                  ),
-                ],
-              ),
-              child: ClipOval(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: RadialGradient(
-                      center: Alignment(-.48 + wave * .07, -.62),
-                      radius: 1.18,
-                      colors: AppColors.isDark
-                          ? const [
-                              Color(0xFFAEB3C6),
-                              Color(0xFF545B72),
-                              Color(0xFF242A40),
-                            ]
-                          : const [
-                              Color(0xFFFFFFFF),
-                              Color(0xFFD7DDF2),
-                              Color(0xFF8792B6),
-                            ],
-                      stops: const [0, .40, 1],
-                    ),
-                  ),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Align(
-                        alignment: Alignment(-.34 + wave * .08, -.48),
-                        child: Container(
-                          width: 21,
-                          height: 10,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: .14),
-                            borderRadius: BorderRadius.circular(99),
-                          ),
-                        ),
-                      ),
-                      Center(
-                        child: Text(
-                          '本',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 21,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -.5,
-                            shadows: const [
-                              Shadow(color: Color(0x38000000), blurRadius: 7),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+      child: Container(
+        key: const Key('profile-avatar'),
+        width: 54,
+        height: 54,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: dark
+                ? const [Color(0xFF454B61), Color(0xFF252A40)]
+                : const [Color(0xF7FFFFFF), Color(0xEBF5FAFF)],
+          ),
+          border: Border.all(
+            color: dark ? const Color(0x885B637B) : const Color(0xE6FFFFFF),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: dark
+                  ? const Color.fromRGBO(0, 0, 0, .20)
+                  : const Color.fromRGBO(98, 110, 174, .08),
+              blurRadius: dark ? 22 : 18,
+              offset: Offset(0, dark ? 9 : 7),
             ),
-          );
-        },
+          ],
+        ),
+        child: Text(
+          initial,
+          style: TextStyle(
+            color: dark ? const Color(0xFFF2F5FF) : const Color(0xFF10131B),
+            fontSize: 20,
+            fontWeight: FontWeight.w900,
+            letterSpacing: -.4,
+          ),
+        ),
       ),
     );
   }
@@ -308,14 +262,16 @@ class _ProfileAvatarState extends State<_ProfileAvatar>
 
 class _MembershipCard extends StatefulWidget {
   const _MembershipCard({
+    required this.authUser,
+    required this.onTap,
     required this.cardCount,
     required this.favoriteCount,
-    required this.onTap,
   });
 
+  final AuthUser? authUser;
+  final VoidCallback? onTap;
   final int cardCount;
   final int favoriteCount;
-  final VoidCallback onTap;
 
   @override
   State<_MembershipCard> createState() => _MembershipCardState();
@@ -335,8 +291,8 @@ class _MembershipCardState extends State<_MembershipCard>
     );
     _pressController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 130),
-      reverseDuration: const Duration(milliseconds: 240),
+      duration: MotionTokens.press,
+      reverseDuration: MotionTokens.stateChange,
     );
   }
 
@@ -368,6 +324,7 @@ class _MembershipCardState extends State<_MembershipCard>
 
   @override
   Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
     return RepaintBoundary(
       child: AnimatedBuilder(
         animation: Listenable.merge([_gradientController, _pressController]),
@@ -380,8 +337,8 @@ class _MembershipCardState extends State<_MembershipCard>
             child: Transform.scale(
               scale: 1 - press * .012,
               child: Semantics(
-                button: true,
-                label: '演示卡片概览，共 ${widget.cardCount} 张卡片',
+                button: widget.onTap != null,
+                label: widget.authUser == null ? '登录后计算卡片等级' : '账号卡片等级',
                 child: GestureDetector(
                   key: const Key('profile-membership-card'),
                   behavior: HitTestBehavior.opaque,
@@ -390,79 +347,88 @@ class _MembershipCardState extends State<_MembershipCard>
                   onTapUp: (_) => _release(),
                   onTapCancel: _release,
                   child: DecoratedBox(
+                    key: const Key('profile-membership-surface'),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        begin: Alignment(-1, -.8 + wave * .12),
-                        end: Alignment(1, .8 - wave * .10),
-                        colors: AppColors.isDark
+                        begin: Alignment(-1, -.8 + wave * .08),
+                        end: Alignment(1, .8 - wave * .07),
+                        colors: dark
                             ? [
                                 Color.lerp(
-                                  const Color(0xFF6A7185),
-                                  const Color(0xFF555E7A),
+                                  const Color(0xFF303B55),
+                                  const Color(0xFF2A3550),
                                   (wave + 1) / 2,
                                 )!,
-                                const Color(0xFF303A5B),
+                                const Color(0xFF252F49),
                                 const Color(0xFF1D2544),
                               ]
                             : [
                                 Color.lerp(
-                                  const Color(0xFFF9FBFF),
-                                  const Color(0xFFE9EDFF),
+                                  const Color(0xEBFFFFFF),
+                                  const Color(0xEBF1F6FF),
                                   (wave + 1) / 2,
                                 )!,
-                                const Color(0xFFE4EAFF),
-                                const Color(0xFFD9E1FF),
+                                const Color(0xEBF1F6FF),
+                                const Color(0xEFF0F0FF),
                               ],
-                        stops: const [0, .52, 1],
+                        stops: const [0, .58, 1],
                       ),
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: dark
+                            ? const Color(0xFF3A4567)
+                            : const Color.fromRGBO(255, 255, 255, .86),
+                      ),
                       boxShadow: [
                         BoxShadow(
-                          color: AppColors.isDark
+                          color: dark
                               ? Color.fromRGBO(1, 5, 20, .34 - press * .12)
-                              : Color.fromRGBO(78, 91, 150, .18 - press * .07),
-                          blurRadius: 30 - press * 8,
-                          offset: Offset(0, 15 - press * 7),
+                              : Color.fromRGBO(
+                                  104,
+                                  122,
+                                  178,
+                                  .14 - press * .05,
+                                ),
+                          blurRadius: 34 - press * 9,
+                          offset: Offset(0, 18 - press * 7),
                         ),
-                        BoxShadow(
-                          color: AppColors.violet.withValues(alpha: .08),
-                          blurRadius: 32,
-                          spreadRadius: -8,
-                        ),
+                        if (!dark)
+                          const BoxShadow(
+                            color: Color(0x70FFFFFF),
+                            blurRadius: 2,
+                            offset: Offset(0, -1),
+                          ),
                       ],
                     ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(1),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(19),
-                        child: Stack(
-                          children: [
-                            Positioned.fill(
-                              child: CustomPaint(
-                                key: const Key('profile-membership-gradient'),
-                                painter: _MembershipAuroraPainter(
-                                  progress: progress,
-                                  dark: AppColors.isDark,
-                                ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(13),
+                      child: Stack(
+                        children: [
+                          Positioned.fill(
+                            child: CustomPaint(
+                              key: const Key('profile-membership-gradient'),
+                              painter: _MembershipAuroraPainter(
+                                progress: progress,
+                                dark: dark,
                               ),
                             ),
-                            Positioned.fill(
-                              child: _MembershipSweep(progress: progress),
+                          ),
+                          Positioned.fill(
+                            child: _MembershipSweep(
+                              progress: progress,
+                              dark: dark,
                             ),
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(
-                                20,
-                                15,
-                                20,
-                                15,
-                              ),
-                              child: _MembershipContent(
-                                cardCount: widget.cardCount,
-                                favoriteCount: widget.favoriteCount,
-                              ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.all(18),
+                            child: _MembershipContent(
+                              dark: dark,
+                              authUser: widget.authUser,
+                              cardCount: widget.cardCount,
+                              favoriteCount: widget.favoriteCount,
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -478,19 +444,23 @@ class _MembershipCardState extends State<_MembershipCard>
 
 class _MembershipContent extends StatelessWidget {
   const _MembershipContent({
+    required this.dark,
+    required this.authUser,
     required this.cardCount,
     required this.favoriteCount,
   });
 
+  final bool dark;
+  final AuthUser? authUser;
   final int cardCount;
   final int favoriteCount;
 
   @override
   Widget build(BuildContext context) {
-    final primary = AppColors.isDark ? Colors.white : const Color(0xFF1A2034);
-    final muted = AppColors.isDark
-        ? const Color(0xFFB7BED1)
-        : const Color(0xFF64708F);
+    final primary = dark ? Colors.white : const Color(0xFF131C2F);
+    final muted = dark ? const Color(0xFFB7BED1) : const Color(0xFF6F7D97);
+    final hasVerifiedAccount = authUser?.emailVerified == true;
+    final summary = _MembershipSummary.fromCounts(cardCount, favoriteCount);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -502,19 +472,24 @@ class _MembershipContent extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '演示卡片',
+                    '卡片等级',
                     style: TextStyle(
                       color: muted,
-                      fontSize: 11.5,
+                      fontSize: 11,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                   const SizedBox(height: 5),
                   Text(
-                    '登录后管理',
+                    authUser == null
+                        ? '未登录'
+                        : hasVerifiedAccount
+                        ? summary.title
+                        : '待验证',
+                    key: const Key('profile-membership-status'),
                     style: TextStyle(
                       color: primary,
-                      fontSize: 20,
+                      fontSize: 18,
                       fontWeight: FontWeight.w900,
                       letterSpacing: -.5,
                     ),
@@ -526,20 +501,20 @@ class _MembershipContent extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  '卡片数',
+                  '质量分',
                   style: TextStyle(
                     color: muted,
-                    fontSize: 10.5,
+                    fontSize: 10,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '$cardCount',
+                  hasVerifiedAccount ? '${summary.score}' : '0',
                   style: TextStyle(
-                    color: primary,
-                    fontSize: 39,
-                    height: .92,
+                    color: dark ? Colors.white : const Color(0xFF101726),
+                    fontSize: 34,
+                    height: 1,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
@@ -547,59 +522,228 @@ class _MembershipContent extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 13),
-        Text(
-          '登录后可收藏、管理并同步你的卡片',
-          style: TextStyle(
-            color: muted,
-            fontSize: 13.5,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 11),
-        Semantics(
-          excludeSemantics: true,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 17, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(
-                alpha: AppColors.isDark ? .08 : .56,
-              ),
-              border: Border.all(
-                color: Colors.white.withValues(
-                  alpha: AppColors.isDark ? .23 : .72,
+        const SizedBox(height: 12),
+        if (hasVerifiedAccount)
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                summary.description,
+                style: TextStyle(
+                  color: dark
+                      ? const Color(0xC7E2E8F0)
+                      : const Color(0xFF51607C),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  height: 1.45,
                 ),
               ),
-              borderRadius: BorderRadius.circular(999),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.violet.withValues(alpha: .12),
-                  blurRadius: 14,
-                  spreadRadius: -4,
-                ),
-              ],
-            ),
-            child: Text(
-              '查看卡片',
-              style: TextStyle(
-                color: AppColors.isDark
-                    ? const Color(0xFFE4E8FF)
-                    : const Color(0xFF5367F4),
-                fontSize: 11.5,
-                fontWeight: FontWeight.w800,
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 9,
+                runSpacing: 8,
+                children: [
+                  _MembershipFactPill(label: '已持有 $cardCount 张卡片', dark: dark),
+                  _MembershipFactPill(label: '收藏 $favoriteCount 张', dark: dark),
+                ],
               ),
-            ),
+            ],
+          )
+        else
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Text(
+                  authUser == null ? '登录后计算卡片等级' : '完成邮箱验证后开放账号同步',
+                  style: TextStyle(
+                    color: dark
+                        ? const Color(0xC7E2E8F0)
+                        : const Color(0xFF51607C),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    height: 1.45,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Semantics(
+                excludeSemantics: true,
+                child: _MembershipStatePill(
+                  dark: dark,
+                  label: authUser == null ? '去登录' : '去验证',
+                  icon: authUser == null
+                      ? Icons.login_rounded
+                      : Icons.mark_email_unread_outlined,
+                ),
+              ),
+            ],
           ),
-        ),
       ],
     );
   }
 }
 
+class _MembershipFactPill extends StatelessWidget {
+  const _MembershipFactPill({required this.label, required this.dark});
+
+  final String label;
+  final bool dark;
+
+  @override
+  Widget build(BuildContext context) {
+    return IntrinsicWidth(
+      child: Container(
+        height: 34,
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 13),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: dark ? .05 : .56),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: dark ? const Color(0x805F6A88) : const Color(0xD1D5DEF7),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: dark ? const Color(0xFFDCE2F6) : const Color(0xFF6A7895),
+            fontSize: 11.5,
+            height: 1,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MembershipStatePill extends StatelessWidget {
+  const _MembershipStatePill({
+    required this.dark,
+    required this.label,
+    required this.icon,
+  });
+
+  final bool dark;
+  final String label;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      key: const Key('profile-login-chip'),
+      constraints: const BoxConstraints(minWidth: 90, maxWidth: 116),
+      child: Container(
+        height: 36,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: dark
+                ? const [Color(0xFF5665BD), Color(0xFF424C9A)]
+                : const [Color(0xFFF9FAFF), Color(0xFFE8EBFF)],
+          ),
+          border: Border.all(
+            color: dark
+                ? const Color(0xA28F9BFF)
+                : const Color.fromRGBO(115, 128, 255, .36),
+          ),
+          borderRadius: BorderRadius.circular(999),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF6575FF).withValues(alpha: .16),
+              blurRadius: 14,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              color: dark ? Colors.white : const Color(0xFF5262D8),
+              size: 15,
+            ),
+            const SizedBox(width: 5),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.fade,
+                softWrap: false,
+                style: TextStyle(
+                  color: dark ? Colors.white : const Color(0xFF5262D8),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MembershipSummary {
+  const _MembershipSummary({
+    required this.title,
+    required this.description,
+    required this.score,
+  });
+
+  final String title;
+  final String description;
+  final int score;
+
+  factory _MembershipSummary.fromCounts(int cardCount, int favoriteCount) {
+    final normalizedCards = cardCount.clamp(0, 9999);
+    final normalizedFavorites = favoriteCount.clamp(0, 9999);
+    final score = normalizedCards * 16 + normalizedFavorites * 4;
+    if (score >= 96) {
+      return _MembershipSummary(
+        title: 'Diamond',
+        description: '高质量卡片组合，覆盖面和梯队都很完整',
+        score: score,
+      );
+    }
+    if (score >= 66) {
+      return _MembershipSummary(
+        title: 'Platinum',
+        description: '主力卡已成型，消费和场景覆盖都比较能打',
+        score: score,
+      );
+    }
+    if (score >= 36) {
+      return _MembershipSummary(
+        title: 'Gold',
+        description: '已经有不错的核心卡组合，还能继续优化梯队',
+        score: score,
+      );
+    }
+    if (score >= 16) {
+      return _MembershipSummary(
+        title: 'Silver',
+        description: '卡片基础已经搭起来了，继续补强高权重卡',
+        score: score,
+      );
+    }
+    return _MembershipSummary(
+      title: 'Bronze',
+      description: '先把第一批主力卡加进来，等级会很快提升',
+      score: score,
+    );
+  }
+}
+
 class _MembershipSweep extends StatelessWidget {
-  const _MembershipSweep({required this.progress});
+  const _MembershipSweep({required this.progress, required this.dark});
 
   final double progress;
+  final bool dark;
 
   @override
   Widget build(BuildContext context) {
@@ -621,9 +765,7 @@ class _MembershipSweep extends StatelessWidget {
                   gradient: LinearGradient(
                     colors: [
                       Colors.white.withValues(alpha: 0),
-                      Colors.white.withValues(
-                        alpha: AppColors.isDark ? .10 : .26,
-                      ),
+                      Colors.white.withValues(alpha: dark ? .055 : .16),
                       Colors.white.withValues(alpha: 0),
                     ],
                   ),
@@ -669,32 +811,21 @@ class _MembershipAuroraPainter extends CustomPainter {
 
     glow(
       firstCenter,
-      size.width * .58,
-      dark ? const Color(0x284F79FF) : const Color(0x507C9CFF),
+      size.width * (dark ? .58 : .40),
+      dark ? const Color(0x284F79FF) : const Color(0x107391FF),
     );
     glow(
       secondCenter,
-      size.width * .50,
-      dark ? const Color(0x224D3D9F) : const Color(0x3AA996FF),
+      size.width * (dark ? .50 : .36),
+      dark ? const Color(0x224D3D9F) : const Color(0x0DBCB0FF),
     );
-
-    final edgePaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1
-      ..shader = LinearGradient(
-        colors: [
-          Colors.white.withValues(alpha: dark ? .28 : .78),
-          const Color(0x004F65FF),
-          const Color(0x665A6FFF),
-        ],
-      ).createShader(Offset.zero & size);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(.5, .5, size.width - 1, size.height - 1),
-        const Radius.circular(18.5),
-      ),
-      edgePaint,
-    );
+    if (!dark) {
+      glow(
+        Offset(size.width * .55, size.height * .18),
+        size.width * .28,
+        const Color(0x0A78D0FF),
+      );
+    }
   }
 
   @override
@@ -703,10 +834,15 @@ class _MembershipAuroraPainter extends CustomPainter {
 }
 
 class _MenuGroup extends StatelessWidget {
-  const _MenuGroup({required this.sections, required this.onOpenSection});
+  const _MenuGroup({
+    required this.sections,
+    required this.onOpenSection,
+    this.proActive = false,
+  });
 
   final List<ProfileSection> sections;
   final ValueChanged<ProfileSection> onOpenSection;
+  final bool proActive;
 
   @override
   Widget build(BuildContext context) {
@@ -721,42 +857,64 @@ class _MenuGroup extends StatelessWidget {
         child: Column(
           children: [
             for (var index = 0; index < sections.length; index++)
-              InkWell(
-                key: Key('profile-menu-${sections[index].name}'),
-                onTap: () => onOpenSection(sections[index]),
-                borderRadius: BorderRadius.circular(20),
-                child: Container(
-                  constraints: const BoxConstraints(minHeight: 58),
-                  padding: const EdgeInsets.symmetric(horizontal: 18),
-                  decoration: BoxDecoration(
-                    border: index == sections.length - 1
-                        ? null
-                        : Border(bottom: BorderSide(color: AppColors.line)),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        sections[index].icon,
-                        color: AppColors.text,
-                        size: 22,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          sections[index].title,
-                          style: TextStyle(
-                            color: AppColors.text,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
+              MotionPressEffect(
+                scale: MotionTokens.pressedScale,
+                child: InkWell(
+                  key: Key('profile-menu-${sections[index].name}'),
+                  splashColor: AppColors.violet.withValues(alpha: .08),
+                  highlightColor: AppColors.violet.withValues(alpha: .035),
+                  hoverColor: AppColors.violet.withValues(alpha: .025),
+                  onTap: () {
+                    AppHaptics.selection();
+                    onOpenSection(sections[index]);
+                  },
+                  borderRadius: BorderRadius.circular(20),
+                  child: Container(
+                    constraints: const BoxConstraints(minHeight: 58),
+                    padding: const EdgeInsets.symmetric(horizontal: 18),
+                    decoration: BoxDecoration(
+                      border: index == sections.length - 1
+                          ? null
+                          : Border(bottom: BorderSide(color: AppColors.line)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          sections[index].icon,
+                          color: AppColors.text,
+                          size: 22,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  sections[index] == ProfileSection.pro &&
+                                          proActive
+                                      ? 'Pro 已开通'
+                                      : sections[index].title,
+                                  style: TextStyle(
+                                    color: AppColors.text,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              if (sections[index] == ProfileSection.pro) ...[
+                                const SizedBox(width: 8),
+                                ProCrownBadge(showLabel: proActive),
+                              ],
+                            ],
                           ),
                         ),
-                      ),
-                      Icon(
-                        Icons.chevron_right_rounded,
-                        color: AppColors.textMuted,
-                        size: 20,
-                      ),
-                    ],
+                        Icon(
+                          Icons.chevron_right_rounded,
+                          color: AppColors.textMuted,
+                          size: 20,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),

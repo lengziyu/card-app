@@ -1,0 +1,14 @@
+{
+  "ENABLE_PRO_BILLING": false,
+  "PRO_MONTHLY_PRODUCT_ID": "cn.lengziyu.cardapp.pro.monthly",
+  "PRO_YEARLY_PRODUCT_ID": "cn.lengziyu.cardapp.pro.yearly",
+  "PRO_CONFIG_PATH": "/api/pro/config",
+  "PRO_VERIFY_PATH": "/api/pro/verify",
+  "PRO_ENTITLEMENT_PATH": "/api/pro/entitlement",
+  "PRO_WORKSPACE_PATH": "/api/pro/workspace",
+  "PRO_BILL_ANALYSIS_PATH": "/api/pro/bill-analysis",
+  "PRO_MANAGE_SUBSCRIPTION_URL": "",
+  "PRO_TERMS_URL": "",
+  "PRO_PRIVACY_URL": "",
+  "SHOW_PRO_DIAGNOSTICS": false
+}

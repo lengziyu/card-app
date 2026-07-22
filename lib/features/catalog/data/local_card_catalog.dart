@@ -40,7 +40,6 @@ const localCardCatalog = <CardSummary>[
     label: 'VIRTUAL · MASTERCARD',
     assetPath: 'assets/cards/metamask.webp',
     tint: 0xFFFF8E52,
-    kycDocuments: {KycDocument.passport},
     isNew: true,
   ),
   CardSummary(
@@ -68,8 +67,10 @@ const localCardCatalog = <CardSummary>[
     category: CardCategory.bankAccount,
     label: 'MULTI-CURRENCY ACCOUNT',
     tint: 0xFF9FE870,
+    sourceUrl: 'https://wise.com/help/articles/2897226/what-is-a-wise-account',
     kycDocuments: {KycDocument.passport},
     isNew: true,
+    kind: CatalogItemKind.globalAccount,
   ),
 ];
 

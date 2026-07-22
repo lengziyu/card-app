@@ -14,7 +14,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   setUp(() {
-    SharedPreferences.setMockInitialValues({});
+    SharedPreferences.setMockInitialValues({'card-app-language-v1': 'zh-CN'});
     PackageInfo.setMockInitialValues(
       appName: '集卡',
       packageName: 'cn.lengziyu.cardapp',
@@ -31,13 +31,246 @@ void main() {
 
     expect(find.byKey(const Key('home-title')), findsOneWidget);
     expect(find.byKey(const Key('home-card-etherfi-core')), findsOneWidget);
+    expect(find.byKey(const Key('home-mode-wallet')), findsOneWidget);
     expect(find.byKey(const Key('nav-市场')), findsOneWidget);
+  });
+
+  testWidgets('free users see crowns and open the Pro page', (tester) async {
+    await tester.pumpWidget(const CardApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('home-mode-button')));
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('home-mode-menu')),
+        matching: find.byKey(const Key('pro-crown-badge')),
+      ),
+      findsNWidgets(2),
+    );
+    final walletTop = tester.getTopLeft(
+      find.descendant(
+        of: find.byKey(const Key('home-mode-menu')),
+        matching: find.byKey(const Key('home-mode-wallet')),
+      ),
+    );
+    final stackTop = tester.getTopLeft(
+      find.byKey(const Key('home-mode-stack')),
+    );
+    final focusTop = tester.getTopLeft(
+      find.byKey(const Key('home-mode-focus')),
+    );
+    expect(walletTop.dy, lessThan(stackTop.dy));
+    expect(stackTop.dy, lessThan(focusTop.dy));
+
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const Key('home-mode-menu')),
+        matching: find.byKey(const Key('home-mode-wallet')),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('pro-page')), findsNothing);
+    expect(find.byKey(const Key('home-mode-wallet')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('home-mode-button')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('home-mode-stack')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('pro-page')), findsOneWidget);
+    expect(find.byKey(const Key('card-stack')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('pro-back')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('home-mode-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('home-mode-focus')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('pro-page')), findsOneWidget);
+    expect(find.text('集卡 Pro'), findsOneWidget);
+    expect(find.text('Pro 权益'), findsOneWidget);
+    expect(find.byKey(const Key('home-focus-stack')), findsNothing);
+
+    final purchaseButton = tester.widget<FilledButton>(
+      find.byKey(const Key('pro-preview-purchase')),
+    );
+    expect(purchaseButton.onPressed, isNull);
+    expect(find.text('正式商店配置完成后开放购买'), findsOneWidget);
+  });
+
+  testWidgets('market comparison entry is visible and gated for free users', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const CardApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('nav-市场')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('market-compare-button')), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('market-compare-button')),
+        matching: find.byKey(const Key('pro-crown-badge')),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('market-compare-button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('pro-page')), findsOneWidget);
+    expect(find.byKey(const Key('card-comparison-page')), findsNothing);
+  });
+
+  testWidgets('Pro users can compare up to four cards and swap positions', (
+    tester,
+  ) async {
+    String? copiedText;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+          if (call.method == 'Clipboard.setData') {
+            copiedText = (call.arguments as Map)['text']?.toString();
+          }
+          if (call.method == 'Clipboard.getData') {
+            return {'text': copiedText};
+          }
+          return null;
+        });
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null),
+    );
+    await tester.pumpWidget(const CardApp(proUnlocked: true));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('nav-市场')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('market-compare-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('card-comparison-page')), findsOneWidget);
+    expect(find.byKey(const Key('comparison-left-card')), findsOneWidget);
+    expect(find.byKey(const Key('comparison-right-card')), findsOneWidget);
+    expect(find.byKey(const Key('comparison-row-卡片类型')), findsOneWidget);
+    expect(find.byKey(const Key('comparison-fee-estimator')), findsOneWidget);
+    expect(find.textContaining('覆盖 2/4'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('comparison-save-preset')));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('方案已保存'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 2800));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.ensureVisible(find.byKey(const Key('comparison-export-csv')));
+    await tester.tap(find.byKey(const Key('comparison-export-csv')));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(
+      (await Clipboard.getData(Clipboard.kTextPlain))?.text,
+      contains('适用地区'),
+    );
+    await tester.pump(const Duration(milliseconds: 2800));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.drag(
+      find
+          .descendant(
+            of: find.byKey(const Key('card-comparison-page')),
+            matching: find.byType(ListView),
+          )
+          .first,
+      const Offset(0, 1200),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('comparison-add-card')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('catalog-card-redotpay')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('comparison-card-redotpay')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('comparison-add-card')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('catalog-card-metamask-card')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('comparison-card-metamask-card')),
+      findsOneWidget,
+    );
+    expect(find.text('已选 4/4'), findsOneWidget);
+    expect(find.byKey(const Key('comparison-add-card')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('comparison-swap')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('card-comparison-page')), findsOneWidget);
+  });
+
+  testWidgets('active Pro users can manage the local workspace', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const CardApp(proUnlocked: true));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('nav-我的')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('profile-menu-pro')));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('pro-open-workspace')),
+      180,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.byKey(const Key('pro-open-workspace')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('pro-workspace-page')), findsOneWidget);
+    expect(find.text('卡包结构报告'), findsOneWidget);
+    expect(find.byKey(const Key('pro-open-bill-analysis')), findsOneWidget);
+    await Scrollable.ensureVisible(
+      tester.element(find.byKey(const Key('pro-open-bill-analysis'))),
+      alignment: .5,
+      duration: Duration.zero,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('pro-open-bill-analysis')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('bill-analysis-page')), findsOneWidget);
+    expect(find.text('识别真实消费成本'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('bill-analysis-back')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('pro-workspace-page')), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('pro-manage-watchlist')),
+      180,
+      scrollable: find
+          .descendant(
+            of: find.byKey(const Key('pro-workspace-page')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.tap(find.byKey(const Key('pro-manage-watchlist')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('search-toggle-etherfi-core')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('完成'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('pro-watched-etherfi-core')), findsOneWidget);
+    await Scrollable.ensureVisible(
+      tester.element(find.byKey(const Key('pro-watched-etherfi-core'))),
+      alignment: .5,
+      duration: Duration.zero,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('pro-watched-etherfi-core')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('card-preview-page')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('preview-back')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('pro-workspace-page')), findsOneWidget);
   });
 
   testWidgets('home switches to the ArkFlow-style focus mode smoothly', (
     tester,
   ) async {
-    await tester.pumpWidget(const CardApp());
+    await tester.pumpWidget(const CardApp(proUnlocked: true));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('home-mode-button')));
@@ -46,6 +279,13 @@ void main() {
     expect(find.text('堆叠'), findsOneWidget);
     expect(find.text('聚焦'), findsOneWidget);
     expect(find.text('钱包'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('home-mode-focus')),
+        matching: find.byIcon(Icons.view_day_outlined),
+      ),
+      findsOneWidget,
+    );
 
     await tester.tap(find.byKey(const Key('home-mode-focus')));
     await tester.pumpAndSettle();
@@ -53,6 +293,10 @@ void main() {
     expect(find.byKey(const Key('card-stack')), findsNothing);
     expect(find.byKey(const Key('home-focus-close')), findsNothing);
     expect(find.byKey(const Key('nav-市场')), findsOneWidget);
+    expect(find.byKey(const Key('home-mode-position')), findsNothing);
+    expect(find.byKey(const Key('home-card-previous')), findsNothing);
+    expect(find.byKey(const Key('home-card-next')), findsNothing);
+    expect(find.text('轻触查看'), findsNothing);
 
     final initiallyFocused = find.byKey(const Key('home-focus-card-redotpay'));
     final initialTop = tester.getTopLeft(initiallyFocused).dy;
@@ -71,15 +315,57 @@ void main() {
     );
   });
 
-  testWidgets('home exposes only mode and add actions', (tester) async {
-    await tester.pumpWidget(const CardApp());
+  testWidgets('stack mode swipes between cards without moving the module', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const CardApp(proUnlocked: true));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('home-mode-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('home-mode-stack')));
+    await tester.pumpAndSettle();
+
+    final stack = find.byKey(const Key('card-stack'));
+    final moduleTop = tester.getTopLeft(stack).dy;
+    expect(find.text('轻触查看'), findsNothing);
+
+    final selectedCard = find.byKey(const Key('home-card-redotpay'));
+    final selectedTop = tester.getTopLeft(selectedCard).dy;
+    final gesture = await tester.startGesture(tester.getCenter(stack));
+    await gesture.moveBy(const Offset(0, -44));
+    await tester.pump();
+    expect(tester.getTopLeft(selectedCard).dy, lessThan(selectedTop));
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    await tester.drag(stack, const Offset(0, -180));
+    await tester.pumpAndSettle();
+
+    expect(tester.getTopLeft(stack).dy, moduleTop);
+    expect(find.byKey(const Key('home-card-blur-redotpay')), findsOneWidget);
+    final redotpayVeil = tester.widget<Opacity>(
+      find.byKey(const Key('home-card-veil-redotpay')),
+    );
+    expect(redotpayVeil.opacity, greaterThan(0));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('home exposes mode and add actions', (tester) async {
+    await tester.pumpWidget(const CardApp(proUnlocked: true));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('home-mode-button')), findsOneWidget);
     expect(find.byKey(const Key('home-sort-button')), findsNothing);
     expect(find.byKey(const Key('home-wallet-button')), findsNothing);
     expect(find.byKey(const Key('home-add-button')), findsOneWidget);
+    expect(find.byKey(const Key('home-navigation-toggle')), findsNothing);
+    expect(find.byKey(const Key('home-title-toggle')), findsOneWidget);
 
+    await tester.tap(find.byKey(const Key('home-mode-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('home-mode-stack')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('home-mode-button')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('home-mode-wallet')));
@@ -104,12 +390,7 @@ void main() {
   testWidgets('wallet reorder keeps the dragged card under the pointer', (
     tester,
   ) async {
-    await tester.pumpWidget(const CardApp());
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const Key('home-mode-button')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('home-mode-wallet')));
+    await tester.pumpWidget(const CardApp(proUnlocked: true));
     await tester.pumpAndSettle();
 
     final card = find.byKey(const Key('home-card-etherfi-core'));
@@ -141,12 +422,7 @@ void main() {
   testWidgets('wallet card tap opens details without expanding the layout', (
     tester,
   ) async {
-    await tester.pumpWidget(const CardApp());
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const Key('home-mode-button')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('home-mode-wallet')));
+    await tester.pumpWidget(const CardApp(proUnlocked: true));
     await tester.pumpAndSettle();
 
     final card = find.byKey(const Key('home-wallet-card-etherfi-core'));
@@ -156,7 +432,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('card-preview-page')), findsOneWidget);
-    expect(find.byKey(const Key('home-mode-wallet')), findsNothing);
+    expect(find.byKey(const Key('market-card-transition')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -179,23 +455,25 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('asks guests to log in before adding cards', (tester) async {
-    await tester.pumpWidget(const CardApp());
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const Key('home-add-button')));
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const Key('login-page')), findsOneWidget);
-    expect(find.byKey(const Key('add-card-page')), findsNothing);
-  });
-
-  testWidgets('auth uses a top home action without language or support links', (
+  testWidgets('opens the local card catalog from the home action', (
     tester,
   ) async {
     await tester.pumpWidget(const CardApp());
     await tester.pumpAndSettle();
+
     await tester.tap(find.byKey(const Key('home-add-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('add-card-page')), findsOneWidget);
+    expect(find.byKey(const Key('login-page')), findsNothing);
+  });
+
+  testWidgets('level card opens auth without extra links', (tester) async {
+    await tester.pumpWidget(const CardApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('nav-我的')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('profile-membership-card')));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('auth-home')), findsOneWidget);
@@ -214,11 +492,15 @@ void main() {
     await tester.pumpWidget(const CardApp());
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('home-card-redotpay')));
+    final redotpay = find.byKey(const Key('home-card-redotpay'));
+    final redotpaySize = tester.getSize(redotpay);
+    await tester.tapAt(
+      tester.getTopLeft(redotpay) + Offset(redotpaySize.width / 2, 20),
+    );
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('card-preview-page')), findsOneWidget);
-    expect(find.byKey(const Key('home-title')), findsNothing);
+    expect(find.byKey(const Key('market-card-transition')), findsOneWidget);
   });
 
   testWidgets('home card previews crop from the top like H5', (tester) async {
@@ -235,13 +517,17 @@ void main() {
     expect(tester.widget<Image>(artwork).alignment, Alignment.topCenter);
   });
 
-  testWidgets('guest card customization opens the login guide', (tester) async {
+  testWidgets('guest card customization opens the local catalog', (
+    tester,
+  ) async {
     await tester.pumpWidget(const CardApp());
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('nav-add')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('login-page')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('nav-quick-add-card')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('add-card-page')), findsOneWidget);
   });
 
   test('home card pinch scale uses the same H5 limits', () {
@@ -253,7 +539,12 @@ void main() {
   testWidgets('two-finger hold then pinch changes the home card height', (
     tester,
   ) async {
-    await tester.pumpWidget(const CardApp());
+    await tester.pumpWidget(const CardApp(proUnlocked: true));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('home-mode-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('home-mode-stack')));
     await tester.pumpAndSettle();
 
     final stack = find.byKey(const Key('card-stack'));
@@ -300,9 +591,7 @@ void main() {
     );
   });
 
-  testWidgets('home title toggles the bottom navigation like H5', (
-    tester,
-  ) async {
+  testWidgets('home title toggles immersive navigation', (tester) async {
     await tester.pumpWidget(const CardApp());
     await tester.pumpAndSettle();
 
@@ -323,14 +612,16 @@ void main() {
     expect(firstCardTop - titleBottom, greaterThan(36));
   });
 
-  testWidgets('add navigation is protected for guests', (tester) async {
+  testWidgets('add navigation opens the local catalog', (tester) async {
     await tester.pumpWidget(const CardApp());
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('nav-add')));
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('nav-quick-add-card')));
+    await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('login-page')), findsOneWidget);
+    expect(find.byKey(const Key('add-card-page')), findsOneWidget);
   });
 
   testWidgets('every primary navigation destination responds', (tester) async {
@@ -358,7 +649,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
 
-    await tester.pumpWidget(const CardApp());
+    await tester.pumpWidget(const CardApp(proUnlocked: true));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('home-title')), findsOneWidget);
@@ -376,7 +667,7 @@ void main() {
     await tester.tap(find.byKey(const Key('home-add-button')));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('login-page')), findsOneWidget);
+    expect(find.byKey(const Key('add-card-page')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -414,6 +705,7 @@ void main() {
     await tester.tap(find.byKey(const Key('nav-市场')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('market-canvas-button')), findsOneWidget);
+    expect(find.byIcon(Icons.scatter_plot_rounded), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('market-canvas-button')));
     await tester.pumpAndSettle();
@@ -659,17 +951,16 @@ void main() {
     await tester.pump();
     expect(find.text('Wise Account'), findsOneWidget);
     expect(find.text('EtherFi Cash'), findsNothing);
+    final cardSurface = tester.widget<Container>(
+      find.byKey(const Key('catalog-card-surface-wise-account')),
+    );
+    expect((cardSurface.decoration! as BoxDecoration).boxShadow, hasLength(2));
 
     await tester.tap(find.byKey(const Key('catalog-card-wise-account')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('card-preview-page')), findsOneWidget);
-    final cardGesture = await tester.startGesture(
-      tester.getCenter(find.byKey(const Key('interactive-card-artwork'))),
-    );
-    await cardGesture.moveBy(const Offset(24, 10));
-    await tester.pump();
-    await cardGesture.up();
-    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('global-account-stage')), findsOneWidget);
+    expect(find.byKey(const Key('detail-toggle-card')), findsNothing);
     expect(tester.takeException(), isNull);
 
     await tester.scrollUntilVisible(
@@ -678,20 +969,45 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
     expect(find.byKey(const Key('detail-basic-info')), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('detail-china-kyc')),
+      260,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.byKey(const Key('detail-china-kyc')), findsOneWidget);
+    expect(find.text('可申请 · 需验证'), findsOneWidget);
     expect(find.byKey(const Key('nav-市场')), findsNothing);
-
-    await tester.tap(find.byKey(const Key('detail-toggle-card')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('login-page')), findsOneWidget);
   });
 
-  testWidgets('searching to add a card requires login', (tester) async {
+  testWidgets('add navigation is available without login', (tester) async {
     await tester.pumpWidget(const CardApp());
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('nav-add')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('login-page')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('nav-quick-add-card')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('add-card-page')), findsOneWidget);
+  });
+
+  testWidgets('global accounts are excluded from adding cards', (tester) async {
+    await tester.pumpWidget(const CardApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('nav-add')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('nav-quick-add-card')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('toggle-wise-account')), findsNothing);
+    await tester.tap(find.byKey(const Key('add-search-button')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('catalog-search-field')),
+      'wise',
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('search-empty')), findsOneWidget);
   });
 
   testWidgets('renders a formal market failure state', (tester) async {
@@ -768,7 +1084,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('profile presents an account-first guest state', (tester) async {
+  testWidgets('profile gates account data behind login', (tester) async {
     await tester.pumpWidget(const CardApp());
     await tester.pumpAndSettle();
 
@@ -777,32 +1093,49 @@ void main() {
     expect(find.byKey(const Key('profile-page')), findsOneWidget);
     expect(find.text('未登录用户'), findsOneWidget);
     expect(find.byKey(const Key('profile-guest-account')), findsOneWidget);
-    expect(find.byKey(const Key('profile-login')), findsOneWidget);
+    expect(find.byKey(const Key('profile-login')), findsNothing);
+
+    expect(find.byKey(const Key('profile-membership-card')), findsOneWidget);
+    expect(find.byKey(const Key('profile-menu-cards')), findsNothing);
+    expect(find.byKey(const Key('profile-menu-pro')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('profile-menu-pro')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('pro-page')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('pro-back')));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('profile-membership-card')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('login-page')), findsOneWidget);
   });
 
-  testWidgets('guest changes never create a local card collection', (
+  testWidgets('guest card changes persist in the local collection', (
     tester,
   ) async {
     await tester.pumpWidget(const CardApp());
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('nav-add')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('login-page')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('nav-quick-add-card')));
+    await tester.pumpAndSettle();
+    final addPageScrollable = find.descendant(
+      of: find.byKey(const Key('add-card-page')),
+      matching: find.byType(Scrollable),
+    );
+    await tester.drag(addPageScrollable.first, const Offset(0, -320));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('toggle-n26-standard')));
+    await tester.pumpAndSettle();
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
     await tester.pumpWidget(const CardApp());
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('home-card-n26-standard')), findsNothing);
+    expect(find.byKey(const Key('home-card-n26-standard')), findsOneWidget);
   });
 
-  testWidgets('favorites require login and are not stored for guests', (
-    tester,
-  ) async {
+  testWidgets('favorites are stored locally for guests', (tester) async {
     await tester.pumpWidget(const CardApp());
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('nav-市场')));
@@ -821,10 +1154,16 @@ void main() {
     await tester.tap(find.byKey(const Key('detail-action-favorite')));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('login-page')), findsOneWidget);
+    expect(find.byKey(const Key('card-preview-page')), findsOneWidget);
+    expect(
+      (await SharedPreferences.getInstance()).getString(
+        'card-app-guest-state-v1',
+      ),
+      contains('n26-standard'),
+    );
   });
 
-  testWidgets('ranking exposes ranking charts metrics and articles', (
+  testWidgets('ranking exposes cards users metrics stablecoins and articles', (
     tester,
   ) async {
     await tester.pumpWidget(const CardApp());
@@ -835,10 +1174,23 @@ void main() {
     expect(find.byKey(const Key('ranking-page')), findsOneWidget);
     expect(find.text('排行榜暂时没加载出来'), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('ranking-tab-charts')));
+    await tester.tap(find.byKey(const Key('ranking-tab-users')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('user-ranking-panel')), findsOneWidget);
+    expect(find.byKey(const Key('user-ranking-demo-1')), findsOneWidget);
+    expect(find.byKey(const Key('pro-crown-badge')), findsWidgets);
+
+    await tester.tap(find.byKey(const Key('ranking-tab-metrics')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('metrics-data-table')), findsOneWidget);
+    expect(
+      find.byKey(const Key('metrics-stablecoin-shortcut')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const Key('metrics-stablecoin-shortcut')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('stablecoin-market-overview')), findsOneWidget);
-    expect(find.text('\$314.00B'), findsOneWidget);
+    expect(find.text('\$314.00B'), findsWidgets);
     expect(find.byKey(const Key('stablecoin-icon-usdt')), findsWidgets);
     expect(
       find.byKey(const Key('stablecoin-chain-icon-ethereum')),
@@ -856,7 +1208,9 @@ void main() {
       ),
     );
 
-    await tester.tap(find.byKey(const Key('ranking-tab-metrics')));
+    Navigator.of(
+      tester.element(find.byKey(const Key('stablecoin-market-overview'))),
+    ).pop();
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('metrics-data-table')), findsOneWidget);
     expect(find.text('主流 U 卡链上数据'), findsOneWidget);
@@ -920,7 +1274,40 @@ void main() {
     expect(find.byKey(const Key('ranking-page')), findsOneWidget);
   });
 
-  testWidgets('profile keeps language help and about outside settings', (
+  testWidgets('long-range market history is gated and unlocks for Pro', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const CardApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('nav-排行')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('ranking-tab-metrics')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('metrics-stablecoin-shortcut')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('stablecoin-range-90d')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('pro-page')), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(
+      const CardApp(key: ValueKey('pro-history-app'), proUnlocked: true),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('nav-排行')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('ranking-tab-metrics')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('metrics-stablecoin-shortcut')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('stablecoin-range-90d')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('pro-page')), findsNothing);
+    expect(find.byKey(const Key('stablecoin-market-overview')), findsOneWidget);
+  });
+
+  testWidgets('profile groups language with settings and moves help/about', (
     tester,
   ) async {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -934,33 +1321,8 @@ void main() {
     await tester.tap(find.byKey(const Key('nav-我的')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('profile-menu-language')), findsOneWidget);
-    expect(find.byKey(const Key('profile-menu-help')), findsOneWidget);
-    expect(find.byKey(const Key('profile-menu-about')), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('profile-menu-help')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('profile-subpage-help')), findsOneWidget);
-    expect(find.text('如何添加卡片？'), findsOneWidget);
-    expect(find.byKey(const Key('nav-我的')), findsNothing);
-
-    await tester.tap(find.byKey(const Key('profile-subpage-back')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('profile-page')), findsOneWidget);
-
-    await Scrollable.ensureVisible(
-      tester.element(find.byKey(const Key('profile-menu-about'))),
-      alignment: 0.45,
-      duration: Duration.zero,
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('profile-menu-about')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('profile-subpage-about')), findsOneWidget);
-    expect(find.text('关于集卡'), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('profile-subpage-back')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('profile-page')), findsOneWidget);
+    expect(find.byKey(const Key('profile-menu-help')), findsNothing);
+    expect(find.byKey(const Key('profile-menu-about')), findsNothing);
 
     await tester.scrollUntilVisible(
       find.byKey(const Key('profile-menu-settings')),
@@ -978,9 +1340,37 @@ void main() {
 
     expect(find.byKey(const Key('profile-subpage-settings')), findsOneWidget);
     expect(find.byKey(const Key('settings-language')), findsNothing);
-    expect(find.byKey(const Key('settings-help')), findsNothing);
-    expect(find.byKey(const Key('settings-about')), findsNothing);
+    expect(find.byKey(const Key('settings-help')), findsOneWidget);
+    expect(find.byKey(const Key('settings-about')), findsOneWidget);
     expect(find.byKey(const Key('settings-version')), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('settings-help')),
+      280,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('settings-help')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('profile-subpage-help')), findsOneWidget);
+    expect(find.text('如何添加卡片？'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('profile-subpage-back')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('profile-subpage-settings')), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('settings-about')),
+      280,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('settings-about')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('profile-subpage-about')), findsOneWidget);
+    expect(find.text('关于集卡'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('profile-subpage-back')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('profile-subpage-settings')), findsOneWidget);
 
     await Scrollable.ensureVisible(
       tester.element(find.byKey(const Key('settings-version'))),
@@ -1003,6 +1393,91 @@ void main() {
     await tester.tap(find.byKey(const Key('profile-subpage-back')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('profile-page')), findsOneWidget);
+  });
+
+  testWidgets('settings exposes notification and haptic controls', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const CardApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('nav-我的')));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('profile-menu-settings')),
+      260,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await Scrollable.ensureVisible(
+      tester.element(find.byKey(const Key('profile-menu-settings'))),
+      alignment: .55,
+      duration: Duration.zero,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('profile-menu-settings')));
+    await tester.pumpAndSettle();
+
+    for (final key in const [
+      Key('settings-notification-permission'),
+      Key('settings-reminder-config'),
+      Key('settings-haptics'),
+      Key('settings-card-swipe-haptics'),
+      Key('settings-card-swipe-strength'),
+    ]) {
+      await Scrollable.ensureVisible(
+        tester.element(find.byKey(key)),
+        alignment: .5,
+        duration: Duration.zero,
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(key), findsOneWidget);
+    }
+    expect(find.text('未设置'), findsOneWidget);
+
+    final hapticsSwitch = find.descendant(
+      of: find.byKey(const Key('settings-haptics')),
+      matching: find.byType(Switch),
+    );
+    await tester.tap(hapticsSwitch);
+    await tester.pumpAndSettle();
+    expect(
+      (await SharedPreferences.getInstance()).getBool(
+        'card-app-haptics-enabled-v1',
+      ),
+      isFalse,
+    );
+    await tester.tap(hapticsSwitch);
+    await tester.pumpAndSettle();
+
+    final strength = find.byKey(const Key('settings-card-swipe-strength'));
+    await Scrollable.ensureVisible(
+      tester.element(strength),
+      alignment: .5,
+      duration: Duration.zero,
+    );
+    await tester.tap(find.descendant(of: strength, matching: find.text('高')));
+    await tester.pumpAndSettle();
+    expect(
+      (await SharedPreferences.getInstance()).getString(
+        'card-app-card-swipe-strength-v1',
+      ),
+      'strong',
+    );
+
+    await tester.drag(
+      find.byKey(const Key('profile-subpage-settings')),
+      const Offset(0, 500),
+    );
+    await tester.pumpAndSettle();
+    await Scrollable.ensureVisible(
+      tester.element(find.byKey(const Key('settings-reminder-config'))),
+      alignment: .72,
+      duration: Duration.zero,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('settings-reminder-config')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('profile-subpage-reminders')), findsOneWidget);
+    expect(find.byKey(const Key('settings-content-push')), findsOneWidget);
   });
 
   testWidgets('display language offers countries and persists the selection', (
@@ -1042,7 +1517,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('language-en-US')));
     await tester.pump(const Duration(milliseconds: 500));
-    expect(find.text('显示语言已设为 English'), findsOneWidget);
+    expect(find.text('Display language set to English'), findsOneWidget);
     expect(
       (await SharedPreferences.getInstance()).getString('card-app-language-v1'),
       'en-US',
@@ -1069,7 +1544,7 @@ void main() {
     expect(find.byKey(const Key('language-en-US')), findsOneWidget);
   });
 
-  testWidgets('feedback is in settings and requires login', (tester) async {
+  testWidgets('feedback is saved to the local outbox', (tester) async {
     await tester.pumpWidget(const CardApp());
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('nav-我的')));
@@ -1084,18 +1559,35 @@ void main() {
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.byKey(const Key('settings-feedback')),
-      160,
+      260,
       scrollable: find.byType(Scrollable).first,
     );
+    await Scrollable.ensureVisible(
+      tester.element(find.byKey(const Key('settings-feedback'))),
+      alignment: .55,
+      duration: Duration.zero,
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('settings-feedback')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('profile-subpage-feedback')), findsOneWidget);
-    await tester.tap(find.byKey(const Key('feedback-login')));
+    await tester.enterText(find.byKey(const Key('submission-subject')), '体验建议');
+    await tester.enterText(
+      find.byKey(const Key('submission-description')),
+      '希望进一步优化卡片筛选体验。',
+    );
+    await tester.tap(find.byKey(const Key('submission-submit')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('login-page')), findsOneWidget);
+    expect(find.text('反馈已提交，感谢你的建议。'), findsOneWidget);
+    expect(
+      (await SharedPreferences.getInstance()).getString(
+        'card-app-guest-state-v1',
+      ),
+      contains('希望进一步优化卡片筛选体验'),
+    );
   });
 
-  testWidgets('card detail correction requires login', (tester) async {
+  testWidgets('card detail correction opens the local form', (tester) async {
     await tester.pumpWidget(const CardApp());
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('nav-市场')));
@@ -1109,19 +1601,25 @@ void main() {
     await tester.tap(find.byKey(const Key('detail-action-correction')));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('login-page')), findsOneWidget);
+    expect(find.byKey(const Key('card-correction-page')), findsOneWidget);
   });
 
   testWidgets('card detail more menu exposes H5 actions', (tester) async {
     await tester.pumpWidget(const CardApp());
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('home-card-redotpay')));
+    final redotpay = find.byKey(const Key('home-card-redotpay'));
+    final redotpaySize = tester.getSize(redotpay);
+    await tester.tapAt(
+      tester.getTopLeft(redotpay) + Offset(redotpaySize.width / 2, 20),
+    );
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('detail-more')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('detail-action-favorite')), findsOneWidget);
     expect(find.byKey(const Key('detail-effect-particle')), findsOneWidget);
+    expect(find.byKey(const Key('detail-action-compare')), findsOneWidget);
+    expect(find.byKey(const Key('detail-action-watch')), findsOneWidget);
     expect(find.byKey(const Key('detail-action-similar')), findsOneWidget);
     expect(find.byKey(const Key('detail-action-official')), findsOneWidget);
     expect(find.byKey(const Key('detail-action-correction')), findsOneWidget);
@@ -1153,7 +1651,7 @@ void main() {
     expect(find.byKey(const Key('article-detail-page')), findsNothing);
   });
 
-  testWidgets('guest card browsing does not expose a personal history menu', (
+  testWidgets('guest local history requires login from profile', (
     tester,
   ) async {
     await tester.pumpWidget(const CardApp());
@@ -1175,49 +1673,16 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('nav-我的')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('profile-menu-history')), findsNothing);
-  });
-
-  testWidgets('card height setting changes the home stack', (tester) async {
-    await tester.pumpWidget(const CardApp());
-    await tester.pumpAndSettle();
-    final firstCard = find.byKey(const Key('home-card-etherfi-core'));
-    final selectedCard = find.byKey(const Key('home-card-redotpay'));
-    final initialReveal =
-        tester.getTopLeft(selectedCard).dy - tester.getTopLeft(firstCard).dy;
-
-    await tester.tap(find.byKey(const Key('nav-我的')));
-    await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.byKey(const Key('profile-menu-settings')),
-      350,
-      scrollable: find.byType(Scrollable).first,
+    expect(find.byKey(const Key('profile-menu-history')), findsOneWidget);
+    await Scrollable.ensureVisible(
+      tester.element(find.byKey(const Key('profile-menu-history'))),
+      alignment: 0.45,
+      duration: Duration.zero,
     );
-    await tester.drag(
-      find.byKey(const Key('profile-page')),
-      const Offset(0, -100),
-    );
+    await tester.tap(find.byKey(const Key('profile-menu-history')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('profile-menu-settings')));
-    await tester.pumpAndSettle();
-    await tester.drag(
-      find.byKey(const Key('profile-card-height')),
-      const Offset(100, 0),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('profile-subpage-back')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('nav-我的卡片')));
-    await tester.pumpAndSettle();
-
-    final updatedReveal =
-        tester.getTopLeft(selectedCard).dy - tester.getTopLeft(firstCard).dy;
-    expect(updatedReveal, greaterThan(initialReveal));
-    final preferences = await SharedPreferences.getInstance();
-    expect(
-      preferences.getDouble('card-app-home-card-height-scale-v1'),
-      greaterThan(1),
-    );
+    expect(find.byKey(const Key('login-page')), findsOneWidget);
+    expect(find.byKey(const Key('profile-subpage-history')), findsNothing);
   });
 
   testWidgets('switches and remembers the H5 theme', (tester) async {

@@ -1,10 +1,13 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
+import 'package:card_app/core/motion/app_haptics.dart';
+import 'package:card_app/core/motion/app_bottom_sheet.dart';
 import 'package:card_app/features/catalog/domain/card_summary.dart';
 import 'package:card_app/features/catalog/widgets/card_artwork.dart';
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:card_app/core/localization/localized_text.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
@@ -268,7 +271,7 @@ class _CardCanvasPageState extends State<CardCanvasPage>
       _stopTransformAnimation();
       _setTransform(target);
     }
-    if (haptic) HapticFeedback.selectionClick();
+    if (haptic) AppHaptics.selection();
   }
 
   void _zoomBy(
@@ -295,7 +298,7 @@ class _CardCanvasPageState extends State<CardCanvasPage>
       _stopTransformAnimation();
       _setTransform(target);
     }
-    if (haptic) HapticFeedback.selectionClick();
+    if (haptic) AppHaptics.selection();
   }
 
   void _onAutoPlayTick(Duration elapsed) {
@@ -560,7 +563,7 @@ class _CardCanvasPageState extends State<CardCanvasPage>
                     onAngle: _showAnglePanel,
                     onShuffle: () {
                       setState(() => _shuffleSeed++);
-                      HapticFeedback.selectionClick();
+                      AppHaptics.selection();
                     },
                     onAutoPlay: _autoPlaying
                         ? _stopAutoPlay
@@ -605,16 +608,17 @@ class _CardCanvasPageState extends State<CardCanvasPage>
   }
 
   Future<void> _showBackgroundPanel() async {
-    await showModalBottomSheet<void>(
+    await showAppDraggableSheet<void>(
       context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withValues(alpha: .26),
-      builder: (sheetContext) => StatefulBuilder(
+      initialSize: .62,
+      minSize: .38,
+      maxSize: .9,
+      barrierAlpha: .26,
+      builder: (sheetContext, scrollController) => StatefulBuilder(
         builder: (context, setSheetState) => _GlassSheet(
           title: '背景',
           onDone: () => Navigator.pop(sheetContext),
+          scrollController: scrollController,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
@@ -699,16 +703,17 @@ class _CardCanvasPageState extends State<CardCanvasPage>
   }
 
   Future<void> _showLayoutPanel() async {
-    await showModalBottomSheet<void>(
+    await showAppDraggableSheet<void>(
       context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withValues(alpha: .26),
-      builder: (sheetContext) => StatefulBuilder(
+      initialSize: .58,
+      minSize: .38,
+      maxSize: .9,
+      barrierAlpha: .26,
+      builder: (sheetContext, scrollController) => StatefulBuilder(
         builder: (context, setSheetState) => _GlassSheet(
           title: '排列',
           onDone: () => Navigator.pop(sheetContext),
+          scrollController: scrollController,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -816,16 +821,17 @@ class _CardCanvasPageState extends State<CardCanvasPage>
   }
 
   Future<void> _showAnglePanel() async {
-    await showModalBottomSheet<void>(
+    await showAppDraggableSheet<void>(
       context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withValues(alpha: .26),
-      builder: (sheetContext) => StatefulBuilder(
+      initialSize: .5,
+      minSize: .36,
+      maxSize: .82,
+      barrierAlpha: .26,
+      builder: (sheetContext, scrollController) => StatefulBuilder(
         builder: (context, setSheetState) => _GlassSheet(
           title: '卡片错位',
           onDone: () => Navigator.pop(sheetContext),
+          scrollController: scrollController,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -883,16 +889,17 @@ class _CardCanvasPageState extends State<CardCanvasPage>
   }
 
   Future<void> _showAutoPlayPanel() async {
-    await showModalBottomSheet<void>(
+    await showAppDraggableSheet<void>(
       context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withValues(alpha: .32),
-      builder: (sheetContext) => StatefulBuilder(
+      initialSize: .62,
+      minSize: .4,
+      maxSize: .9,
+      barrierAlpha: .32,
+      builder: (sheetContext, scrollController) => StatefulBuilder(
         builder: (context, setSheetState) => _GlassSheet(
           title: '自动播放',
           onDone: () => Navigator.pop(sheetContext),
+          scrollController: scrollController,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1274,28 +1281,50 @@ class _RoundControlButton extends StatelessWidget {
     return Semantics(
       button: true,
       label: label,
-      child: ClipOval(
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Material(
-            color: selected
-                ? const Color(0xFFE2F7EF).withValues(alpha: .88)
-                : Colors.white.withValues(alpha: .82),
-            shape: CircleBorder(
-              side: BorderSide(color: Colors.white.withValues(alpha: .60)),
+      child: DecoratedBox(
+        key: const Key('card-canvas-control-shadow'),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: .18),
+              blurRadius: 18,
+              spreadRadius: -2,
+              offset: const Offset(0, 7),
             ),
-            child: InkWell(
-              customBorder: const CircleBorder(),
-              onTap: onTap,
-              child: SizedBox(
-                width: size,
-                height: size,
-                child: Icon(
-                  icon,
-                  size: size >= 58 ? 31 : 23,
-                  color: selected
-                      ? _CardCanvasPageState._green
-                      : const Color(0xFF111315),
+            BoxShadow(
+              color: selected
+                  ? _CardCanvasPageState._green.withValues(alpha: .18)
+                  : Colors.white.withValues(alpha: .42),
+              blurRadius: 8,
+              spreadRadius: -1,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: ClipOval(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+            child: Material(
+              color: selected
+                  ? const Color(0xFFE2F7EF).withValues(alpha: .88)
+                  : Colors.white.withValues(alpha: .82),
+              shape: CircleBorder(
+                side: BorderSide(color: Colors.white.withValues(alpha: .60)),
+              ),
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: onTap,
+                child: SizedBox(
+                  width: size,
+                  height: size,
+                  child: Icon(
+                    icon,
+                    size: size >= 58 ? 31 : 23,
+                    color: selected
+                        ? _CardCanvasPageState._green
+                        : const Color(0xFF111315),
+                  ),
                 ),
               ),
             ),
@@ -1311,11 +1340,13 @@ class _GlassSheet extends StatelessWidget {
     required this.title,
     required this.onDone,
     required this.child,
+    required this.scrollController,
   });
 
   final String title;
   final VoidCallback onDone;
   final Widget child;
+  final ScrollController scrollController;
 
   @override
   Widget build(BuildContext context) {
@@ -1328,6 +1359,7 @@ class _GlassSheet extends StatelessWidget {
           child: SafeArea(
             top: false,
             child: SingleChildScrollView(
+              controller: scrollController,
               padding: const EdgeInsets.fromLTRB(24, 10, 24, 28),
               child: Column(
                 mainAxisSize: MainAxisSize.min,

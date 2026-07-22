@@ -1,8 +1,11 @@
 import 'dart:ui';
 
+import 'package:card_app/core/motion/app_haptics.dart';
+import 'package:card_app/core/motion/motion_tokens.dart';
+import 'package:card_app/core/motion/motion_widgets.dart';
 import 'package:card_app/core/theme/app_colors.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:card_app/core/localization/localized_text.dart';
+import 'package:flutter/material.dart' hide Text;
 
 class GlassSegmentItem<T> {
   const GlassSegmentItem({required this.value, required this.label, this.key});
@@ -39,10 +42,8 @@ class AnimatedGlassSegment<T> extends StatelessWidget {
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
     final selectedIndex = items.indexWhere((item) => item.value == selected);
     final safeIndex = selectedIndex < 0 ? 0 : selectedIndex;
-    final duration = reduceMotion
-        ? Duration.zero
-        : const Duration(milliseconds: 520);
-    const spring = Cubic(0.22, 1.16, 0.30, 1);
+    final duration = reduceMotion ? Duration.zero : MotionTokens.contentSwitch;
+    const curve = MotionTokens.standardEnter;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(radius),
@@ -60,13 +61,13 @@ class AnimatedGlassSegment<T> extends StatelessWidget {
                 color: showOuterSurface
                     ? (AppColors.isDark
                           ? const Color(0xA6232737)
-                          : const Color(0x247386A8))
+                          : const Color(0x247382A8))
                     : Colors.transparent,
                 gradient: showOuterSurface && !AppColors.isDark
                     ? const LinearGradient(
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
-                        colors: [Color(0x52FFFFFF), Color(0x26FFFFFF)],
+                        colors: [Color(0x2C8B9AC0), Color(0x18798AAD)],
                       )
                     : null,
                 borderRadius: BorderRadius.circular(radius),
@@ -78,9 +79,9 @@ class AnimatedGlassSegment<T> extends StatelessWidget {
                         BoxShadow(
                           color: AppColors.isDark
                               ? const Color(0x33000000)
-                              : const Color(0x0F646FA8),
-                          blurRadius: 24,
-                          offset: const Offset(0, 10),
+                              : const Color(0x12646FA8),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
                         ),
                       ]
                     : null,
@@ -89,11 +90,14 @@ class AnimatedGlassSegment<T> extends StatelessWidget {
                 children: [
                   AnimatedPositioned(
                     duration: duration,
-                    curve: spring,
-                    left: safeIndex * itemWidth,
-                    top: 0,
-                    bottom: 0,
-                    width: itemWidth,
+                    curve: curve,
+                    // Keep a one-pixel breathing space at either edge.  The
+                    // selected indicator has a border and shadow, which used
+                    // to be visibly clipped when the last segment was active.
+                    left: safeIndex * itemWidth + 1,
+                    top: 1,
+                    bottom: 1,
+                    width: itemWidth - 2,
                     child: DecoratedBox(
                       key: const Key('animated-glass-segment-indicator'),
                       decoration: BoxDecoration(
@@ -127,39 +131,41 @@ class AnimatedGlassSegment<T> extends StatelessWidget {
                           child: Semantics(
                             button: true,
                             selected: index == safeIndex,
-                            child: InkWell(
-                              key: items[index].key,
-                              onTap: () {
-                                if (items[index].value == selected) return;
-                                HapticFeedback.selectionClick();
-                                onChanged(items[index].value);
-                              },
-                              borderRadius: BorderRadius.circular(radius),
-                              child: AnimatedScale(
-                                duration: duration,
-                                curve: spring,
-                                scale: index == safeIndex ? 1 : 0.96,
-                                child: Center(
-                                  child: AnimatedDefaultTextStyle(
-                                    duration: reduceMotion
-                                        ? Duration.zero
-                                        : const Duration(milliseconds: 220),
-                                    curve: Curves.easeOut,
-                                    style: TextStyle(
-                                      color: index == safeIndex
-                                          ? (AppColors.isDark
-                                                ? const Color(0xFFEDF2FF)
-                                                : const Color(0xFF6070FF))
-                                          : AppColors.textMuted,
-                                      fontSize: fontSize,
-                                      fontWeight: index == safeIndex
-                                          ? FontWeight.w800
-                                          : FontWeight.w600,
-                                    ),
-                                    child: Text(
-                                      items[index].label,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
+                            child: MotionPressEffect(
+                              child: InkWell(
+                                key: items[index].key,
+                                onTap: () {
+                                  if (items[index].value == selected) return;
+                                  AppHaptics.selection();
+                                  onChanged(items[index].value);
+                                },
+                                borderRadius: BorderRadius.circular(radius),
+                                child: AnimatedScale(
+                                  duration: duration,
+                                  curve: curve,
+                                  scale: index == safeIndex ? 1 : 0.975,
+                                  child: Center(
+                                    child: AnimatedDefaultTextStyle(
+                                      duration: reduceMotion
+                                          ? Duration.zero
+                                          : MotionTokens.stateChange,
+                                      curve: MotionTokens.standardEnter,
+                                      style: TextStyle(
+                                        color: index == safeIndex
+                                            ? (AppColors.isDark
+                                                  ? const Color(0xFFEDF2FF)
+                                                  : const Color(0xFF6070FF))
+                                            : AppColors.textMuted,
+                                        fontSize: fontSize,
+                                        fontWeight: index == safeIndex
+                                            ? FontWeight.w800
+                                            : FontWeight.w600,
+                                      ),
+                                      child: Text(
+                                        items[index].label,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -213,56 +219,82 @@ class AnimatedPillSegment<T> extends StatelessWidget {
                 behavior: HitTestBehavior.opaque,
                 onTap: () {
                   if (items[index].value == selected) return;
-                  HapticFeedback.selectionClick();
+                  AppHaptics.selection();
                   onChanged(items[index].value);
                 },
-                child: AnimatedContainer(
-                  duration: reduceMotion
-                      ? Duration.zero
-                      : const Duration(milliseconds: 360),
-                  curve: const Cubic(0.22, 1.16, 0.30, 1),
-                  height: height,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: items[index].value == selected
-                        ? (AppColors.isDark
-                              ? const Color(0x706771C2)
-                              : const Color(0xFAFFFFFF))
-                        : (AppColors.isDark
-                              ? const Color(0x24FFFFFF)
-                              : const Color(0x94FFFFFF)),
-                    borderRadius: BorderRadius.circular(height / 2),
-                    border: Border.all(
-                      color: items[index].value == selected
-                          ? (AppColors.isDark
-                                ? const Color(0x57AAB2FF)
-                                : const Color(0x2E5E79FF))
-                          : (AppColors.isDark
-                                ? const Color(0x29FFFFFF)
-                                : const Color(0xBDFFFFFF)),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.isDark
-                            ? const Color(0x24000000)
-                            : const Color(0x146F82AE),
-                        blurRadius: items[index].value == selected ? 18 : 14,
-                        offset: const Offset(0, 7),
+                child: MotionPressEffect(
+                  child: SizedBox(
+                    height: 44,
+                    child: Center(
+                      child: AnimatedContainer(
+                        duration: reduceMotion
+                            ? Duration.zero
+                            : MotionTokens.contentSwitch,
+                        curve: MotionTokens.standardEnter,
+                        height: height,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: items[index].value == selected
+                              ? (AppColors.isDark
+                                    ? const Color(0x706771C2)
+                                    : const Color(0xFAFFFFFF))
+                              : (AppColors.isDark
+                                    ? const Color(0x24FFFFFF)
+                                    : const Color(0x94FFFFFF)),
+                          borderRadius: BorderRadius.circular(height / 2),
+                          border: Border.all(
+                            color: items[index].value == selected
+                                ? (AppColors.isDark
+                                      ? const Color(0x57AAB2FF)
+                                      : const Color(0x2E5E79FF))
+                                : (AppColors.isDark
+                                      ? const Color(0x29FFFFFF)
+                                      : const Color(0xBDFFFFFF)),
+                          ),
+                          boxShadow: AppColors.isDark
+                              ? [
+                                  BoxShadow(
+                                    color: const Color(0x24000000),
+                                    blurRadius: items[index].value == selected
+                                        ? 18
+                                        : 14,
+                                    offset: const Offset(0, 7),
+                                  ),
+                                ]
+                              : [
+                                  BoxShadow(
+                                    color: const Color(0x2963729F),
+                                    blurRadius: items[index].value == selected
+                                        ? 24
+                                        : 20,
+                                    spreadRadius: -2,
+                                    offset: const Offset(0, 9),
+                                  ),
+                                  BoxShadow(
+                                    color: items[index].value == selected
+                                        ? const Color(0x245C73FF)
+                                        : const Color(0x1463729F),
+                                    blurRadius: 12,
+                                    spreadRadius: -3,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                        ),
+                        child: Text(
+                          items[index].label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: items[index].value == selected
+                                ? (AppColors.isDark
+                                      ? const Color(0xFFEDF2FF)
+                                      : const Color(0xFF3554FF))
+                                : AppColors.textMuted,
+                            fontSize: fontSize,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
                       ),
-                    ],
-                  ),
-                  child: Text(
-                    items[index].label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: items[index].value == selected
-                          ? (AppColors.isDark
-                                ? const Color(0xFFEDF2FF)
-                                : const Color(0xFF3554FF))
-                          : AppColors.textMuted,
-                      fontSize: fontSize,
-                      fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),

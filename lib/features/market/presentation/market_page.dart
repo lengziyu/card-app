@@ -1,27 +1,43 @@
+import 'package:card_app/core/motion/motion_tokens.dart';
+import 'package:card_app/core/localization/app_localizations.dart';
 import 'package:card_app/core/theme/app_colors.dart';
 import 'package:card_app/core/widgets/app_feedback.dart';
 import 'package:card_app/features/catalog/domain/card_summary.dart';
 import 'package:card_app/features/catalog/widgets/catalog_card_row.dart';
+import 'package:card_app/features/catalog/widgets/global_account_catalog_card.dart';
+import 'package:card_app/features/pro/widgets/pro_crown_badge.dart';
 import 'package:card_app/features/shell/widgets/animated_glass_segment.dart';
-import 'package:flutter/material.dart';
+import 'package:card_app/core/localization/localized_text.dart';
+import 'package:flutter/material.dart' hide Text;
 
-enum _MarketGroup { uCard, other }
+enum _MarketGroup { uCard, globalAccount, other }
 
 enum _UCardFilter { all, newest, idCard, passport }
+
+typedef MarketCardOpenTransition =
+    void Function(CardSummary card, CatalogCardSourceGeometry geometry);
 
 class MarketPage extends StatefulWidget {
   const MarketPage({
     required this.repository,
     required this.onSearch,
     required this.onOpenCard,
+    this.onOpenCardTransition,
+    this.transitioningCardId,
+    this.onCompare,
     this.onOpenCanvas,
+    this.onOpenAiAdvisor,
     super.key,
   });
 
   final CardCatalogRepository repository;
   final VoidCallback onSearch;
+  final VoidCallback? onCompare;
   final ValueChanged<CardSummary> onOpenCard;
+  final MarketCardOpenTransition? onOpenCardTransition;
+  final String? transitioningCardId;
   final VoidCallback? onOpenCanvas;
+  final VoidCallback? onOpenAiAdvisor;
 
   @override
   State<MarketPage> createState() => _MarketPageState();
@@ -58,8 +74,13 @@ class _MarketPageState extends State<MarketPage> {
 
   List<CardSummary> get _filteredCards {
     final cards = _cards ?? const <CardSummary>[];
+    if (_group == _MarketGroup.globalAccount) {
+      return cards.where((card) => card.isGlobalAccount).toList();
+    }
     if (_group == _MarketGroup.other) {
-      return cards.where((card) => !card.category.isUCard).toList();
+      return cards
+          .where((card) => !card.category.isUCard && !card.isGlobalAccount)
+          .toList();
     }
     return cards.where((card) {
       if (!card.category.isUCard) return false;
@@ -89,16 +110,18 @@ class _MarketPageState extends State<MarketPage> {
           ),
           slivers: [
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(24, 18, 24, 14),
+              padding: const EdgeInsets.fromLTRB(24, 6, 24, 5),
               sliver: SliverToBoxAdapter(
                 child: _MarketHeader(
                   onSearch: widget.onSearch,
+                  onCompare: widget.onCompare,
                   onOpenCanvas: widget.onOpenCanvas,
+                  onOpenAiAdvisor: widget.onOpenAiAdvisor,
                 ),
               ),
             ),
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(24, 0, 24, 10),
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 1),
               sliver: SliverToBoxAdapter(
                 child: _MainSegment(
                   selected: _group,
@@ -106,8 +129,14 @@ class _MarketPageState extends State<MarketPage> {
                   uCardCount: _cards
                       ?.where((card) => card.category.isUCard)
                       .length,
+                  globalAccountCount: _cards
+                      ?.where((card) => card.isGlobalAccount)
+                      .length,
                   otherCount: _cards
-                      ?.where((card) => !card.category.isUCard)
+                      ?.where(
+                        (card) =>
+                            !card.category.isUCard && !card.isGlobalAccount,
+                      )
                       .length,
                   onSelected: _selectGroup,
                 ),
@@ -117,9 +146,9 @@ class _MarketPageState extends State<MarketPage> {
               SliverPersistentHeader(
                 pinned: true,
                 delegate: PinnedGlassHeaderDelegate(
-                  height: 48,
+                  height: 46,
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 5, 24, 9),
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
                     child: _SubSegment(
                       selected: _filter,
                       onSelected: _selectFilter,
@@ -128,19 +157,24 @@ class _MarketPageState extends State<MarketPage> {
                 ),
               ),
             SliverPadding(
-              padding: EdgeInsets.fromLTRB(24, 10, 24, 132 + bottomInset),
+              padding: EdgeInsets.fromLTRB(
+                24,
+                _group == _MarketGroup.uCard ? 1 : 12,
+                24,
+                132 + bottomInset,
+              ),
               sliver: SliverToBoxAdapter(
                 child: AnimatedSwitcher(
                   duration: reduceMotion
                       ? Duration.zero
-                      : const Duration(milliseconds: 300),
-                  switchInCurve: Curves.easeOutCubic,
-                  switchOutCurve: Curves.easeInCubic,
+                      : MotionTokens.contentSwitch,
+                  switchInCurve: MotionTokens.standardEnter,
+                  switchOutCurve: MotionTokens.standardExit,
                   transitionBuilder: (child, animation) => FadeTransition(
                     opacity: animation,
                     child: SlideTransition(
                       position: Tween<Offset>(
-                        begin: Offset(0.05 * _contentDirection, 0),
+                        begin: Offset(0.035 * _contentDirection, 0),
                         end: Offset.zero,
                       ).animate(animation),
                       child: child,
@@ -201,10 +235,29 @@ class _MarketPageState extends State<MarketPage> {
       key: ValueKey('${_group.name}-${_filter.name}'),
       children: [
         for (var index = 0; index < cards.length; index++) ...[
-          CatalogCardRow(
-            card: cards[index],
-            onTap: () => widget.onOpenCard(cards[index]),
-          ),
+          if (cards[index].isGlobalAccount)
+            GlobalAccountCatalogCard(
+              card: cards[index],
+              onTap: () => widget.onOpenCard(cards[index]),
+              sharedContentHidden:
+                  widget.transitioningCardId == cards[index].id,
+              onTapWithGeometry: widget.onOpenCardTransition == null
+                  ? null
+                  : (geometry) =>
+                        widget.onOpenCardTransition!(cards[index], geometry),
+            )
+          else
+            CatalogCardRow(
+              card: cards[index],
+              onTap: () => widget.onOpenCard(cards[index]),
+              enableMotion: true,
+              sharedContentHidden:
+                  widget.transitioningCardId == cards[index].id,
+              onTapWithGeometry: widget.onOpenCardTransition == null
+                  ? null
+                  : (geometry) =>
+                        widget.onOpenCardTransition!(cards[index], geometry),
+            ),
           if (index != cards.length - 1) SizedBox(height: 12),
         ],
       ],
@@ -213,10 +266,17 @@ class _MarketPageState extends State<MarketPage> {
 }
 
 class _MarketHeader extends StatelessWidget {
-  const _MarketHeader({required this.onSearch, this.onOpenCanvas});
+  const _MarketHeader({
+    required this.onSearch,
+    this.onOpenCanvas,
+    this.onCompare,
+    this.onOpenAiAdvisor,
+  });
 
   final VoidCallback onSearch;
+  final VoidCallback? onCompare;
   final VoidCallback? onOpenCanvas;
+  final VoidCallback? onOpenAiAdvisor;
 
   @override
   Widget build(BuildContext context) {
@@ -232,17 +292,41 @@ class _MarketHeader extends StatelessWidget {
                 key: Key('market-title'),
                 style: Theme.of(context).textTheme.headlineMedium,
               ),
-              SizedBox(height: 8),
-              Text('探索市面上热门的卡片', style: Theme.of(context).textTheme.bodyMedium),
+              SizedBox(height: 5),
+              Text(
+                '探索市面上热门的卡片',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
             ],
           ),
         ),
         SizedBox(width: 12),
+        if (onCompare != null) ...[
+          _MarketHeaderAction(
+            key: const Key('market-compare-button'),
+            icon: Icons.compare_arrows_rounded,
+            semanticLabel: context.tr('卡片对比，Pro 会员功能'),
+            onTap: onCompare!,
+            showProBadge: true,
+          ),
+          const SizedBox(width: 8),
+        ],
+        if (onOpenAiAdvisor != null) ...[
+          _MarketHeaderAction(
+            key: const Key('market-ai-advisor-button'),
+            icon: Icons.auto_awesome_rounded,
+            semanticLabel: context.tr('AI 选卡'),
+            onTap: onOpenAiAdvisor!,
+          ),
+          const SizedBox(width: 8),
+        ],
         if (onOpenCanvas != null) ...[
           _MarketHeaderAction(
             key: const Key('market-canvas-button'),
-            icon: Icons.grid_view_rounded,
-            semanticLabel: '打开卡片画布',
+            icon: Icons.scatter_plot_rounded,
+            semanticLabel: context.tr('打开卡片画布'),
             onTap: onOpenCanvas!,
           ),
           const SizedBox(width: 8),
@@ -250,7 +334,7 @@ class _MarketHeader extends StatelessWidget {
         _MarketHeaderAction(
           key: const Key('market-search-button'),
           icon: Icons.search_rounded,
-          semanticLabel: '搜索卡片',
+          semanticLabel: context.tr('搜索卡片'),
           onTap: onSearch,
         ),
       ],
@@ -263,12 +347,14 @@ class _MarketHeaderAction extends StatelessWidget {
     required this.icon,
     required this.semanticLabel,
     required this.onTap,
+    this.showProBadge = false,
     super.key,
   });
 
   final IconData icon;
   final String semanticLabel;
   final VoidCallback onTap;
+  final bool showProBadge;
 
   @override
   Widget build(BuildContext context) {
@@ -288,7 +374,14 @@ class _MarketHeaderAction extends StatelessWidget {
               shape: BoxShape.circle,
               border: Border.all(color: AppColors.line),
             ),
-            child: Icon(icon, color: AppColors.text, size: 22),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Center(child: Icon(icon, color: AppColors.text, size: 22)),
+                if (showProBadge)
+                  const Positioned(right: -4, top: -4, child: ProCrownBadge()),
+              ],
+            ),
           ),
         ),
       ),
@@ -300,12 +393,14 @@ class _MainSegment extends StatelessWidget {
   const _MainSegment({
     required this.selected,
     required this.uCardCount,
+    required this.globalAccountCount,
     required this.otherCount,
     required this.onSelected,
   });
 
   final _MarketGroup selected;
   final int? uCardCount;
+  final int? globalAccountCount;
   final int? otherCount;
   final ValueChanged<_MarketGroup> onSelected;
 
@@ -320,6 +415,12 @@ class _MainSegment extends StatelessWidget {
           value: _MarketGroup.uCard,
           label: 'U卡${uCardCount == null ? '' : ' ($uCardCount)'}',
           key: const Key('market-group-ucard'),
+        ),
+        GlassSegmentItem(
+          value: _MarketGroup.globalAccount,
+          label:
+              '全球账户${globalAccountCount == null ? '' : ' ($globalAccountCount)'}',
+          key: const Key('market-group-global-account'),
         ),
         GlassSegmentItem(
           value: _MarketGroup.other,

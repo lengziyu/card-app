@@ -26,9 +26,10 @@ class CardStackController extends ChangeNotifier {
     _motion.addStatusListener(_handleMotionStatus);
   }
 
-  static const Duration motionDuration = Duration(milliseconds: 420);
-  static const double distanceThresholdFactor = .18;
-  static const double velocityThreshold = 700;
+  static const Duration motionDuration = Duration(milliseconds: 340);
+  static const Curve settleCurve = Cubic(.2, .82, .24, 1);
+  static const double distanceThresholdFactor = .1;
+  static const double velocityThreshold = 420;
 
   final AnimationController _motion;
   List<String> _cardIds;
@@ -46,7 +47,7 @@ class CardStackController extends ChangeNotifier {
   Size _cardSize = Size.zero;
   Map<String, CardTransformState> _from = const {};
   Map<String, CardTransformState> _target = const {};
-  Curve _curve = Curves.easeOutCubic;
+  Curve _curve = settleCurve;
 
   CardStackMode get mode => _mode;
   List<String> get cardIds => List.unmodifiable(_cardIds);
@@ -80,10 +81,14 @@ class CardStackController extends ChangeNotifier {
     if (current.isEmpty || _motion.value == 1) {
       _from = next;
       _target = next;
-      _motion.value = 1;
+      if (_motion.value != 1) _motion.value = 1;
       return;
     }
-    _startMotion(current, next, curve: _curve);
+    // A mode change can alter the scene height while the transition is
+    // already rebuilding. Retarget the in-flight motion without restarting
+    // the animation (and without notifying listeners from inside build).
+    _from = current;
+    _target = next;
   }
 
   void syncCards(List<String> nextIds) {
@@ -98,9 +103,6 @@ class CardStackController extends ChangeNotifier {
       _cardIds = merged;
       if (!_hasUserSelected || !_cardIds.contains(_selectedId)) {
         _selectedId = _defaultSelectedId();
-      }
-      if (_mode == CardStackMode.stack && _selectedId != null) {
-        _moveIdToFocusSlot(_selectedId!);
       }
     });
   }
@@ -117,9 +119,6 @@ class CardStackController extends ChangeNotifier {
         if (!_hasUserSelected || _selectedId == null) {
           _selectedId = _defaultSelectedId();
         }
-        if (nextMode == CardStackMode.stack && _selectedId != null) {
-          _moveIdToFocusSlot(_selectedId!);
-        }
       }
     }, animate: animate);
   }
@@ -133,7 +132,6 @@ class CardStackController extends ChangeNotifier {
       _transition(() {
         _hasUserSelected = true;
         _selectedId = id;
-        _moveIdToFocusSlot(id);
       });
       return false;
     }
@@ -157,7 +155,6 @@ class CardStackController extends ChangeNotifier {
 
   void startDrag() {
     if (_reorderingId != null ||
-        _mode == CardStackMode.stack ||
         (_mode == CardStackMode.wallet && !_walletExpanded) ||
         _cardIds.length < 2) {
       return;
@@ -173,7 +170,6 @@ class CardStackController extends ChangeNotifier {
 
   void updateDrag(double delta) {
     if (_reorderingId != null ||
-        _mode == CardStackMode.stack ||
         (_mode == CardStackMode.wallet && !_walletExpanded) ||
         _cardIds.length < 2 ||
         delta == 0) {
@@ -194,7 +190,6 @@ class CardStackController extends ChangeNotifier {
 
   int endDrag({required double velocity}) {
     if (_reorderingId != null ||
-        _mode == CardStackMode.stack ||
         (_mode == CardStackMode.wallet && !_walletExpanded) ||
         _dragOffset == 0) {
       return selectedIndex;
@@ -212,7 +207,7 @@ class CardStackController extends ChangeNotifier {
     _hasUserSelected = true;
     _selectedId = _cardIds[nextIndex];
     _dragOffset = 0;
-    _startMotion(current, _calculateTarget(), curve: Curves.easeOutBack);
+    _startMotion(current, _calculateTarget(), curve: settleCurve);
     return nextIndex;
   }
 
@@ -220,7 +215,7 @@ class CardStackController extends ChangeNotifier {
     if (_dragOffset == 0) return;
     final current = _snapshotCurrent();
     _dragOffset = 0;
-    _startMotion(current, _calculateTarget(), curve: Curves.easeOutBack);
+    _startMotion(current, _calculateTarget(), curve: settleCurve);
   }
 
   bool startWalletReorder(String id) {
@@ -341,22 +336,12 @@ class CardStackController extends ChangeNotifier {
     return indexed.map((entry) => entry.$2).toList(growable: false);
   }
 
-  void _moveIdToFocusSlot(String id) {
-    final index = _cardIds.indexOf(id);
-    if (index < 0 || _cardIds.length < 2) return;
-    final focusSlot = _cardIds.length ~/ 2;
-    if (index == focusSlot) return;
-    final next = [..._cardIds];
-    final cardId = next.removeAt(index);
-    _cardIds = next..insert(focusSlot, cardId);
-  }
-
   String? _defaultSelectedId() =>
       _cardIds.isEmpty ? null : _cardIds[_cardIds.length ~/ 2];
 
   void _transition(
     VoidCallback mutate, {
-    Curve curve = Curves.easeOutCubic,
+    Curve curve = settleCurve,
     bool animate = true,
   }) {
     final current = isConfigured

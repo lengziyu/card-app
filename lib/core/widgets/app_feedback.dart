@@ -2,9 +2,12 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui';
 
+import 'package:card_app/core/motion/motion_tokens.dart';
+import 'package:card_app/core/motion/app_haptics.dart';
 import 'package:card_app/core/theme/app_colors.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:card_app/core/localization/app_localizations.dart';
+import 'package:card_app/core/localization/localized_text.dart';
+import 'package:flutter/material.dart' hide Text;
 
 enum AppNoticeTone { info, success, warning, error }
 
@@ -44,10 +47,9 @@ abstract final class AppNotice {
     overlay.insert(entry);
 
     final feedback = switch (tone) {
-      AppNoticeTone.success => HapticFeedback.lightImpact,
-      AppNoticeTone.warning ||
-      AppNoticeTone.error => HapticFeedback.mediumImpact,
-      AppNoticeTone.info => HapticFeedback.selectionClick,
+      AppNoticeTone.success => AppHaptics.lightImpact,
+      AppNoticeTone.warning || AppNoticeTone.error => AppHaptics.mediumImpact,
+      AppNoticeTone.info => AppHaptics.selection,
     };
     feedback();
   }
@@ -85,9 +87,8 @@ class _AppNoticeOverlay extends StatefulWidget {
 }
 
 class _AppNoticeOverlayState extends State<_AppNoticeOverlay>
-    with TickerProviderStateMixin {
+    with SingleTickerProviderStateMixin {
   late final AnimationController _entranceController;
-  late final AnimationController _pulseController;
   Timer? _dismissTimer;
   bool _dismissing = false;
 
@@ -96,12 +97,8 @@ class _AppNoticeOverlayState extends State<_AppNoticeOverlay>
     super.initState();
     _entranceController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 420),
-      reverseDuration: const Duration(milliseconds: 220),
-    );
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1800),
+      duration: MotionTokens.page,
+      reverseDuration: MotionTokens.stateChange,
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -110,7 +107,6 @@ class _AppNoticeOverlayState extends State<_AppNoticeOverlay>
         _entranceController.value = 1;
       } else {
         _entranceController.forward();
-        _pulseController.repeat(reverse: true);
       }
       _dismissTimer = Timer(widget.duration, _dismiss);
     });
@@ -120,7 +116,6 @@ class _AppNoticeOverlayState extends State<_AppNoticeOverlay>
     if (!mounted || _dismissing) return;
     _dismissing = true;
     _dismissTimer?.cancel();
-    _pulseController.stop();
     if (!MediaQuery.disableAnimationsOf(context)) {
       await _entranceController.reverse();
     }
@@ -131,7 +126,6 @@ class _AppNoticeOverlayState extends State<_AppNoticeOverlay>
   void dispose() {
     _dismissTimer?.cancel();
     _entranceController.dispose();
-    _pulseController.dispose();
     super.dispose();
   }
 
@@ -140,8 +134,8 @@ class _AppNoticeOverlayState extends State<_AppNoticeOverlay>
     final tone = _noticeVisual(widget.tone);
     final curved = CurvedAnimation(
       parent: _entranceController,
-      curve: Curves.easeOutBack,
-      reverseCurve: Curves.easeInCubic,
+      curve: MotionTokens.standardEnter,
+      reverseCurve: MotionTokens.standardExit,
     );
     return Positioned(
       key: const Key('app-notice'),
@@ -162,10 +156,14 @@ class _AppNoticeOverlayState extends State<_AppNoticeOverlay>
                   end: Offset.zero,
                 ).animate(curved),
                 child: ScaleTransition(
-                  scale: Tween<double>(begin: 0.96, end: 1).animate(curved),
+                  scale: Tween<double>(
+                    begin: MotionTokens.incomingScale,
+                    end: 1,
+                  ).animate(curved),
                   child: Semantics(
                     liveRegion: true,
-                    label: '${widget.title ?? tone.label}，${widget.message}',
+                    label:
+                        '${context.tr(widget.title ?? tone.label)}，${context.tr(widget.message)}',
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTap: _dismiss,
@@ -216,17 +214,7 @@ class _AppNoticeOverlayState extends State<_AppNoticeOverlay>
                                     crossAxisAlignment:
                                         CrossAxisAlignment.center,
                                     children: [
-                                      AnimatedBuilder(
-                                        animation: _pulseController,
-                                        builder: (context, child) =>
-                                            Transform.scale(
-                                              scale:
-                                                  1 +
-                                                  _pulseController.value * .055,
-                                              child: child,
-                                            ),
-                                        child: _NoticeIcon(visual: tone),
-                                      ),
+                                      _NoticeIcon(visual: tone),
                                       const SizedBox(width: 12),
                                       Expanded(
                                         child: Column(
@@ -379,7 +367,7 @@ class _AppLoadingIndicatorState extends State<AppLoadingIndicator>
 
   @override
   Widget build(BuildContext context) => Semantics(
-    label: '正在加载',
+    label: context.tr('正在加载'),
     child: SizedBox.square(
       dimension: widget.size,
       child: AnimatedBuilder(
@@ -601,7 +589,7 @@ class _AppPullToRefreshState extends State<AppPullToRefresh> {
 
   void _updateProgress(double value) {
     final nextArmed = value >= 1;
-    if (nextArmed && !_armed) HapticFeedback.selectionClick();
+    if (nextArmed && !_armed) AppHaptics.selection();
     if (value == _progress && nextArmed == _armed) return;
     setState(() {
       _progress = value;
@@ -616,7 +604,7 @@ class _AppPullToRefreshState extends State<AppPullToRefresh> {
       _progress = 1;
       _armed = false;
     });
-    HapticFeedback.lightImpact();
+    AppHaptics.lightImpact();
     var succeeded = true;
     try {
       await widget.onRefresh();
@@ -630,9 +618,9 @@ class _AppPullToRefreshState extends State<AppPullToRefresh> {
       _failed = !succeeded;
     });
     if (succeeded) {
-      HapticFeedback.mediumImpact();
+      AppHaptics.mediumImpact();
     } else {
-      HapticFeedback.heavyImpact();
+      AppHaptics.heavyImpact();
     }
     await Future<void>.delayed(
       MediaQuery.disableAnimationsOf(context)
@@ -729,9 +717,10 @@ class _AppPullToRefreshState extends State<AppPullToRefresh> {
                               size: 23,
                             )
                           else
-                            AppLoadingIndicator(
-                              size: 25,
-                              progress: _refreshing ? null : _progress,
+                            _PullRefreshGlyph(
+                              progress: _progress,
+                              refreshing: _refreshing,
+                              color: feedbackColor,
                             ),
                           const SizedBox(width: 7),
                           Text(
@@ -754,6 +743,85 @@ class _AppPullToRefreshState extends State<AppPullToRefresh> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _PullRefreshGlyph extends StatefulWidget {
+  const _PullRefreshGlyph({
+    required this.progress,
+    required this.refreshing,
+    required this.color,
+  });
+
+  final double progress;
+  final bool refreshing;
+  final Color color;
+
+  @override
+  State<_PullRefreshGlyph> createState() => _PullRefreshGlyphState();
+}
+
+class _PullRefreshGlyphState extends State<_PullRefreshGlyph>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _rotationController;
+
+  @override
+  void initState() {
+    super.initState();
+    _rotationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 760),
+    );
+    _syncAnimation();
+  }
+
+  @override
+  void didUpdateWidget(covariant _PullRefreshGlyph oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshing != widget.refreshing) _syncAnimation();
+  }
+
+  void _syncAnimation() {
+    if (widget.refreshing) {
+      _rotationController.repeat();
+    } else {
+      _rotationController.stop();
+      _rotationController.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _rotationController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final pullTurns = widget.progress.clamp(0.0, 1.0) * .72;
+    return SizedBox.square(
+      dimension: 25,
+      child: AnimatedBuilder(
+        animation: _rotationController,
+        builder: (context, child) {
+          final turns = reduceMotion
+              ? 0.0
+              : widget.refreshing
+              ? _rotationController.value
+              : pullTurns;
+          return Transform.rotate(angle: turns * math.pi * 2, child: child);
+        },
+        child: AnimatedScale(
+          scale: widget.progress >= 1 && !widget.refreshing ? 1.08 : 1,
+          duration: reduceMotion
+              ? Duration.zero
+              : const Duration(milliseconds: 160),
+          curve: Curves.easeOutBack,
+          child: Icon(Icons.refresh_rounded, color: widget.color, size: 24),
+        ),
+      ),
     );
   }
 }

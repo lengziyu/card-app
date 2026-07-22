@@ -11,6 +11,13 @@ enum CardCategory {
   bool get isUCard => this == CardCategory.uCard;
 }
 
+/// A directory entry can describe a card or a non-card financial product.
+///
+/// Keep this separate from [CardCategory]: a provider may offer a card beside
+/// its account, but a global account is still not something users add to their
+/// personal card wallet.
+enum CatalogItemKind { card, globalAccount }
+
 enum KycDocument {
   idCard('身份证'),
   passport('护照');
@@ -32,10 +39,12 @@ class CardSummary {
     required this.tint,
     this.assetPath,
     this.imageUrl,
+    this.coverImageUrl,
     this.logoImageUrl,
     this.sourceUrl,
     this.kycDocuments = const <KycDocument>{},
     this.isNew = false,
+    this.kind = CatalogItemKind.card,
   });
 
   final String id;
@@ -46,10 +55,18 @@ class CardSummary {
   final int tint;
   final String? assetPath;
   final String? imageUrl;
+  final String? coverImageUrl;
   final String? logoImageUrl;
   final String? sourceUrl;
   final Set<KycDocument> kycDocuments;
   final bool isNew;
+  final CatalogItemKind kind;
+
+  bool get isGlobalAccount => kind == CatalogItemKind.globalAccount;
+
+  bool get isAddableToCardWallet => kind == CatalogItemKind.card;
+
+  String get directoryTypeLabel => isGlobalAccount ? '全球账户' : category.label;
 
   CardNetwork get network {
     final normalized = label.toLowerCase();
