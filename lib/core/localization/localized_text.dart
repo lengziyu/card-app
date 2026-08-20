@@ -1,4 +1,4 @@
-import 'package:card_app/core/localization/app_localizations.dart';
+import 'package:cardfi/core/localization/app_localizations.dart';
 import 'package:flutter/material.dart' as material;
 
 /// Drop-in localized text renderer used by app-owned screens.

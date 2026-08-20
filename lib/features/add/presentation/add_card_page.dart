@@ -1,10 +1,9 @@
-import 'package:card_app/core/motion/app_haptics.dart';
-import 'package:card_app/core/motion/motion_tokens.dart';
-import 'package:card_app/core/motion/motion_widgets.dart';
-import 'package:card_app/core/theme/app_colors.dart';
-import 'package:card_app/features/catalog/domain/card_summary.dart';
-import 'package:card_app/features/catalog/widgets/card_artwork.dart';
-import 'package:card_app/core/localization/localized_text.dart';
+import 'package:cardfi/core/motion/app_haptics.dart';
+import 'package:cardfi/core/motion/motion_widgets.dart';
+import 'package:cardfi/core/theme/app_colors.dart';
+import 'package:cardfi/features/catalog/domain/card_summary.dart';
+import 'package:cardfi/features/catalog/widgets/catalog_card_row.dart';
+import 'package:cardfi/core/localization/localized_text.dart';
 import 'package:flutter/material.dart' hide Text;
 
 class AddCardPage extends StatelessWidget {
@@ -12,6 +11,7 @@ class AddCardPage extends StatelessWidget {
     required this.addedCardIds,
     required this.cards,
     required this.onCardChanged,
+    required this.onOpenCard,
     required this.onSearch,
     super.key,
   });
@@ -19,6 +19,7 @@ class AddCardPage extends StatelessWidget {
   final Set<String> addedCardIds;
   final List<CardSummary> cards;
   final void Function(CardSummary card, bool added) onCardChanged;
+  final ValueChanged<CardSummary> onOpenCard;
   final VoidCallback onSearch;
 
   @override
@@ -70,10 +71,15 @@ class AddCardPage extends StatelessWidget {
               final card = addableCards[index];
               return Padding(
                 padding: const EdgeInsets.only(bottom: 12),
-                child: _CardRow(
+                child: CatalogCardRow(
                   card: card,
                   added: addedCardIds.contains(card.id),
-                  onChanged: (added) => onCardChanged(card, added),
+                  onTap: () => onOpenCard(card),
+                  toggleKey: Key('toggle-${card.id}'),
+                  onToggleAdded: (added) {
+                    AppHaptics.selection();
+                    onCardChanged(card, added);
+                  },
                 ),
               );
             },
@@ -113,110 +119,6 @@ class _RoundActionButton extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _CardRow extends StatelessWidget {
-  const _CardRow({
-    required this.card,
-    required this.added,
-    required this.onChanged,
-  });
-
-  final CardSummary card;
-  final bool added;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final reduceMotion = MediaQuery.disableAnimationsOf(context);
-    return AnimatedContainer(
-      duration: reduceMotion ? Duration.zero : MotionTokens.stateChange,
-      curve: MotionTokens.standardEnter,
-      constraints: BoxConstraints(minHeight: 88),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: added
-            ? AppColors.mint.withValues(alpha: AppColors.isDark ? .08 : .055)
-            : AppColors.glass,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.line),
-      ),
-      child: Row(
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: SizedBox(
-              width: 86,
-              height: 54,
-              child: CardArtwork(card: card, showGeneratedLabels: false),
-            ),
-          ),
-          SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  card.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: AppColors.text,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                SizedBox(height: 5),
-                Text(
-                  card.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: AppColors.textMuted,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          SizedBox(width: 10),
-          Semantics(
-            button: true,
-            toggled: added,
-            label: added ? '从我的卡片移除 ${card.name}' : '添加 ${card.name}',
-            child: SizedBox(
-              width: 38,
-              height: 38,
-              child: MotionPressEffect(
-                child: IconButton.filledTonal(
-                  key: Key('toggle-${card.id}'),
-                  onPressed: () {
-                    AppHaptics.selection();
-                    onChanged(!added);
-                  },
-                  tooltip: added ? '移除' : '添加',
-                  icon: MotionStateIcon(
-                    stateKey: added,
-                    child: Icon(
-                      added ? Icons.check_rounded : Icons.add_rounded,
-                      size: 18,
-                    ),
-                  ),
-                  style: IconButton.styleFrom(
-                    foregroundColor: added ? AppColors.mint : AppColors.text,
-                    backgroundColor: added
-                        ? AppColors.mint.withValues(alpha: 0.14)
-                        : AppColors.violet.withValues(alpha: 0.24),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

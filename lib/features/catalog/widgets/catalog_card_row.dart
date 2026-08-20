@@ -1,9 +1,9 @@
-import 'package:card_app/core/theme/app_colors.dart';
-import 'package:card_app/core/motion/pressable_scale.dart';
-import 'package:card_app/core/motion/motion_widgets.dart';
-import 'package:card_app/features/catalog/domain/card_summary.dart';
-import 'package:card_app/features/catalog/widgets/card_artwork.dart';
-import 'package:card_app/core/localization/localized_text.dart';
+import 'package:cardfi/core/theme/app_colors.dart';
+import 'package:cardfi/core/motion/pressable_scale.dart';
+import 'package:cardfi/core/motion/motion_widgets.dart';
+import 'package:cardfi/features/catalog/domain/card_summary.dart';
+import 'package:cardfi/features/catalog/widgets/card_artwork.dart';
+import 'package:cardfi/core/localization/localized_text.dart';
 import 'package:flutter/material.dart' hide Text;
 
 @immutable
@@ -23,6 +23,7 @@ class CatalogCardRow extends StatelessWidget {
     required this.onTap,
     this.added,
     this.onToggleAdded,
+    this.toggleKey,
     this.enableMotion = true,
     this.sharedContentHidden = false,
     this.onTapWithGeometry,
@@ -33,6 +34,7 @@ class CatalogCardRow extends StatelessWidget {
   final VoidCallback onTap;
   final bool? added;
   final ValueChanged<bool>? onToggleAdded;
+  final Key? toggleKey;
   final bool enableMotion;
   final bool sharedContentHidden;
   final ValueChanged<CatalogCardSourceGeometry>? onTapWithGeometry;
@@ -148,7 +150,8 @@ class CatalogCardRow extends StatelessWidget {
                         ),
                         SizedBox(height: 5),
                         Text(
-                          '${card.issuer} · ${card.directoryTypeLabel}',
+                          _decisionSubtitle(card),
+                          key: Key('catalog-card-subtitle-${card.id}'),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -166,7 +169,7 @@ class CatalogCardRow extends StatelessWidget {
                       width: 48,
                       height: 48,
                       child: IconButton.filledTonal(
-                        key: Key('search-toggle-${card.id}'),
+                        key: toggleKey ?? Key('search-toggle-${card.id}'),
                         onPressed: () => onToggleAdded!(!isAdded),
                         tooltip: isAdded ? '移除' : '添加',
                         icon: MotionStateIcon(
@@ -234,6 +237,71 @@ class CatalogCardRow extends StatelessWidget {
       ),
     ];
   }
+}
+
+String _decisionSubtitle(CardSummary card) {
+  final application = _applicationSummary(card);
+  final benefit = _benefitSummary(card.cashbackRate);
+  final freshness = _freshnessSummary(card.updatedAt);
+  return <String?>[
+    benefit,
+    application,
+    if (benefit == null) freshness,
+  ].whereType<String>().join(' · ');
+}
+
+String _applicationSummary(CardSummary card) {
+  final summary = card.kycSummary.trim();
+  if (summary.isNotEmpty && summary != '申请条件待确认') {
+    return _isDocumentSummary(summary) ? '证件：$summary' : summary;
+  }
+
+  final documents = KycDocument.values
+      .where(card.kycDocuments.contains)
+      .map((document) => document.label)
+      .join(' / ');
+  if (documents.isNotEmpty) return '证件：$documents';
+  return '申请条件待确认';
+}
+
+bool _isDocumentSummary(String value) {
+  final normalized = value
+      .toLowerCase()
+      .replaceAll('身份证', '')
+      .replaceAll('护照', '')
+      .replaceAll('id card', '')
+      .replaceAll('passport', '')
+      .replaceAll(RegExp(r'[\s/、,，&]+'), '');
+  return normalized.isEmpty;
+}
+
+String? _benefitSummary(String source) {
+  final value = source.trim();
+  if (value.isEmpty) return null;
+  final normalized = value.toLowerCase();
+  if (normalized == 'none' ||
+      normalized == 'low / none' ||
+      normalized == 'n/a' ||
+      normalized == '无') {
+    return null;
+  }
+  if (normalized.contains('apy') || normalized.contains('yield')) {
+    final rate = RegExp(r'\d+(?:\.\d+)?%').firstMatch(value)?.group(0);
+    return rate == null ? '收益权益' : '收益最高约 $rate APY';
+  }
+  if (value.contains(r'$')) {
+    return value.startsWith('最高') ? '奖励$value' : '奖励 $value';
+  }
+  if (value.contains('%')) {
+    return value.startsWith('最高') ? '最高返现${value.substring(2)}' : '返现 $value';
+  }
+  return '权益：$value';
+}
+
+String? _freshnessSummary(DateTime? updatedAt) {
+  if (updatedAt == null) return null;
+  final local = updatedAt.toLocal();
+  return '${local.month}月${local.day}日更新';
 }
 
 class _GlobalAccountArtwork extends StatelessWidget {

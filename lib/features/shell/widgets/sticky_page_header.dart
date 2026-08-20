@@ -1,6 +1,6 @@
 import 'dart:ui';
 
-import 'package:card_app/core/theme/app_colors.dart';
+import 'package:cardfi/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 
 /// 二级页面共用的顶部毛玻璃渐隐层。

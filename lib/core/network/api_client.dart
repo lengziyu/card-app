@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:card_app/core/network/api_exception.dart';
-import 'package:card_app/core/network/app_environment.dart';
+import 'package:cardfi/core/network/api_exception.dart';
+import 'package:cardfi/core/network/app_environment.dart';
 import 'package:http/http.dart' as http;
 
 class ApiClient {

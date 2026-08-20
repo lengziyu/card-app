@@ -1,9 +1,9 @@
 import 'dart:convert';
 
-import 'package:card_app/core/network/api_client.dart';
-import 'package:card_app/features/catalog/data/local_card_catalog.dart';
-import 'package:card_app/features/catalog/data/local_card_details.dart';
-import 'package:card_app/features/pro/data/pro_workspace_controller.dart';
+import 'package:cardfi/core/network/api_client.dart';
+import 'package:cardfi/features/catalog/data/local_card_catalog.dart';
+import 'package:cardfi/features/catalog/data/local_card_details.dart';
+import 'package:cardfi/features/pro/data/pro_workspace_controller.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';

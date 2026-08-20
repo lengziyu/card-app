@@ -1,14 +1,17 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:card_app/core/motion/app_haptics.dart';
-import 'package:card_app/core/network/api_exception.dart';
-import 'package:card_app/core/theme/app_colors.dart';
-import 'package:card_app/features/pro/data/bill_analysis_repository.dart';
-import 'package:card_app/features/pro/domain/bill_analysis.dart';
-import 'package:card_app/features/pro/widgets/pro_crown_badge.dart';
-import 'package:card_app/features/shell/widgets/sticky_page_header.dart';
-import 'package:card_app/core/localization/localized_text.dart';
+import 'package:cardfi/core/motion/app_haptics.dart';
+import 'package:cardfi/core/network/api_exception.dart';
+import 'package:cardfi/core/privacy/ai_data_consent.dart';
+import 'package:cardfi/core/theme/app_colors.dart';
+import 'package:cardfi/core/widgets/ai_data_consent_tile.dart';
+import 'package:cardfi/core/widgets/premium_motion.dart';
+import 'package:cardfi/features/pro/data/bill_analysis_repository.dart';
+import 'package:cardfi/features/pro/domain/bill_analysis.dart';
+import 'package:cardfi/features/pro/widgets/pro_crown_badge.dart';
+import 'package:cardfi/features/shell/widgets/sticky_page_header.dart';
+import 'package:cardfi/core/localization/localized_text.dart';
 import 'package:flutter/material.dart' hide Text;
 import 'package:image_picker/image_picker.dart';
 
@@ -283,46 +286,32 @@ class _UploadCard extends StatelessWidget {
           onPressed: onPick,
           icon: const Icon(Icons.photo_library_outlined),
           label: Text(imageBytes == null ? '选择消费截图' : '更换截图'),
-        ),
-        const SizedBox(height: 10),
-        Material(
-          color: Colors.transparent,
-          child: CheckboxListTile(
-            key: const Key('bill-privacy-confirmation'),
-            value: privacyConfirmed,
-            onChanged: onPrivacyChanged,
-            contentPadding: EdgeInsets.zero,
-            controlAffinity: ListTileControlAffinity.leading,
-            title: const Text(
-              '我已确认截图不包含完整卡号、姓名、订单号或其他不必要的敏感信息',
-              style: TextStyle(
-                fontSize: 11.5,
-                height: 1.4,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            subtitle: Text(
-              '截图会发送到服务端和第三方 AI 进行一次性识别；App 不会把原图保存到账单记录。',
-              style: TextStyle(
-                color: AppColors.textMuted,
-                fontSize: 9.5,
-                height: 1.4,
-              ),
-            ),
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size.fromHeight(58),
           ),
         ),
+        const SizedBox(height: 10),
+        AiDataConsentTile(
+          key: const Key('bill-privacy-confirmation'),
+          kind: AiDataConsentKind.billVision,
+          value: privacyConfirmed,
+          onChanged: onPrivacyChanged,
+        ),
         const SizedBox(height: 8),
-        FilledButton.icon(
+        FilledButton(
           key: const Key('bill-start-analysis'),
           onPressed: onAnalyze,
-          icon: analyzing
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.auto_awesome_rounded),
-          label: Text(analyzing ? '正在识别…' : '开始分析'),
+          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(60)),
+          child: analyzing
+              ? const ThinkingOrbs(size: 24, label: 'Working…')
+              : const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.auto_awesome_rounded),
+                    SizedBox(width: 8),
+                    Text('开始分析'),
+                  ],
+                ),
         ),
       ],
     ),

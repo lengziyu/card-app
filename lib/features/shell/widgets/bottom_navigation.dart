@@ -1,11 +1,12 @@
 import 'dart:ui';
 
-import 'package:card_app/core/localization/app_localizations.dart';
-import 'package:card_app/core/motion/motion_tokens.dart';
-import 'package:card_app/core/motion/motion_widgets.dart';
-import 'package:card_app/core/theme/app_colors.dart';
+import 'package:cardfi/core/icons/app_icons.dart';
+import 'package:cardfi/core/localization/app_localizations.dart';
+import 'package:cardfi/core/motion/motion_tokens.dart';
+import 'package:cardfi/core/motion/motion_widgets.dart';
+import 'package:cardfi/core/theme/app_colors.dart';
+import 'package:cardfi/features/pro/widgets/pro_crown_badge.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
 class BottomNavigation extends StatefulWidget {
   const BottomNavigation({
@@ -30,33 +31,33 @@ class BottomNavigation extends StatefulWidget {
 class _BottomNavigationState extends State<BottomNavigation> {
   bool _quickMenuOpen = false;
 
-  static const _items =
-      <({String? asset, IconData icon, IconData selectedIcon, String label})>[
-        (
-          asset: null,
-          icon: Icons.credit_card_outlined,
-          selectedIcon: Icons.credit_card_rounded,
-          label: '我的卡片',
-        ),
-        (
-          asset: null,
-          icon: Icons.storefront_outlined,
-          selectedIcon: Icons.storefront_rounded,
-          label: '市场',
-        ),
-        (
-          asset: 'assets/navigation/chart.svg',
-          icon: Icons.show_chart_rounded,
-          selectedIcon: Icons.show_chart_rounded,
-          label: '排行',
-        ),
-        (
-          asset: null,
-          icon: Icons.person_outline_rounded,
-          selectedIcon: Icons.person_rounded,
-          label: '我的',
-        ),
-      ];
+  static const _items = <({AppIconPair icons, String label})>[
+    (
+      icons: AppIconPair(regular: AppIcons.cards, fill: AppIcons.cardsSelected),
+      label: '我的卡片',
+    ),
+    (
+      icons: AppIconPair(
+        regular: AppIcons.market,
+        fill: AppIcons.marketSelected,
+      ),
+      label: '市场',
+    ),
+    (
+      icons: AppIconPair(
+        regular: AppIcons.ranking,
+        fill: AppIcons.rankingSelected,
+      ),
+      label: '排行',
+    ),
+    (
+      icons: AppIconPair(
+        regular: AppIcons.profile,
+        fill: AppIcons.profileSelected,
+      ),
+      label: '我的',
+    ),
+  ];
 
   void _closeQuickMenu() {
     if (_quickMenuOpen) {
@@ -158,7 +159,7 @@ class _BottomNavigationState extends State<BottomNavigation> {
                                         : MotionTokens.stateChange,
                                     curve: MotionTokens.standardEnter,
                                     child: Icon(
-                                      Icons.add_rounded,
+                                      AppIcons.add,
                                       color: AppColors.isDark
                                           ? Colors.white
                                           : (addActive
@@ -224,7 +225,8 @@ class _QuickActionMenu extends StatelessWidget {
                 delay: 1,
                 closedOffset: const Offset(1.21, .85),
                 tooltip: context.tr('拍照识别账单'),
-                icon: Icons.receipt_long_rounded,
+                icon: AppIcons.bill,
+                showProBadge: true,
                 onTap: onAnalyzeBill,
               ),
             ),
@@ -237,7 +239,7 @@ class _QuickActionMenu extends StatelessWidget {
                 delay: 0,
                 closedOffset: const Offset(0, 1.48),
                 tooltip: context.tr('添加卡片'),
-                icon: Icons.add_card_rounded,
+                icon: AppIcons.cardsSelected,
                 onTap: onAddCard,
               ),
             ),
@@ -257,6 +259,7 @@ class _QuickMenuButton extends StatelessWidget {
     required this.tooltip,
     required this.icon,
     required this.onTap,
+    this.showProBadge = false,
   });
 
   final Key actionKey;
@@ -266,6 +269,7 @@ class _QuickMenuButton extends StatelessWidget {
   final String tooltip;
   final IconData icon;
   final VoidCallback onTap;
+  final bool showProBadge;
 
   @override
   Widget build(BuildContext context) {
@@ -298,12 +302,24 @@ class _QuickMenuButton extends StatelessWidget {
                     width: 58,
                     height: 58,
                     decoration: _quickMenuDecoration(),
-                    child: Icon(
-                      icon,
-                      size: 23,
-                      color: AppColors.isDark
-                          ? Colors.white
-                          : const Color(0xFF4F67FF),
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      alignment: Alignment.center,
+                      children: [
+                        Icon(
+                          icon,
+                          size: 23,
+                          color: AppColors.isDark
+                              ? Colors.white
+                              : const Color(0xFF4F67FF),
+                        ),
+                        if (showProBadge)
+                          const Positioned(
+                            right: -4,
+                            top: -5,
+                            child: ProCrownBadge(),
+                          ),
+                      ],
                     ),
                   ),
                 ),
@@ -394,6 +410,7 @@ class _GlassNavigationSurface extends StatelessWidget {
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
         child: Container(
+          key: const Key('bottom-navigation-surface'),
           height: 58,
           padding: const EdgeInsets.all(5),
           decoration: BoxDecoration(
@@ -401,12 +418,12 @@ class _GlassNavigationSurface extends StatelessWidget {
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: AppColors.isDark
-                  ? [Color(0x24FFFFFF), Color(0x0AFFFFFF)]
+                  ? [Color(0xB8141A2A), Color(0xA30B101E)]
                   : [Color(0x9EFFFFFF), Color(0x6BF4F7FF)],
             ),
             borderRadius: BorderRadius.circular(999),
             border: Border.all(
-              color: AppColors.isDark ? Color(0x1FFFFFFF) : Color(0xBDFFFFFF),
+              color: AppColors.isDark ? Color(0x3DFFFFFF) : Color(0xBDFFFFFF),
             ),
             boxShadow: [
               BoxShadow(
@@ -430,18 +447,15 @@ class _NavItem extends StatelessWidget {
     required this.onTap,
   });
 
-  final ({String? asset, IconData icon, IconData selectedIcon, String label})
-  item;
+  final ({AppIconPair icons, String label}) item;
   final bool selected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final color = selected
-        ? (AppColors.isDark ? const Color(0xFFF5F7FF) : AppColors.cyan)
-        : (AppColors.isDark
-              ? const Color(0xFFAEB8CD)
-              : const Color(0xFF46536E));
+    final color = AppColors.isDark
+        ? Colors.white
+        : (selected ? AppColors.cyan : const Color(0xFF46536E));
     return Expanded(
       child: Semantics(
         button: true,
@@ -484,13 +498,11 @@ class _NavItem extends StatelessWidget {
                         : null,
                   ),
                   child: Center(
-                    child: item.asset != null
-                        ? _NavigationSvgIcon(asset: item.asset!, color: color)
-                        : Icon(
-                            selected ? item.selectedIcon : item.icon,
-                            color: color,
-                            size: 25,
-                          ),
+                    child: _NavigationStateIcon(
+                      icon: selected ? item.icons.fill : item.icons.regular,
+                      color: color,
+                      selected: selected,
+                    ),
                   ),
                 ),
               ],
@@ -502,26 +514,141 @@ class _NavItem extends StatelessWidget {
   }
 }
 
-class _NavigationSvgIcon extends StatelessWidget {
-  const _NavigationSvgIcon({required this.asset, required this.color});
+class _NavigationStateIcon extends StatefulWidget {
+  const _NavigationStateIcon({
+    required this.icon,
+    required this.color,
+    required this.selected,
+  });
 
-  final String asset;
+  final IconData icon;
   final Color color;
+  final bool selected;
+
+  @override
+  State<_NavigationStateIcon> createState() => _NavigationStateIconState();
+}
+
+class _NavigationStateIconState extends State<_NavigationStateIcon>
+    with SingleTickerProviderStateMixin {
+  static const _motionDuration = Duration(milliseconds: 360);
+
+  late final AnimationController _controller;
+  IconData? _previousIcon;
+  Color? _previousColor;
+  bool _previousSelected = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: _motionDuration,
+      value: 1,
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _NavigationStateIcon oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selected == widget.selected) return;
+
+    _previousIcon = oldWidget.icon;
+    _previousColor = oldWidget.color;
+    _previousSelected = oldWidget.selected;
+    _controller.forward(from: 0);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
-    final duration = reduceMotion ? Duration.zero : MotionTokens.contentSwitch;
-    return TweenAnimationBuilder<Color?>(
-      tween: ColorTween(end: color),
-      duration: duration,
-      curve: MotionTokens.standardEnter,
-      builder: (context, animatedColor, child) => SvgPicture.asset(
-        asset,
-        width: 25,
-        height: 25,
-        colorFilter: ColorFilter.mode(animatedColor ?? color, BlendMode.srcIn),
+    if (reduceMotion) {
+      return _NavigationGlyph(
+        icon: widget.icon,
+        color: widget.color,
+        selected: widget.selected,
+      );
+    }
+
+    return SizedBox(
+      width: 30,
+      height: 30,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, _) {
+          final progress = _controller.value;
+          final enter = Curves.easeOutBack.transform(progress);
+          final fadeIn = Curves.easeOut.transform(progress).clamp(0.0, 1.0);
+          final fadeOut = (1 - Curves.easeIn.transform(progress)).clamp(
+            0.0,
+            1.0,
+          );
+          final previousOffset = _previousSelected ? -6.0 : 6.0;
+          final currentOffset = widget.selected ? 6.0 : -6.0;
+
+          return Stack(
+            alignment: Alignment.center,
+            clipBehavior: Clip.none,
+            children: [
+              if (_previousIcon != null && progress < 1)
+                Opacity(
+                  opacity: fadeOut,
+                  child: Transform.translate(
+                    offset: Offset(0, previousOffset * progress),
+                    child: Transform.scale(
+                      scale: lerpDouble(1, .46, progress)!,
+                      child: _NavigationGlyph(
+                        icon: _previousIcon!,
+                        color: _previousColor!,
+                        selected: _previousSelected,
+                      ),
+                    ),
+                  ),
+                ),
+              Opacity(
+                opacity: fadeIn,
+                child: Transform.translate(
+                  offset: Offset(0, currentOffset * (1 - fadeIn)),
+                  child: Transform.scale(
+                    scale: lerpDouble(.46, 1, enter)!,
+                    child: _NavigationGlyph(
+                      icon: widget.icon,
+                      color: widget.color,
+                      selected: widget.selected,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
+}
+
+class _NavigationGlyph extends StatelessWidget {
+  const _NavigationGlyph({
+    required this.icon,
+    required this.color,
+    required this.selected,
+  });
+
+  final IconData icon;
+  final Color color;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) => Icon(
+    icon,
+    key: ValueKey('navigation-glyph-$selected-${icon.codePoint}'),
+    color: color,
+    size: selected ? 26 : 24,
+  );
 }

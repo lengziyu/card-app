@@ -1,9 +1,9 @@
-import 'package:card_app/core/motion/motion_tokens.dart';
-import 'package:card_app/core/theme/app_colors.dart';
-import 'package:card_app/features/catalog/domain/card_summary.dart';
-import 'package:card_app/features/catalog/widgets/card_artwork.dart';
-import 'package:card_app/features/catalog/widgets/global_account_cover.dart';
-import 'package:card_app/core/localization/localized_text.dart';
+import 'package:cardfi/core/motion/motion_tokens.dart';
+import 'package:cardfi/core/theme/app_colors.dart';
+import 'package:cardfi/features/catalog/domain/card_summary.dart';
+import 'package:cardfi/features/catalog/widgets/card_artwork.dart';
+import 'package:cardfi/features/catalog/widgets/global_account_cover.dart';
+import 'package:cardfi/core/localization/localized_text.dart';
 import 'package:flutter/material.dart' hide Text;
 
 /// A lightweight shared-card flight used by the market list and the existing

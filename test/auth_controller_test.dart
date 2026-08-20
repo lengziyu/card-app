@@ -1,6 +1,8 @@
-import 'package:card_app/features/auth/data/auth_controller.dart';
-import 'package:card_app/features/auth/data/auth_repository.dart';
-import 'package:card_app/features/auth/domain/auth_user.dart';
+import 'dart:async';
+
+import 'package:cardfi/features/auth/data/auth_controller.dart';
+import 'package:cardfi/features/auth/data/auth_repository.dart';
+import 'package:cardfi/features/auth/domain/auth_user.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -108,7 +110,7 @@ void main() {
         password: 'correct-horse',
       );
 
-      await controller.resetAuthenticationFlow();
+      controller.resetAuthenticationFlow();
 
       expect(controller.user, isNull);
       expect(controller.message, isNull);
@@ -135,6 +137,42 @@ void main() {
     expect(controller.message, '账号和云端数据已删除。');
     controller.dispose();
   });
+
+  test('live session changes keep the visible account state in sync', () async {
+    final repository = _LiveAuthRepository();
+    final controller = AuthController(repository);
+    await controller.initialize();
+
+    repository.emit(
+      const AuthUser(
+        id: 'restored-user',
+        email: 'member@example.com',
+        displayName: null,
+        emailVerified: true,
+      ),
+    );
+    await Future<void>.delayed(Duration.zero);
+    expect(controller.isVerified, isTrue);
+
+    repository.emit(null);
+    await Future<void>.delayed(Duration.zero);
+    expect(controller.user, isNull);
+
+    controller.dispose();
+    await repository.close();
+  });
+}
+
+class _LiveAuthRepository extends _FakeAuthRepository
+    implements AuthStateRepository {
+  final _states = StreamController<AuthUser?>.broadcast();
+
+  @override
+  Stream<AuthUser?> get authStateChanges => _states.stream;
+
+  void emit(AuthUser? user) => _states.add(user);
+
+  Future<void> close() => _states.close();
 }
 
 class _FakeAuthRepository implements AuthRepository {

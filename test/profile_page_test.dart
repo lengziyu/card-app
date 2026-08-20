@@ -1,5 +1,7 @@
-import 'package:card_app/core/theme/app_colors.dart';
-import 'package:card_app/features/profile/presentation/profile_page.dart';
+import 'package:cardfi/core/localization/app_localizations.dart';
+import 'package:cardfi/core/theme/app_colors.dart';
+import 'package:cardfi/features/auth/domain/auth_user.dart';
+import 'package:cardfi/features/profile/presentation/profile_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -33,8 +35,10 @@ void main() {
     expect(find.byKey(const Key('profile-membership-card')), findsOneWidget);
     expect(find.byKey(const Key('profile-menu-cards')), findsNothing);
     expect(find.byKey(const Key('profile-menu-pro')), findsOneWidget);
+    expect(find.byKey(const Key('profile-menu-notifications')), findsNothing);
     expect(find.byKey(const Key('profile-menu-language')), findsOneWidget);
     expect(find.byKey(const Key('profile-menu-settings')), findsOneWidget);
+    expect(find.byKey(const Key('profile-menu-motionLab')), findsNothing);
     final languageBottom = tester.getBottomLeft(
       find.byKey(const Key('profile-menu-language')),
     );
@@ -141,6 +145,131 @@ void main() {
     expect(find.text('质量分'), findsOneWidget);
     expect(find.text('去登录'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'Pro profile gives the account and card level a premium identity',
+    (tester) async {
+      AppColors.configure(Brightness.dark);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData.dark(),
+          home: MediaQuery(
+            data: const MediaQueryData(disableAnimations: true),
+            child: Scaffold(
+              body: ProfilePage(
+                onOpenSection: (_) {},
+                onLogin: () {},
+                isDarkMode: true,
+                onToggleTheme: () {},
+                isPro: true,
+                authUser: const AuthUser(
+                  id: 'user-1',
+                  email: 'pro@example.com',
+                  displayName: 'Pro 用户',
+                  emailVerified: true,
+                ),
+                cardCount: 3,
+                favoriteCount: 4,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('Pro 用户'), findsOneWidget);
+      expect(find.text('Pro 卡片等级'), findsOneWidget);
+      expect(find.text('Pro 权益已解锁'), findsNothing);
+      expect(find.byKey(const Key('pro-crown-badge')), findsWidgets);
+      final avatar = tester.widget<Container>(
+        find.byKey(const Key('profile-avatar')),
+      );
+      final decoration = avatar.decoration! as BoxDecoration;
+      final border = decoration.border! as Border;
+      expect(border.top.color, const Color(0xFFF4A51C).withValues(alpha: .72));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'English profile preserves user data and translates card counts',
+    (tester) async {
+      AppColors.configure(Brightness.light);
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('en', 'US'),
+          supportedLocales: const [Locale('en', 'US')],
+          localizationsDelegates: const [AppLocalizations.delegate],
+          home: MediaQuery(
+            data: const MediaQueryData(disableAnimations: true),
+            child: Scaffold(
+              body: ProfilePage(
+                onOpenSection: (_) {},
+                onLogin: () {},
+                isDarkMode: false,
+                onToggleTheme: () {},
+                isPro: true,
+                authUser: const AuthUser(
+                  id: 'review-user',
+                  email: 'review@example.com',
+                  displayName: '审核账号',
+                  emailVerified: true,
+                ),
+                cardCount: 12,
+                favoriteCount: 0,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('审核账号'), findsOneWidget);
+      expect(find.text('审'), findsOneWidget);
+      expect(find.text('@审核账号 · Manage cards and favorites'), findsOneWidget);
+      expect(find.text('12 cards owned'), findsOneWidget);
+      expect(find.text('0 favorites'), findsOneWidget);
+      expect(
+        find.text('Details are not available in English yet.'),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('guest profile never displays a Pro membership treatment', (
+    tester,
+  ) async {
+    AppColors.configure(Brightness.dark);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(),
+        home: MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: Scaffold(
+            body: ProfilePage(
+              onOpenSection: (_) {},
+              onLogin: () {},
+              isDarkMode: true,
+              onToggleTheme: () {},
+              isPro: true,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('卡片等级'), findsOneWidget);
+    expect(find.text('Pro 卡片等级'), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('profile-avatar')),
+        matching: find.byKey(const Key('pro-crown-badge')),
+      ),
+      findsNothing,
+    );
   });
 
   testWidgets('theme switch refreshes profile glass colors immediately', (

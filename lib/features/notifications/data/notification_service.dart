@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'dart:math';
 
-import 'package:card_app/features/notifications/data/notification_repository.dart';
+import 'package:cardfi/features/notifications/data/notification_repository.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class NotificationService {
@@ -15,6 +16,7 @@ class NotificationService {
 
   final NotificationRepository _repository;
   final _routes = StreamController<String>.broadcast();
+  final _apns = _ApnsNotificationClient();
   StreamSubscription<String>? _tokenRefreshSubscription;
   bool _firebaseReady = false;
 
@@ -37,19 +39,9 @@ class NotificationService {
 
   Future<NotificationEnableResult> enable({required String locale}) async {
     try {
-      await _ensureFirebase();
-      final settings = await FirebaseMessaging.instance.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
-      if (settings.authorizationStatus == AuthorizationStatus.denied ||
-          settings.authorizationStatus == AuthorizationStatus.notDetermined) {
-        return NotificationEnableResult.denied;
-      }
-      final token = await FirebaseMessaging.instance.getToken();
+      final token = await _requestToken();
       if (token == null || token.isEmpty) {
-        return NotificationEnableResult.unavailable;
+        return NotificationEnableResult.denied;
       }
       await _repository.subscribe(
         installationId: await installationId(),
@@ -79,8 +71,7 @@ class NotificationService {
   Future<void> start({required String locale}) async {
     if (!await isEnabled()) return;
     try {
-      await _ensureFirebase();
-      final token = await FirebaseMessaging.instance.getToken();
+      final token = await _currentToken();
       if (token != null && token.isNotEmpty) {
         await _repository.subscribe(
           installationId: await installationId(),
@@ -97,6 +88,10 @@ class NotificationService {
   }
 
   Future<void> _ensureFirebase() async {
+    if (_usesApns) {
+      await _apns.initialize(_emitRoute);
+      return;
+    }
     if (!_firebaseReady) {
       await Firebase.initializeApp();
       FirebaseMessaging.onMessageOpenedApp.listen(_emitRouteFromMessage);
@@ -119,6 +114,33 @@ class NotificationService {
     if (launchMessage != null) _emitRouteFromMessage(launchMessage);
   }
 
+  bool get _usesApns => defaultTargetPlatform == TargetPlatform.iOS;
+
+  Future<String?> _requestToken() async {
+    if (_usesApns) {
+      await _apns.initialize(_emitRoute);
+      if (!await _apns.requestPermission()) return null;
+      return _apns.waitForToken();
+    }
+    await _ensureFirebase();
+    final settings = await FirebaseMessaging.instance.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+    if (settings.authorizationStatus == AuthorizationStatus.denied ||
+        settings.authorizationStatus == AuthorizationStatus.notDetermined) {
+      return null;
+    }
+    return FirebaseMessaging.instance.getToken();
+  }
+
+  Future<String?> _currentToken() async {
+    await _ensureFirebase();
+    if (_usesApns) return _apns.token();
+    return FirebaseMessaging.instance.getToken();
+  }
+
   void _emitRouteFromMessage(RemoteMessage message) =>
       _emitRoute(message.data['route']?.toString() ?? '');
 
@@ -133,3 +155,36 @@ class NotificationService {
 }
 
 enum NotificationEnableResult { enabled, denied, unavailable }
+
+/// Native APNs bridge used only on iOS. Android continues to use FCM.
+class _ApnsNotificationClient {
+  static const _channel = MethodChannel('cardfi/apns');
+  var _initialized = false;
+
+  Future<void> initialize(ValueChanged<String> onRoute) async {
+    if (_initialized) return;
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'notificationOpened') {
+        final route = call.arguments?.toString() ?? '';
+        if (route.isNotEmpty) onRoute(route);
+      }
+    });
+    _initialized = true;
+    final route = await _channel.invokeMethod<String>('initialRoute');
+    if (route != null && route.isNotEmpty) onRoute(route);
+  }
+
+  Future<bool> requestPermission() async =>
+      await _channel.invokeMethod<bool>('requestPermission') ?? false;
+
+  Future<String?> token() => _channel.invokeMethod<String>('token');
+
+  Future<String?> waitForToken() async {
+    for (var attempt = 0; attempt < 10; attempt++) {
+      final value = await token();
+      if (value != null && value.isNotEmpty) return value;
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    }
+    return null;
+  }
+}

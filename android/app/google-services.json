@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "819083767557",
+    "project_id": "card-app-ab368",
+    "storage_bucket": "card-app-ab368.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:819083767557:android:f459479cbb4d406a2d516c",
+        "android_client_info": {
+          "package_name": "cn.lengziyu.cardapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCCOTZyO7bfcYX59KRU0c4QLd4hG95LhHw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,4 +1,4 @@
-import 'package:card_app/features/auth/data/supabase_auth_config.dart';
+import 'package:cardfi/features/auth/data/supabase_auth_config.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

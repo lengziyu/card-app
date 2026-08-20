@@ -1,8 +1,9 @@
-import 'package:card_app/core/theme/app_colors.dart';
-import 'package:card_app/features/catalog/domain/card_summary.dart';
-import 'package:card_app/features/profile/data/local_guest_state.dart';
-import 'package:card_app/features/shell/widgets/sticky_page_header.dart';
-import 'package:card_app/core/localization/localized_text.dart';
+import 'package:cardfi/core/theme/app_colors.dart';
+import 'package:cardfi/core/network/api_exception.dart';
+import 'package:cardfi/features/catalog/domain/card_summary.dart';
+import 'package:cardfi/features/profile/data/local_guest_state.dart';
+import 'package:cardfi/features/shell/widgets/sticky_page_header.dart';
+import 'package:cardfi/core/localization/localized_text.dart';
 import 'package:flutter/material.dart' hide Text;
 
 class CardCorrectionPage extends StatefulWidget {
@@ -15,7 +16,7 @@ class CardCorrectionPage extends StatefulWidget {
 
   final CardSummary card;
   final VoidCallback onBack;
-  final ValueChanged<LocalSubmissionDraft> onSubmit;
+  final Future<void> Function(LocalSubmissionDraft) onSubmit;
 
   @override
   State<CardCorrectionPage> createState() => _CardCorrectionPageState();
@@ -31,22 +32,33 @@ class _CardCorrectionPageState extends State<CardCorrectionPage> {
     super.dispose();
   }
 
-  void _submit() {
+  bool _submitting = false;
+
+  Future<void> _submit() async {
+    if (_submitting) return;
     if (_controller.text.trim().length < 8) {
       setState(() => _message = '请至少输入 8 个字的说明');
       return;
     }
-    widget.onSubmit(
-      LocalSubmissionDraft(
-        category: LocalSubmissionCategory.correction,
-        description: _controller.text,
-        cardId: widget.card.id,
-        cardName: widget.card.name,
-      ),
-    );
-    _controller.clear();
-    FocusScope.of(context).unfocus();
-    setState(() => _message = '纠错内容已提交，感谢你的反馈。');
+    setState(() => _submitting = true);
+    try {
+      await widget.onSubmit(
+        LocalSubmissionDraft(
+          category: LocalSubmissionCategory.correction,
+          description: _controller.text,
+          cardId: widget.card.id,
+          cardName: widget.card.name,
+        ),
+      );
+      if (!mounted) return;
+      _controller.clear();
+      FocusScope.of(context).unfocus();
+      setState(() => _message = '纠错内容已提交，感谢你的反馈。');
+    } on ApiException catch (error) {
+      if (mounted) setState(() => _message = error.message);
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
   @override
@@ -74,7 +86,7 @@ class _CardCorrectionPageState extends State<CardCorrectionPage> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    '请说明需要更新的字段，并尽量附上官方公开来源。内容会先保存到本机。',
+                    '请说明需要更新的字段，并尽量附上官方公开来源。提交后会同步到你的账号。',
                     style: TextStyle(
                       color: AppColors.textMuted,
                       fontSize: 13,
@@ -115,12 +127,12 @@ class _CardCorrectionPageState extends State<CardCorrectionPage> {
                   const SizedBox(height: 16),
                   FilledButton(
                     key: const Key('correction-submit'),
-                    onPressed: _submit,
-                    child: const Text('提交纠错'),
+                    onPressed: _submitting ? null : _submit,
+                    child: Text(_submitting ? '正在提交…' : '提交纠错'),
                   ),
                   const SizedBox(height: 9),
                   Text(
-                    '当前不会上传；可在“消息与反馈”中查看或删除。',
+                    '提交后可在“消息与反馈”中查看处理进度。',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: AppColors.textMuted,

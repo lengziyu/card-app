@@ -1,10 +1,10 @@
 import 'dart:ui';
 
-import 'package:card_app/core/motion/app_haptics.dart';
-import 'package:card_app/core/motion/motion_tokens.dart';
-import 'package:card_app/core/motion/motion_widgets.dart';
-import 'package:card_app/core/theme/app_colors.dart';
-import 'package:card_app/core/localization/localized_text.dart';
+import 'package:cardfi/core/motion/app_haptics.dart';
+import 'package:cardfi/core/motion/motion_tokens.dart';
+import 'package:cardfi/core/motion/motion_widgets.dart';
+import 'package:cardfi/core/theme/app_colors.dart';
+import 'package:cardfi/core/localization/localized_text.dart';
 import 'package:flutter/material.dart' hide Text;
 
 class GlassSegmentItem<T> {
@@ -20,6 +20,7 @@ class AnimatedGlassSegment<T> extends StatelessWidget {
     required this.items,
     required this.selected,
     required this.onChanged,
+    this.onReselected,
     this.height = 48,
     this.padding = 4,
     this.fontSize = 13,
@@ -31,6 +32,7 @@ class AnimatedGlassSegment<T> extends StatelessWidget {
   final List<GlassSegmentItem<T>> items;
   final T selected;
   final ValueChanged<T> onChanged;
+  final ValueChanged<T>? onReselected;
   final double height;
   final double padding;
   final double fontSize;
@@ -60,7 +62,7 @@ class AnimatedGlassSegment<T> extends StatelessWidget {
               decoration: BoxDecoration(
                 color: showOuterSurface
                     ? (AppColors.isDark
-                          ? const Color(0xA6232737)
+                          ? const Color(0xB0384259)
                           : const Color(0x247382A8))
                     : Colors.transparent,
                 gradient: showOuterSurface && !AppColors.isDark
@@ -91,13 +93,13 @@ class AnimatedGlassSegment<T> extends StatelessWidget {
                   AnimatedPositioned(
                     duration: duration,
                     curve: curve,
-                    // Keep a one-pixel breathing space at either edge.  The
-                    // selected indicator has a border and shadow, which used
-                    // to be visibly clipped when the last segment was active.
-                    left: safeIndex * itemWidth + 1,
-                    top: 1,
-                    bottom: 1,
-                    width: itemWidth - 2,
+                    // Leave a clear inset around every edge. In dark mode the
+                    // indicator border and shadow are otherwise most visible
+                    // at the final segment, where they can look clipped.
+                    left: safeIndex * itemWidth + 3,
+                    top: 2,
+                    bottom: 2,
+                    width: itemWidth - 6,
                     child: DecoratedBox(
                       key: const Key('animated-glass-segment-indicator'),
                       decoration: BoxDecoration(
@@ -105,7 +107,7 @@ class AnimatedGlassSegment<T> extends StatelessWidget {
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                           colors: AppColors.isDark
-                              ? const [Color(0x57969EEA), Color(0x706771C2)]
+                              ? const [Color(0x668D98C8), Color(0x786E789F)]
                               : const [Color(0xF7FFFFFF), Color(0xE8FFFFFF)],
                         ),
                         borderRadius: BorderRadius.circular(radius - padding),
@@ -135,7 +137,13 @@ class AnimatedGlassSegment<T> extends StatelessWidget {
                               child: InkWell(
                                 key: items[index].key,
                                 onTap: () {
-                                  if (items[index].value == selected) return;
+                                  if (items[index].value == selected) {
+                                    if (onReselected case final callback?) {
+                                      AppHaptics.selection();
+                                      callback(items[index].value);
+                                    }
+                                    return;
+                                  }
                                   AppHaptics.selection();
                                   onChanged(items[index].value);
                                 },
@@ -236,7 +244,7 @@ class AnimatedPillSegment<T> extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: items[index].value == selected
                               ? (AppColors.isDark
-                                    ? const Color(0x706771C2)
+                                    ? const Color(0x786E789F)
                                     : const Color(0xFAFFFFFF))
                               : (AppColors.isDark
                                     ? const Color(0x24FFFFFF)
@@ -245,7 +253,7 @@ class AnimatedPillSegment<T> extends StatelessWidget {
                           border: Border.all(
                             color: items[index].value == selected
                                 ? (AppColors.isDark
-                                      ? const Color(0x57AAB2FF)
+                                      ? const Color(0x5297A2D1)
                                       : const Color(0x2E5E79FF))
                                 : (AppColors.isDark
                                       ? const Color(0x29FFFFFF)

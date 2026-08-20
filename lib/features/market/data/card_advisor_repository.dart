@@ -1,6 +1,7 @@
-import 'package:card_app/core/network/api_client.dart';
-import 'package:card_app/core/network/api_exception.dart';
-import 'package:card_app/features/market/domain/card_advisor.dart';
+import 'package:cardfi/core/network/api_client.dart';
+import 'package:cardfi/core/network/api_exception.dart';
+import 'package:cardfi/core/privacy/ai_data_consent.dart';
+import 'package:cardfi/features/market/domain/card_advisor.dart';
 
 class CardAdvisorRepository {
   CardAdvisorRepository(this._apiClient, {required this._accessTokenProvider});
@@ -13,22 +14,33 @@ class CardAdvisorRepository {
   Future<CardAdvisorResult> advise(CardAdvisorProfile profile) async {
     final token = (await _accessTokenProvider())?.trim();
     if (token == null || token.isEmpty) {
-      throw const ApiException(
-        code: 'UNAUTHORIZED',
-        message: '请先登录并完成邮箱验证后使用 AI 选卡',
-      );
+      throw const ApiException(code: 'UNAUTHORIZED', message: '请先登录后使用 AI精选好卡');
     }
-    final response = jsonObject(
-      await _apiClient.post(
-        path,
-        headers: {'authorization': 'Bearer $token'},
-        body: {'profile': profile.toJson()},
-        timeout: const Duration(seconds: 35),
-      ),
-      label: 'AI 选卡结果',
-    );
+    late final Map<String, Object?> response;
+    try {
+      response = jsonObject(
+        await _apiClient.post(
+          path,
+          headers: {'authorization': 'Bearer $token'},
+          body: {
+            'profile': profile.toJson(),
+            'aiDataConsent': AiDataConsent.payload(AiDataConsentKind.cardMatch),
+          },
+          timeout: const Duration(seconds: 35),
+        ),
+        label: 'AI精选好卡结果',
+      );
+    } on ApiException catch (error) {
+      if (error.statusCode == 404) {
+        throw const ApiException(
+          code: 'SERVICE_UNAVAILABLE',
+          message: 'AI精选好卡服务尚未部署，请稍后再试。',
+        );
+      }
+      rethrow;
+    }
     return CardAdvisorResult.fromJson(
-      jsonObject(response['advisor'], label: 'AI 选卡结果'),
+      jsonObject(response['advisor'], label: 'AI精选好卡结果'),
     );
   }
 }

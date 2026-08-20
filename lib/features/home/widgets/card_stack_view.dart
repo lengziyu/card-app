@@ -1,15 +1,17 @@
 import 'dart:math' as math;
-import 'dart:ui';
 
-import 'package:card_app/core/motion/app_haptics.dart';
-import 'package:card_app/features/catalog/domain/card_summary.dart';
-import 'package:card_app/features/catalog/widgets/catalog_card_row.dart';
-import 'package:card_app/features/home/controllers/card_stack_controller.dart';
-import 'package:card_app/features/home/domain/card_layout_calculator.dart';
-import 'package:card_app/features/home/domain/card_transform_state.dart';
-import 'package:card_app/features/home/domain/home_card_layout.dart';
-import 'package:card_app/features/home/widgets/wallet_card_item.dart';
+import 'package:cardfi/core/motion/app_haptics.dart';
+import 'package:cardfi/core/motion/motion_tokens.dart';
+import 'package:cardfi/features/catalog/domain/card_summary.dart';
+import 'package:cardfi/features/catalog/widgets/catalog_card_row.dart';
+import 'package:cardfi/features/home/controllers/card_stack_controller.dart';
+import 'package:cardfi/features/home/domain/card_layout_calculator.dart';
+import 'package:cardfi/features/home/domain/card_transform_state.dart';
+import 'package:cardfi/features/home/domain/home_card_layout.dart';
+import 'package:cardfi/features/home/widgets/wallet_card_item.dart';
 import 'package:flutter/material.dart';
+
+enum _TwoFingerGesture { undecided, pinch, scenePan }
 
 typedef HomeCardOpenTransition =
     void Function(CardSummary card, CatalogCardSourceGeometry geometry);
@@ -17,6 +19,7 @@ typedef HomeCardOpenTransition =
 class CardStackView extends StatefulWidget {
   const CardStackView({
     required this.cards,
+    required this.displayMode,
     required this.controller,
     required this.availableHeight,
     required this.heightScale,
@@ -29,6 +32,7 @@ class CardStackView extends StatefulWidget {
   });
 
   final List<CardSummary> cards;
+  final CardStackMode displayMode;
   final CardStackController controller;
   final double availableHeight;
   final double heightScale;
@@ -52,10 +56,24 @@ class _CardStackViewState extends State<CardStackView> {
   double _pinchHeightStart = homeCardStackDefaultScale;
   double _pointerPinchDistance = 0;
   double? _pendingHeightScale;
+  final Map<int, Offset> _twoFingerStartPoints = {};
+  Offset _twoFingerStartCentroid = Offset.zero;
+  double _twoFingerSceneOffsetStart = 0;
+  double _twoFingerSceneOffset = 0;
+  bool _twoFingerScenePanning = false;
+  _TwoFingerGesture _twoFingerGesture = _TwoFingerGesture.undecided;
+
+  static const double _twoFingerSceneUpLimit = 48;
+
+  double get _twoFingerSceneDownLimit =>
+      (widget.availableHeight * .55).clamp(280.0, 420.0).toDouble();
 
   @override
   void didUpdateWidget(covariant CardStackView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.displayMode != widget.displayMode) {
+      _resetScenePosition();
+    }
     if (oldWidget.heightScale != widget.heightScale && !_pinching) {
       widget.controller.setRevealScale(
         widget.heightScale / homeCardStackDefaultScale,
@@ -64,22 +82,41 @@ class _CardStackViewState extends State<CardStackView> {
     }
   }
 
+  void _resetScenePosition() {
+    _pointers.clear();
+    _twoFingerStartPoints.clear();
+    _rawPinching = false;
+    _pinching = false;
+    _dragging = false;
+    _dragDistance = 0;
+    _pendingHeightScale = null;
+    _twoFingerSceneOffset = 0;
+    _twoFingerSceneOffsetStart = 0;
+    _twoFingerScenePanning = false;
+    _twoFingerGesture = _TwoFingerGesture.undecided;
+  }
+
   @override
   Widget build(BuildContext context) {
-    widget.controller.setReduceMotion(MediaQuery.disableAnimationsOf(context));
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    widget.controller.setReduceMotion(reduceMotion);
     final cardsById = {for (final card in widget.cards) card.id: card};
     return LayoutBuilder(
       builder: (context, constraints) {
-        final cardWidth = math.min(
-          constraints.maxWidth - CardLayoutCalculator.horizontalMargin * 2,
-          420.0,
-        );
-        final cardHeight = cardWidth / CardLayoutCalculator.cardAspectRatio;
-        final cardSize = Size(cardWidth, cardHeight);
         return AnimatedBuilder(
           animation: widget.controller,
           builder: (context, _) {
             final mode = widget.controller.mode;
+            final cardWidth = math.min(
+              constraints.maxWidth - CardLayoutCalculator.horizontalMargin * 2,
+              440.0,
+            );
+            // 三种展示模式共用素材的原始卡面比例。钱包模式只调整卡片
+            // 之间露出的高度，不能拉高卡面，否则 CardArtwork 的 cover
+            // 会裁掉左右两侧的内容。
+            const cardAspectRatio = CardLayoutCalculator.cardAspectRatio;
+            final cardHeight = cardWidth / cardAspectRatio;
+            final cardSize = Size(cardWidth, cardHeight);
             final layoutHeight = CardLayoutCalculator.preferredHeight(
               mode: widget.controller.mode,
               availableHeight: widget.availableHeight,
@@ -88,13 +125,13 @@ class _CardStackViewState extends State<CardStackView> {
               revealScale: widget.controller.revealScale,
               selectedIndex: widget.controller.layoutSelectedIndex,
             );
-            // Focus is an immersive surface: keep its centering math tied to
-            // the viewport slot, but let the stack paint farther underneath
-            // the floating close control so the lower peeks are not clipped.
-            final focusOverflow = mode == CardStackMode.focus
-                ? math.min(124.0, widget.availableHeight * .22)
-                : 0.0;
-            final height = layoutHeight + focusOverflow;
+            // Stack and focus are immersive fans: keep the centering math
+            // tied to the viewport slot, but let lower card strips paint and
+            // stay tappable beyond it instead of being clipped away.
+            final fanOverflow = mode == CardStackMode.wallet
+                ? 0.0
+                : math.min(124.0, widget.availableHeight * .22);
+            final height = layoutHeight + fanOverflow;
             final screenSize = Size(constraints.maxWidth, layoutHeight);
             widget.controller.configureLayout(
               screenSize: screenSize,
@@ -105,36 +142,32 @@ class _CardStackViewState extends State<CardStackView> {
               CardStackMode.focus => const Key('home-focus-stack'),
               CardStackMode.wallet => const Key('home-mode-wallet'),
             };
-            final firstVisibleFocusIndex = math.max(
-              0,
-              widget.controller.selectedIndex - 2,
-            );
+            // 钱包模式的纵向手势属于外层 CustomScrollView。这里不要再
+            // 注册 ScaleGestureRecognizer，否则 Android 上它可能先赢得
+            // 手势竞技场，导致卡包列表偶发无法滚动（尤其是一加等设备）。
+            // 堆叠/聚焦模式仍需要内部拖拽和双指缩放。
+            final supportsSceneGestures = mode != CardStackMode.wallet;
             final cardLayers = <Widget>[
               for (final id in widget.controller.paintOrder)
-                if (mode != CardStackMode.focus ||
-                    widget.controller.cardIds.indexOf(id) >=
-                        firstVisibleFocusIndex)
-                  if (cardsById[id] case final card?)
-                    _PositionedWalletCard(
-                      key: ValueKey('positioned-$id'),
-                      card: card,
-                      mode: mode,
-                      selected: widget.controller.selectedId == id,
-                      cardSize: cardSize,
-                      controller: widget.controller,
-                      onLongPressStart: (details) =>
-                          _onCardLongPressStart(card, details),
-                      onLongPressMoveUpdate: _onCardLongPressMoveUpdate,
-                      onLongPressEnd: _onCardLongPressEnd,
-                      onLongPressCancel: _onCardLongPressCancel,
-                      onTap: () => _onCardTap(card),
-                      onTapWithGeometry: (geometry) =>
-                          _onCardTap(card, geometry: geometry),
-                      sharedContentHidden:
-                          widget.transitioningCardId == card.id,
-                    ),
-              if (mode == CardStackMode.focus)
-                const Positioned.fill(child: _FocusEdgeSofteners()),
+                if (cardsById[id] case final card?)
+                  _PositionedWalletCard(
+                    key: ValueKey('positioned-$id'),
+                    card: card,
+                    mode: mode,
+                    selected: widget.controller.selectedId == id,
+                    cardSize: cardSize,
+                    cardAspectRatio: cardAspectRatio,
+                    controller: widget.controller,
+                    onLongPressStart: (details) =>
+                        _onCardLongPressStart(card, details),
+                    onLongPressMoveUpdate: _onCardLongPressMoveUpdate,
+                    onLongPressEnd: _onCardLongPressEnd,
+                    onLongPressCancel: _onCardLongPressCancel,
+                    onTap: () => _onCardTap(card),
+                    onTapWithGeometry: (geometry) =>
+                        _onCardTap(card, geometry: geometry),
+                    sharedContentHidden: widget.transitioningCardId == card.id,
+                  ),
             ];
 
             return Listener(
@@ -145,16 +178,28 @@ class _CardStackViewState extends State<CardStackView> {
               child: GestureDetector(
                 key: stackKey,
                 behavior: HitTestBehavior.opaque,
-                onScaleStart: _onScaleStart,
-                onScaleUpdate: _onScaleUpdate,
-                onScaleEnd: _onScaleEnd,
+                onScaleStart: supportsSceneGestures ? _onScaleStart : null,
+                onScaleUpdate: supportsSceneGestures ? _onScaleUpdate : null,
+                onScaleEnd: supportsSceneGestures ? _onScaleEnd : null,
+                // 钱包保留自身边界；堆叠与聚焦不再额外叠加顶部遮罩。
                 child: SizedBox(
                   height: height,
-                  child: mode == CardStackMode.focus
-                      ? Stack(clipBehavior: Clip.none, children: cardLayers)
-                      : ClipRect(
+                  child: mode == CardStackMode.wallet
+                      ? ClipRect(
                           child: Stack(
-                            clipBehavior: Clip.hardEdge,
+                            clipBehavior: Clip.none,
+                            children: cardLayers,
+                          ),
+                        )
+                      : AnimatedSlide(
+                          key: const Key('home-fan-scene'),
+                          duration: reduceMotion || _twoFingerScenePanning
+                              ? Duration.zero
+                              : MotionTokens.fast,
+                          curve: MotionTokens.standardExit,
+                          offset: Offset(0, _twoFingerSceneOffset / height),
+                          child: Stack(
+                            clipBehavior: Clip.none,
                             children: cardLayers,
                           ),
                         ),
@@ -290,10 +335,21 @@ class _CardStackViewState extends State<CardStackView> {
     _pointerPinchDistance = (points[0] - points[1]).distance;
     if (_pointerPinchDistance <= 0) return;
     _rawPinching = true;
-    _pinching = true;
+    _pinching = false;
     _dragging = false;
     _pinchHeightStart = widget.heightScale;
     _pendingHeightScale = null;
+    _twoFingerStartPoints
+      ..clear()
+      ..addEntries(
+        _pointers.entries
+            .take(2)
+            .map((entry) => MapEntry(entry.key, entry.value)),
+      );
+    _twoFingerStartCentroid = (points[0] + points[1]) / 2;
+    _twoFingerSceneOffsetStart = _twoFingerSceneOffset;
+    _twoFingerScenePanning = false;
+    _twoFingerGesture = _TwoFingerGesture.undecided;
     widget.controller.cancelDrag();
   }
 
@@ -306,6 +362,45 @@ class _CardStackViewState extends State<CardStackView> {
     }
     final points = _pointers.values.take(2).toList(growable: false);
     final distance = (points[0] - points[1]).distance;
+    final centroid = (points[0] + points[1]) / 2;
+    final distanceDelta = distance - _pointerPinchDistance;
+    final verticalTranslation = centroid.dy - _twoFingerStartCentroid.dy;
+
+    if (_twoFingerGesture == _TwoFingerGesture.undecided) {
+      final pointerIds = _pointers.keys.take(2).toList(growable: false);
+      final firstMovement =
+          _pointers[pointerIds[0]]! - _twoFingerStartPoints[pointerIds[0]]!;
+      final secondMovement =
+          _pointers[pointerIds[1]]! - _twoFingerStartPoints[pointerIds[1]]!;
+      final fingersMoveTogether =
+          firstMovement.dy.abs() >= 1 &&
+          secondMovement.dy.abs() >= 1 &&
+          firstMovement.dy * secondMovement.dy > 0;
+
+      if (widget.controller.mode != CardStackMode.wallet &&
+          fingersMoveTogether &&
+          verticalTranslation.abs() >= 2 &&
+          verticalTranslation.abs() >= distanceDelta.abs() * .25) {
+        _twoFingerGesture = _TwoFingerGesture.scenePan;
+        _twoFingerScenePanning = true;
+        AppHaptics.selection();
+      } else if (distanceDelta.abs() > 14 &&
+          distanceDelta.abs() > verticalTranslation.abs() * 1.35) {
+        _twoFingerGesture = _TwoFingerGesture.pinch;
+        _pinching = true;
+      }
+    }
+
+    if (_twoFingerGesture == _TwoFingerGesture.scenePan) {
+      final nextOffset = (_twoFingerSceneOffsetStart + verticalTranslation)
+          .clamp(-_twoFingerSceneUpLimit, _twoFingerSceneDownLimit)
+          .toDouble();
+      if (nextOffset != _twoFingerSceneOffset) {
+        setState(() => _twoFingerSceneOffset = nextOffset);
+      }
+      return;
+    }
+    if (_twoFingerGesture != _TwoFingerGesture.pinch) return;
     final nextHeightScale = clampHomeCardHeightScale(
       _pinchHeightStart * distance / _pointerPinchDistance,
     );
@@ -318,59 +413,20 @@ class _CardStackViewState extends State<CardStackView> {
   void _onPointerUp(PointerEvent event) {
     _pointers.remove(event.pointer);
     if (!_rawPinching || _pointers.length >= 2) return;
+    final wasScenePan = _twoFingerGesture == _TwoFingerGesture.scenePan;
     final nextHeightScale = _pendingHeightScale;
     _rawPinching = false;
     _pinching = false;
     _pendingHeightScale = null;
+    _twoFingerStartPoints.clear();
+    _twoFingerGesture = _TwoFingerGesture.undecided;
+    if (wasScenePan) {
+      setState(() => _twoFingerScenePanning = false);
+      return;
+    }
     if (nextHeightScale == null) return;
     widget.onHeightScaleChanged(nextHeightScale);
     AppHaptics.selection();
-  }
-}
-
-class _FocusEdgeSofteners extends StatelessWidget {
-  const _FocusEdgeSofteners();
-
-  @override
-  Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: const [
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: _FocusEdgeFade(top: true),
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: -52,
-            child: _FocusEdgeFade(top: false),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FocusEdgeFade extends StatelessWidget {
-  const _FocusEdgeFade({required this.top});
-
-  final bool top;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: top ? 42 : 58,
-      child: ClipRect(
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 2, sigmaY: 2),
-          child: const SizedBox.expand(),
-        ),
-      ),
-    );
   }
 }
 
@@ -380,6 +436,7 @@ class _PositionedWalletCard extends StatelessWidget {
     required this.mode,
     required this.selected,
     required this.cardSize,
+    required this.cardAspectRatio,
     required this.controller,
     required this.onLongPressStart,
     required this.onLongPressMoveUpdate,
@@ -395,6 +452,7 @@ class _PositionedWalletCard extends StatelessWidget {
   final CardStackMode mode;
   final bool selected;
   final Size cardSize;
+  final double cardAspectRatio;
   final CardStackController controller;
   final GestureLongPressStartCallback onLongPressStart;
   final GestureLongPressMoveUpdateCallback onLongPressMoveUpdate;
@@ -407,6 +465,9 @@ class _PositionedWalletCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = controller.transformFor(card.id);
+    final depthState = mode == CardStackMode.focus && controller.isAnimating
+        ? controller.targetTransformFor(card.id) ?? state
+        : state;
     return Positioned(
       top: state.top,
       left: state.left,
@@ -421,19 +482,24 @@ class _PositionedWalletCard extends StatelessWidget {
             child: Transform.scale(
               scale: state.scale,
               alignment: Alignment.topCenter,
-              child: WalletCardItem(
-                card: card,
-                mode: mode,
-                selected: selected,
-                elevation: state.elevation,
-                focusDepth: _visualDepthFor(state),
-                onLongPressStart: onLongPressStart,
-                onLongPressMoveUpdate: onLongPressMoveUpdate,
-                onLongPressEnd: onLongPressEnd,
-                onLongPressCancel: onLongPressCancel,
-                onTap: onTap,
-                onTapWithGeometry: onTapWithGeometry,
-                sharedContentHidden: sharedContentHidden,
+              child: Transform.scale(
+                scaleX: _focusWidthScaleFor(depthState),
+                alignment: Alignment.topCenter,
+                child: WalletCardItem(
+                  card: card,
+                  mode: mode,
+                  selected: selected,
+                  elevation: state.elevation,
+                  aspectRatio: cardAspectRatio,
+                  focusDepth: _focusDepthFor(depthState),
+                  onLongPressStart: onLongPressStart,
+                  onLongPressMoveUpdate: onLongPressMoveUpdate,
+                  onLongPressEnd: onLongPressEnd,
+                  onLongPressCancel: onLongPressCancel,
+                  onTap: onTap,
+                  onTapWithGeometry: onTapWithGeometry,
+                  sharedContentHidden: sharedContentHidden,
+                ),
               ),
             ),
           ),
@@ -442,12 +508,19 @@ class _PositionedWalletCard extends StatelessWidget {
     );
   }
 
-  double _visualDepthFor(CardTransformState state) {
-    if (mode == CardStackMode.wallet) return 0;
-    final scaleStep = mode == CardStackMode.focus ? .07 : .012;
-    // Derive the treatment from the animated geometry instead of switching
-    // it immediately with `selected`. This lets blur, colour lift and the
-    // white veil cross-fade while the next card naturally comes forward.
-    return ((1 - state.scale) / scaleStep).clamp(0.0, 4.0).toDouble();
+  /// 聚焦模式的深度直接从动画中的缩放几何推导，模式切换和拖拽时
+  /// 模糊与蒙层都会随之连续过渡；其余模式不做深度处理。
+  double _focusDepthFor(CardTransformState state) {
+    if (mode != CardStackMode.focus) return 0;
+    return ((1 - state.scale) / CardLayoutCalculator.focusDepthScaleStep)
+        .clamp(0.0, 3.5)
+        .toDouble();
+  }
+
+  /// 远景卡除整体缩小外，再轻微收窄横向尺寸，避免与当前卡同宽。
+  double _focusWidthScaleFor(CardTransformState state) {
+    if (mode != CardStackMode.focus) return 1;
+    final depth = _focusDepthFor(state);
+    return (1 - depth * .05).clamp(.84, 1.0).toDouble();
   }
 }

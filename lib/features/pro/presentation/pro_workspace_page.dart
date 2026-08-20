@@ -1,18 +1,18 @@
 import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:card_app/core/motion/app_haptics.dart';
-import 'package:card_app/core/motion/app_bottom_sheet.dart';
-import 'package:card_app/core/motion/motion_widgets.dart';
-import 'package:card_app/core/theme/app_colors.dart';
-import 'package:card_app/core/widgets/app_feedback.dart';
-import 'package:card_app/features/catalog/domain/card_detail.dart';
-import 'package:card_app/features/catalog/domain/card_summary.dart';
-import 'package:card_app/features/catalog/widgets/catalog_card_row.dart';
-import 'package:card_app/features/pro/data/pro_workspace_controller.dart';
-import 'package:card_app/features/pro/widgets/pro_crown_badge.dart';
-import 'package:card_app/features/shell/widgets/sticky_page_header.dart';
-import 'package:card_app/core/localization/localized_text.dart';
+import 'package:cardfi/core/motion/app_haptics.dart';
+import 'package:cardfi/core/motion/app_bottom_sheet.dart';
+import 'package:cardfi/core/motion/motion_widgets.dart';
+import 'package:cardfi/core/theme/app_colors.dart';
+import 'package:cardfi/core/widgets/app_feedback.dart';
+import 'package:cardfi/features/catalog/domain/card_detail.dart';
+import 'package:cardfi/features/catalog/domain/card_summary.dart';
+import 'package:cardfi/features/catalog/widgets/catalog_card_row.dart';
+import 'package:cardfi/features/pro/data/pro_workspace_controller.dart';
+import 'package:cardfi/features/pro/widgets/pro_crown_badge.dart';
+import 'package:cardfi/features/shell/widgets/sticky_page_header.dart';
+import 'package:cardfi/core/localization/localized_text.dart';
 import 'package:flutter/material.dart' hide Text;
 
 class ProWorkspacePage extends StatelessWidget {
@@ -317,8 +317,8 @@ class _WorkspaceStats extends StatelessWidget {
               ),
               child: Column(
                 children: [
-                  Text(
-                    '${item.$2}',
+                  _AnimatedWorkspaceNumber(
+                    value: item.$2,
                     style: TextStyle(
                       color: AppColors.text,
                       fontSize: 20,
@@ -371,27 +371,9 @@ class _CollectionReport extends StatelessWidget {
           Row(
             children: [
               SizedBox(
-                width: 78,
-                height: 78,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    CircularProgressIndicator(
-                      value: score / 100,
-                      strokeWidth: 7,
-                      color: const Color(0xFFF4A51C),
-                      backgroundColor: AppColors.line,
-                    ),
-                    Text(
-                      '$score',
-                      style: TextStyle(
-                        color: AppColors.text,
-                        fontSize: 23,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ],
-                ),
+                width: 116,
+                height: 116,
+                child: _AnimatedScoreGauge(score: score),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -409,7 +391,7 @@ class _CollectionReport extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 6),
           for (final item in components)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 5),
@@ -438,6 +420,70 @@ class _CollectionReport extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+class _AnimatedWorkspaceNumber extends StatelessWidget {
+  const _AnimatedWorkspaceNumber({required this.value, required this.style});
+
+  final int value;
+  final TextStyle style;
+
+  @override
+  Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    return TweenAnimationBuilder<int>(
+      tween: IntTween(begin: 0, end: value),
+      duration: reduceMotion
+          ? Duration.zero
+          : const Duration(milliseconds: 720),
+      curve: Curves.easeOutCubic,
+      builder: (context, current, _) => Text('$current', style: style),
+    );
+  }
+}
+
+class _AnimatedScoreGauge extends StatelessWidget {
+  const _AnimatedScoreGauge({required this.score});
+
+  final int score;
+
+  @override
+  Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: score / 100),
+      duration: reduceMotion
+          ? Duration.zero
+          : const Duration(milliseconds: 1150),
+      curve: Curves.easeOutCubic,
+      builder: (context, progress, _) {
+        return Stack(
+          alignment: Alignment.center,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(4),
+              child: CircularProgressIndicator(
+                value: progress,
+                strokeWidth: 8,
+                strokeCap: StrokeCap.round,
+                color: const Color(0xFFF4A51C),
+                backgroundColor: AppColors.line,
+              ),
+            ),
+            Text(
+              '${(score * progress).round()}',
+              style: TextStyle(
+                color: AppColors.text,
+                fontSize: 24,
+                fontWeight: FontWeight.w900,
+                height: 1,
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

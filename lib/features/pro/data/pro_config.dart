@@ -1,6 +1,11 @@
-import 'package:card_app/features/pro/domain/pro_models.dart';
+import 'package:cardfi/features/pro/domain/pro_models.dart';
 
 abstract final class ProConfig {
+  static const referralProgramEnabled = bool.fromEnvironment(
+    'ENABLE_PRO_REFERRALS',
+    defaultValue: false,
+  );
+
   static const billingEnabled = bool.fromEnvironment(
     'ENABLE_PRO_BILLING',
     defaultValue: false,
@@ -39,6 +44,11 @@ abstract final class ProConfig {
   static const billAnalysisPath = String.fromEnvironment(
     'PRO_BILL_ANALYSIS_PATH',
     defaultValue: '/api/pro/bill-analysis',
+  );
+
+  static const applicationAssistantPath = String.fromEnvironment(
+    'PRO_APPLICATION_ASSISTANT_PATH',
+    defaultValue: '/api/pro/application-assistant',
   );
 
   static const manageSubscriptionUrl = String.fromEnvironment(

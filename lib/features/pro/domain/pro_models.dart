@@ -132,4 +132,7 @@ class ProServiceConfiguration {
 
   bool matchesProducts({required String monthly, required String yearly}) =>
       monthlyProductId == monthly && yearlyProductId == yearly;
+
+  bool canLoadEntitlements({required String monthly, required String yearly}) =>
+      enabled && matchesProducts(monthly: monthly, yearly: yearly);
 }

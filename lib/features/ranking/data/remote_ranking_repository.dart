@@ -1,6 +1,8 @@
-import 'package:card_app/core/network/api_client.dart';
-import 'package:card_app/features/ranking/domain/local_article.dart';
-import 'package:card_app/features/ranking/domain/ranking_data.dart';
+import 'package:cardfi/core/network/api_client.dart';
+import 'package:cardfi/features/ranking/domain/local_article.dart';
+import 'package:cardfi/features/ranking/domain/ranking_data.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 
 class RemoteRankingRepository {
   RemoteRankingRepository(this._apiClient);
@@ -91,8 +93,11 @@ class RemoteRankingRepository {
     final json = jsonObject(await _apiClient.get('/api/user-rankings'));
     return UserRankingDashboard(
       periodLabel: json['periodLabel']?.toString() ?? '本月',
-      methodology: json['methodology']?.toString() ?? '按贡献活跃度排序；会员身份不参与计分。',
+      methodology: json['methodology']?.toString() ?? '按贡献与活跃度综合排序；会员身份不参与计分。',
       updatedAt: DateTime.tryParse(json['updatedAt']?.toString() ?? ''),
+      // The public leaderboard is intentionally capped. Keeping the limit in
+      // the data layer also prevents an oversized response from making the
+      // mobile ranking screen unnecessarily heavy.
       items: jsonList(json['items'] ?? const [], label: '卡友榜')
           .map((value) {
             final item = jsonObject(value, label: '卡友排行项');
@@ -111,6 +116,7 @@ class RemoteRankingRepository {
               isCurrentUser: item['isCurrentUser'] == true,
             );
           })
+          .take(20)
           .toList(growable: false),
     );
   }
@@ -155,16 +161,44 @@ class RemoteRankingRepository {
     );
   }
 
-  Future<List<ArticleFeedItem>> loadArticles() async {
-    final json = jsonObject(await _apiClient.get('/api/articles'));
+  Future<List<ArticleFeedItem>> loadArticles({Locale? locale}) async {
+    final json = jsonObject(
+      await _apiClient.get(
+        '/api/articles',
+        query: {
+          'platform': _contentPlatform,
+          if (locale != null) 'locale': locale.toLanguageTag(),
+        },
+        headers: locale == null
+            ? null
+            : {'accept-language': locale.toLanguageTag()},
+      ),
+    );
     return jsonList(json['items'] ?? const [], label: '文章列表')
-        .map((value) => _articleFromJson(jsonObject(value, label: '文章')))
+        .map(
+          (value) =>
+              _articleFromJson(jsonObject(value, label: '文章'), locale: locale),
+        )
         .toList(growable: false);
   }
 
-  Future<ArticleFeedItem> loadArticle(String slug) async {
-    final json = jsonObject(await _apiClient.get('/api/articles/$slug'));
-    return _articleFromJson(jsonObject(json['item'], label: '文章详情'));
+  Future<ArticleFeedItem> loadArticle(String slug, {Locale? locale}) async {
+    final json = jsonObject(
+      await _apiClient.get(
+        '/api/articles/$slug',
+        query: {
+          'platform': _contentPlatform,
+          if (locale != null) 'locale': locale.toLanguageTag(),
+        },
+        headers: locale == null
+            ? null
+            : {'accept-language': locale.toLanguageTag()},
+      ),
+    );
+    return _articleFromJson(
+      jsonObject(json['item'], label: '文章详情'),
+      locale: locale,
+    );
   }
 
   Future<void> recordArticleView(String slug) async {
@@ -175,10 +209,22 @@ class RemoteRankingRepository {
     await _apiClient.post('/api/articles/$slug/like');
   }
 
-  ArticleFeedItem _articleFromJson(Map<String, dynamic> json) {
+  String get _contentPlatform {
+    if (kIsWeb) return 'h5';
+    return switch (defaultTargetPlatform) {
+      TargetPlatform.android => 'android',
+      TargetPlatform.iOS => 'ios',
+      _ => 'h5',
+    };
+  }
+
+  ArticleFeedItem _articleFromJson(
+    Map<String, dynamic> json, {
+    Locale? locale,
+  }) {
     final slug = json['slug']?.toString() ?? '';
-    final raw = json['rawContent']?.toString() ?? '';
-    final bodyHtml = json['bodyHtml']?.toString() ?? '';
+    final raw = _localizedText(json, 'rawContent', locale);
+    final bodyHtml = _localizedText(json, 'bodyHtml', locale);
     final markdown = bodyHtml.trim().isNotEmpty
         ? _htmlToMarkdown(bodyHtml)
         : raw.trim();
@@ -189,13 +235,19 @@ class RemoteRankingRepository {
         .toList(growable: false);
     final feedCategory = switch (json['category']?.toString()) {
       'benefit' => ArticleFeedCategory.benefit,
+      'global-account' || 'global_account' => ArticleFeedCategory.globalAccount,
       'open-card' => ArticleFeedCategory.openCard,
+      'community-tip' ||
+      'community_tip' ||
+      'tip' => ArticleFeedCategory.communityTip,
       _ => ArticleFeedCategory.news,
     };
     final category = switch (feedCategory) {
       ArticleFeedCategory.news => '行业资讯',
+      ArticleFeedCategory.globalAccount => '全球账户',
       ArticleFeedCategory.benefit => '权益指南',
       ArticleFeedCategory.openCard => '开卡攻略',
+      ArticleFeedCategory.communityTip => '卡友技巧',
     };
     final coverPath = json['coverImageUrl']?.toString() ?? '';
     return ArticleFeedItem(
@@ -204,13 +256,13 @@ class RemoteRankingRepository {
         // 远端文章的详情、浏览和点赞接口均以 slug 定位。
         id: slug,
         category: category,
-        title: json['title']?.toString() ?? '',
-        summary: json['summary']?.toString() ?? '',
+        title: _localizedText(json, 'title', locale),
+        summary: _localizedText(json, 'summary', locale),
         body: paragraphs.isEmpty
-            ? [json['summary']?.toString() ?? '']
+            ? [_localizedText(json, 'summary', locale)]
             : paragraphs,
         tags: jsonList(
-          json['tags'] ?? const [],
+          _localizedValue(json, 'tags', locale) ?? const [],
           label: '文章标签',
         ).map((value) => value.toString()).toList(growable: false),
         publishedLabel: _dateLabel(json['publishedAt']?.toString()),
@@ -224,7 +276,11 @@ class RemoteRankingRepository {
         markdown: markdown.isEmpty ? null : markdown,
         inviteCode: _nullableText(json['inviteCode']),
         inviteUrl: _nullableText(json['inviteUrl']),
-        author: _nullableText(json['author']),
+        author: _nullableText(_localizedValue(json, 'author', locale)),
+        isCommunityTip: feedCategory == ArticleFeedCategory.communityTip,
+        verifiedLabel: _nullableText(
+          _localizedValue(json, 'verifiedLabel', locale) ?? json['verifiedAt'],
+        ),
       ),
       coverImageUrl: coverPath.isEmpty
           ? null
@@ -234,6 +290,39 @@ class RemoteRankingRepository {
       category: feedCategory,
     );
   }
+
+  Object? _localizedValue(
+    Map<String, dynamic> value,
+    String field,
+    Locale? locale,
+  ) {
+    final language = _translationLocale(locale);
+    if (language == null || language == 'zh') return value[field];
+    final translations = value['translations'];
+    if (translations is Map && translations[language] is Map) {
+      final translated = (translations[language] as Map)[field];
+      if (translated != null) return translated;
+    }
+    if (language == 'en') {
+      return value['${field}En'] ?? value['${field}_en'] ?? value[field];
+    }
+    return value[field];
+  }
+
+  String? _translationLocale(Locale? locale) {
+    if (locale == null) return null;
+    if (locale.languageCode == 'zh' &&
+        (locale.countryCode == 'HK' || locale.countryCode == 'TW')) {
+      return 'zh-Hant';
+    }
+    return locale.languageCode;
+  }
+
+  String _localizedText(
+    Map<String, dynamic> value,
+    String field,
+    Locale? locale,
+  ) => _localizedValue(value, field, locale)?.toString() ?? '';
 
   String _htmlToMarkdown(String source) {
     var value = source;

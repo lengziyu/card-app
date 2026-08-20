@@ -1,10 +1,11 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:card_app/core/network/api_client.dart';
-import 'package:card_app/core/network/api_exception.dart';
-import 'package:card_app/features/pro/data/pro_config.dart';
-import 'package:card_app/features/pro/domain/bill_analysis.dart';
+import 'package:cardfi/core/network/api_client.dart';
+import 'package:cardfi/core/network/api_exception.dart';
+import 'package:cardfi/core/privacy/ai_data_consent.dart';
+import 'package:cardfi/features/pro/data/pro_config.dart';
+import 'package:cardfi/features/pro/domain/bill_analysis.dart';
 
 class BillAnalysisRepository {
   factory BillAnalysisRepository(
@@ -43,7 +44,11 @@ class BillAnalysisRepository {
       await _apiClient.post(
         ProConfig.billAnalysisPath,
         headers: {'authorization': 'Bearer $token'},
-        body: {'mimeType': mimeType, 'imageBase64': base64Encode(imageBytes)},
+        body: {
+          'mimeType': mimeType,
+          'imageBase64': base64Encode(imageBytes),
+          'aiDataConsent': AiDataConsent.payload(AiDataConsentKind.billVision),
+        },
         timeout: const Duration(seconds: 45),
       ),
       label: '账单分析',

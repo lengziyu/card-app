@@ -1,8 +1,9 @@
-import 'package:card_app/core/theme/app_colors.dart';
-import 'package:card_app/core/widgets/app_feedback.dart';
-import 'package:card_app/features/catalog/domain/card_summary.dart';
-import 'package:card_app/features/catalog/widgets/catalog_card_row.dart';
-import 'package:card_app/core/localization/localized_text.dart';
+import 'package:cardfi/core/theme/app_colors.dart';
+import 'package:cardfi/core/widgets/app_feedback.dart';
+import 'package:cardfi/core/widgets/premium_motion.dart';
+import 'package:cardfi/features/catalog/domain/card_summary.dart';
+import 'package:cardfi/features/catalog/widgets/catalog_card_row.dart';
+import 'package:cardfi/core/localization/localized_text.dart';
 import 'package:flutter/material.dart' hide Text;
 
 enum CardSearchMode { market, add }
@@ -33,11 +34,22 @@ class CardSearchPage extends StatefulWidget {
 
 class _CardSearchPageState extends State<CardSearchPage> {
   final _controller = TextEditingController();
+  final _focusNode = FocusNode();
   String _query = '';
+  bool _searchFocused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode.addListener(
+      () => setState(() => _searchFocused = _focusNode.hasFocus),
+    );
+  }
 
   @override
   void dispose() {
     _controller.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -87,44 +99,49 @@ class _CardSearchPageState extends State<CardSearchPage> {
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 22, 20, 14),
-          child: TextField(
-            key: Key('catalog-search-field'),
-            controller: _controller,
-            autofocus: true,
-            textInputAction: TextInputAction.search,
-            onChanged: (value) => setState(() => _query = value),
-            style: TextStyle(color: AppColors.text),
-            decoration: InputDecoration(
-              hintText: '搜索卡片名称或发行方',
-              hintStyle: TextStyle(color: AppColors.textMuted),
-              prefixIcon: Icon(
-                Icons.search_rounded,
-                color: AppColors.textMuted,
-              ),
-              suffixIcon: _query.isEmpty
-                  ? null
-                  : IconButton(
-                      key: Key('clear-search'),
-                      onPressed: () {
-                        _controller.clear();
-                        setState(() => _query = '');
-                      },
-                      tooltip: '清空搜索',
-                      icon: Icon(Icons.close_rounded),
-                    ),
-              filled: true,
-              fillColor: AppColors.glass,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(18),
-                borderSide: BorderSide(color: AppColors.line),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(18),
-                borderSide: BorderSide(color: AppColors.line),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(18),
-                borderSide: BorderSide(color: AppColors.violet),
+          child: BeamBorder(
+            active: _searchFocused || _query.isNotEmpty,
+            radius: 18,
+            child: TextField(
+              key: Key('catalog-search-field'),
+              controller: _controller,
+              focusNode: _focusNode,
+              autofocus: true,
+              textInputAction: TextInputAction.search,
+              onChanged: (value) => setState(() => _query = value),
+              style: TextStyle(color: AppColors.text),
+              decoration: InputDecoration(
+                hintText: '搜索卡片名称或发行方',
+                hintStyle: TextStyle(color: AppColors.textMuted),
+                prefixIcon: Icon(
+                  Icons.search_rounded,
+                  color: AppColors.textMuted,
+                ),
+                suffixIcon: _query.isEmpty
+                    ? null
+                    : IconButton(
+                        key: Key('clear-search'),
+                        onPressed: () {
+                          _controller.clear();
+                          setState(() => _query = '');
+                        },
+                        tooltip: '清空搜索',
+                        icon: Icon(Icons.close_rounded),
+                      ),
+                filled: true,
+                fillColor: AppColors.glass,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(18),
+                  borderSide: BorderSide(color: AppColors.line),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(18),
+                  borderSide: BorderSide(color: AppColors.line),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(18),
+                  borderSide: BorderSide(color: AppColors.violet),
+                ),
               ),
             ),
           ),

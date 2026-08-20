@@ -1,7 +1,7 @@
 import 'dart:convert';
 
-import 'package:card_app/core/network/api_client.dart';
-import 'package:card_app/features/auth/data/auth_account_repository.dart';
+import 'package:cardfi/core/network/api_client.dart';
+import 'package:cardfi/features/auth/data/auth_account_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';

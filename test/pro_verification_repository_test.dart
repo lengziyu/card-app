@@ -1,8 +1,8 @@
 import 'dart:convert';
 
-import 'package:card_app/core/network/api_client.dart';
-import 'package:card_app/features/pro/data/pro_verification_repository.dart';
-import 'package:card_app/features/pro/domain/pro_models.dart';
+import 'package:cardfi/core/network/api_client.dart';
+import 'package:cardfi/features/pro/data/pro_verification_repository.dart';
+import 'package:cardfi/features/pro/domain/pro_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -33,6 +33,13 @@ void main() {
     expect(configuration.enabled, isTrue);
     expect(configuration.appStoreEnabled, isTrue);
     expect(configuration.googlePlayEnabled, isFalse);
+    expect(
+      configuration.canLoadEntitlements(
+        monthly: 'cn.lengziyu.cardapp.pro.monthly',
+        yearly: 'cn.lengziyu.cardapp.pro.yearly',
+      ),
+      isTrue,
+    );
     expect(
       configuration.matchesProducts(
         monthly: 'cn.lengziyu.cardapp.pro.monthly',

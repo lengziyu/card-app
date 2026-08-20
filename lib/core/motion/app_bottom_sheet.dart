@@ -1,4 +1,4 @@
-import 'package:card_app/core/motion/motion_tokens.dart';
+import 'package:cardfi/core/motion/motion_tokens.dart';
 import 'package:flutter/material.dart';
 
 typedef AppSheetBuilder =

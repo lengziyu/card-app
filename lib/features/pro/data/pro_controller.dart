@@ -1,10 +1,10 @@
 import 'dart:async';
 
-import 'package:card_app/core/network/api_exception.dart';
-import 'package:card_app/core/network/api_client.dart';
-import 'package:card_app/features/pro/data/pro_config.dart';
-import 'package:card_app/features/pro/data/pro_verification_repository.dart';
-import 'package:card_app/features/pro/domain/pro_models.dart';
+import 'package:cardfi/core/network/api_exception.dart';
+import 'package:cardfi/core/network/api_client.dart';
+import 'package:cardfi/features/pro/data/pro_config.dart';
+import 'package:cardfi/features/pro/data/pro_verification_repository.dart';
+import 'package:cardfi/features/pro/domain/pro_models.dart';
 import 'package:flutter/foundation.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 
@@ -47,7 +47,9 @@ class ProController extends ChangeNotifier {
   bool restoring = false;
   bool storeAvailable = false;
   bool serviceAvailable = false;
+  bool entitlementServiceAvailable = false;
   String? message;
+  int activationCelebrationVersion = 0;
 
   bool get billingEnabled => ProConfig.billingEnabled;
   bool get accountConnected => _accessToken?.isNotEmpty == true;
@@ -105,20 +107,25 @@ class ProController extends ChangeNotifier {
         );
       }
 
-      if (ProConfig.billingEnabled) {
-        await _refreshAccountContext();
+      // Entitlements are authoritative server state even when this build does
+      // not expose store billing (for example, internal admin-granted access).
+      await _refreshAccountContext();
+      if (accountConnected) {
         await _loadServiceConfiguration();
-
-        if (serviceAvailable && accountConnected) {
-          try {
-            _setEntitlement(
-              await _verification.loadEntitlement(accessToken: _accessToken!),
-            );
-          } catch (_) {
-            message = '暂时无法刷新 Pro 权益，请稍后重试。';
-          }
+      }
+      if (entitlementServiceAvailable && accountConnected) {
+        try {
+          _setEntitlement(
+            await _verification.loadEntitlement(accessToken: _accessToken!),
+          );
+        } on ApiException catch (error) {
+          message = error.message;
+        } catch (_) {
+          message = '暂时无法刷新 Pro 权益，请稍后重试。';
         }
+      }
 
+      if (ProConfig.billingEnabled) {
         // Drain everything received while account and backend state were
         // loading. New events remain queued until this loop is empty.
         while (_queuedPurchases.isNotEmpty) {
@@ -219,15 +226,15 @@ class ProController extends ChangeNotifier {
 
   Future<void> refreshEntitlement() async {
     await _refreshAccountContext();
-    await _loadServiceConfiguration();
-    if (!serviceAvailable) {
-      message = 'Pro 服务端尚未开放。';
-      notifyListeners();
-      return;
-    }
     if (!accountConnected) {
       _setEntitlement(const ProEntitlement.free());
       message = '请先登录后刷新 Pro 权益。';
+      notifyListeners();
+      return;
+    }
+    await _loadServiceConfiguration();
+    if (!entitlementServiceAvailable) {
+      message = 'Pro 服务端尚未开放。';
       notifyListeners();
       return;
     }
@@ -238,6 +245,8 @@ class ProController extends ChangeNotifier {
       _setEntitlement(
         await _verification.loadEntitlement(accessToken: _accessToken!),
       );
+    } on ApiException catch (error) {
+      message = error.message;
     } catch (_) {
       message = 'Pro 权益刷新失败，请稍后重试。';
     } finally {
@@ -264,7 +273,13 @@ class ProController extends ChangeNotifier {
       for (final offer in ProConfig.offers)
         if (_products[offer.productId] case final product?)
           offer.copyWith(
-            title: product.title,
+            // Keep the app-owned plan label as the source of truth. StoreKit
+            // can temporarily return a title in the storefront's fallback
+            // language (or an availability placeholder) while subscription
+            // localizations are propagating. Price and currency must still
+            // come from StoreKit, but showing that raw title would leak mixed
+            // language or placeholder copy into the purchase UI.
+            title: offer.title,
             price: product.price,
             currencyCode: product.currencyCode,
             available: true,
@@ -314,11 +329,15 @@ class ProController extends ChangeNotifier {
       return;
     }
     try {
+      final wasActive = isActive;
       final result = await _verification.verify(
         purchase: purchase,
         accessToken: _accessToken!,
       );
       if (result.valid) _setEntitlement(result.entitlement);
+      if (result.valid && !wasActive && isActive) {
+        activationCelebrationVersion++;
+      }
       purchasePending = false;
       restoring = false;
       message = switch ((result.valid, entitlement.isActive)) {
@@ -387,7 +406,7 @@ class ProController extends ChangeNotifier {
         ),
       );
       notifyListeners();
-      if (serviceAvailable && accountConnected) {
+      if (entitlementServiceAvailable && accountConnected) {
         unawaited(refreshEntitlement());
       }
     });
@@ -403,13 +422,13 @@ class ProController extends ChangeNotifier {
   }
 
   Future<void> _loadServiceConfiguration() async {
-    if (!ProConfig.billingEnabled) {
-      serviceAvailable = false;
-      return;
-    }
     try {
       final configuration = await _verification.loadConfiguration();
       final productsMatch = configuration.matchesProducts(
+        monthly: ProConfig.monthlyProductId,
+        yearly: ProConfig.yearlyProductId,
+      );
+      entitlementServiceAvailable = configuration.canLoadEntitlements(
         monthly: ProConfig.monthlyProductId,
         yearly: ProConfig.yearlyProductId,
       );
@@ -420,14 +439,19 @@ class ProController extends ChangeNotifier {
         _ => false,
       };
       serviceAvailable =
-          configuration.enabled && productsMatch && currentStoreAvailable;
+          configuration.enabled &&
+          productsMatch &&
+          (!ProConfig.billingEnabled || currentStoreAvailable);
       if (configuration.enabled && !productsMatch) {
         message = '客户端与服务端的 Pro 商品配置不一致。';
-      } else if (configuration.enabled && !currentStoreAvailable) {
+      } else if (ProConfig.billingEnabled &&
+          configuration.enabled &&
+          !currentStoreAvailable) {
         message = '当前平台的 Pro 验单服务尚未配置。';
       }
     } catch (_) {
       serviceAvailable = false;
+      entitlementServiceAvailable = false;
       message = '暂时无法确认 Pro 服务状态。';
     }
   }

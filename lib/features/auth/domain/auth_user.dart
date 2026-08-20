@@ -4,12 +4,22 @@ class AuthUser {
     required this.email,
     required this.displayName,
     required this.emailVerified,
+    this.avatarUrl,
   });
 
   final String id;
   final String? email;
   final String? displayName;
   final bool emailVerified;
+  final String? avatarUrl;
+
+  AuthUser copyWith({String? displayName, String? avatarUrl}) => AuthUser(
+    id: id,
+    email: email,
+    displayName: displayName ?? this.displayName,
+    emailVerified: emailVerified,
+    avatarUrl: avatarUrl ?? this.avatarUrl,
+  );
 
   String get profileName {
     final name = displayName?.trim();

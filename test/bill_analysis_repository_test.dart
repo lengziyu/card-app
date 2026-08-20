@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:card_app/core/network/api_client.dart';
-import 'package:card_app/core/network/api_exception.dart';
-import 'package:card_app/features/pro/data/bill_analysis_repository.dart';
+import 'package:cardfi/core/network/api_client.dart';
+import 'package:cardfi/core/network/api_exception.dart';
+import 'package:cardfi/features/pro/data/bill_analysis_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -98,6 +98,11 @@ void main() {
     expect(captured.headers['authorization'], 'Bearer short-lived-token');
     expect(body['mimeType'], 'image/png');
     expect(body['imageBase64'], base64Encode(bytes));
+    expect(body['aiDataConsent'], {
+      'granted': true,
+      'version': '2026-08-18',
+      'provider': 'openai',
+    });
     expect(analysis.extraction.provider, 'MEXC');
     expect(analysis.extraction.original.label, '25 CNY');
     expect(analysis.extraction.exchangeRates, hasLength(2));

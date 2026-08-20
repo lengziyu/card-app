@@ -15,6 +15,7 @@
 - 稳定币数据支持 Pro 长周期区间（90 天与全部历史），免费版保留 7 天和 30 天；
 - Pro 工作区已实现规则关注、保存的对比方案、离线公开资料包和透明的卡包资料评分；
 - Pro 消费账单分析已提供截图选择、明确的隐私确认、结构化 AI 提取和服务端确定性费率计算；原图不写入账单记录，市场基准损耗在可靠数据源接入前不展示数值；
+- AI 选卡与 AI 开卡准备已统一为 Pro 入口；开卡准备客户端已实现引导式条件确认、敏感文本阻断、结构化清单与可追溯来源展示；
 - 离线详情可在网络失败时回退使用，但不会缓存邀请码或跳转链接，避免绕过服务端公开开关；
 - 工作区云同步接口已预留，只同步关注项与对比方案，离线资料只保存在本机；
 - App 启动时先监听未完成交易，再加载账号、服务端和商品状态，避免冷启动漏单；
@@ -38,6 +39,7 @@ flutter run --dart-define-from-file=config/pro.local.json
 | 参数 | 用途 |
 | --- | --- |
 | `ENABLE_PRO_BILLING` | 是否连接系统应用内购买 |
+| `ENABLE_PRO_REFERRALS` | 是否展示邀请奖励入口；App Store 审核包默认保持 `false` |
 | `PRO_MONTHLY_PRODUCT_ID` | 月度订阅商品 ID |
 | `PRO_YEARLY_PRODUCT_ID` | 年度订阅商品 ID |
 | `PRO_CONFIG_PATH` | 服务端公开 Pro 配置与可用性路径 |
@@ -45,6 +47,7 @@ flutter run --dart-define-from-file=config/pro.local.json
 | `PRO_ENTITLEMENT_PATH` | 当前账号权益查询路径 |
 | `PRO_WORKSPACE_PATH` | Pro 工作区同步路径 |
 | `PRO_BILL_ANALYSIS_PATH` | Pro 消费账单分析路径 |
+| `PRO_APPLICATION_ASSISTANT_PATH` | Pro AI 开卡准备路径 |
 | `PRO_MANAGE_SUBSCRIPTION_URL` | 可选的订阅管理链接；为空时使用 Apple / Google 官方入口 |
 | `PRO_TERMS_URL` | 上线前必须配置的会员服务条款 HTTPS 地址 |
 | `PRO_PRIVACY_URL` | 上线前必须配置的隐私政策 HTTPS 地址 |
@@ -66,6 +69,8 @@ Flutter 已接入 Supabase 邮箱认证：配置完成且邮箱验证通过后�
 `card.lengziyu.cn` 已新增隔离的 `/server/pro` 模块与以下接口，未修改 Vue H5 页面或现有 H5 登录行为。除验单与权益接口外，已实现仅限有效 Pro 访问的 `GET/PUT /api/pro/workspace` 与 `POST /api/pro/bill-analysis`。账单 AI 的产品范围、计算口径和隐私边界见 [`PRO_BILL_ANALYSIS.md`](PRO_BILL_ANALYSIS.md)；部署参数、账号 introspection 契约、Apple/Google/OpenAI 密钥配置与单实例存储限制见相邻项目的 `docs/PRO_SUBSCRIPTIONS.md`。
 
 服务端缺少账号、加密密钥或对应商店凭据时，`/api/pro/config` 会安全返回不可用，客户端不会发起购买。旧 H5 会话令牌不能访问 Pro 权益接口。
+
+AI 开卡准备的 Flutter 客户端与接口契约已完成，但 `/api/pro/application-assistant` 服务端尚未在本 Flutter 仓库中实现。正式启用前必须在独立 API 服务完成 Pro 权益复核、项目文章优先检索、发行方官方域名白名单与 `no-store` 响应，详见 [`AI_APPLICATION_ASSISTANT.md`](AI_APPLICATION_ASSISTANT.md)。AI 选卡服务也必须在服务端补上同等的有效 Pro 权益校验。
 
 ## 服务端接口契约
 

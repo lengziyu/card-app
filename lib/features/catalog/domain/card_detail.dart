@@ -1,4 +1,4 @@
-import 'package:card_app/features/catalog/domain/card_summary.dart';
+import 'package:cardfi/features/catalog/domain/card_summary.dart';
 
 enum DetailFeatureIcon { wallet, shield, payments, globe }
 
@@ -52,11 +52,26 @@ class DetailFeature {
   final String text;
 }
 
-class FeeLine {
-  const FeeLine({required this.label, required this.value});
+/// A long-form usage, cashback, or funding rule shown outside the compact
+/// benefit-card grid so that its content can wrap naturally.
+class DetailRule {
+  const DetailRule({
+    required this.label,
+    required this.value,
+    required this.icon,
+  });
 
   final String label;
   final String value;
+  final DetailFeatureIcon icon;
+}
+
+class FeeLine {
+  const FeeLine({required this.label, required this.value, this.note});
+
+  final String label;
+  final String value;
+  final String? note;
 }
 
 class CardDetail {
@@ -67,11 +82,15 @@ class CardDetail {
     required this.funding,
     required this.availability,
     required this.features,
+    this.rules = const [],
     required this.fees,
     required this.kycNote,
     required this.paymentChannels,
     required this.sourceLabel,
     required this.note,
+    this.rating,
+    this.reviewCount,
+    this.supportedCurrencies = const [],
     this.chinaKyc,
     this.inviteCode,
     this.inviteUrl,
@@ -83,11 +102,18 @@ class CardDetail {
   final String funding;
   final String availability;
   final List<DetailFeature> features;
+  final List<DetailRule> rules;
   final List<FeeLine> fees;
   final String kycNote;
   final Set<PaymentChannel> paymentChannels;
   final String sourceLabel;
   final String note;
+
+  /// Public rating summary curated with the card detail. A missing value means
+  /// the source does not publish enough information to display a score.
+  final double? rating;
+  final int? reviewCount;
+  final List<String> supportedCurrencies;
   final ChinaKycInfo? chinaKyc;
   final String? inviteCode;
   final String? inviteUrl;

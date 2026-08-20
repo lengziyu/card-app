@@ -1,11 +1,10 @@
 import 'dart:ui';
 
-import 'package:card_app/core/theme/app_colors.dart';
-import 'package:card_app/features/catalog/domain/card_summary.dart';
-import 'package:card_app/features/catalog/widgets/card_artwork.dart';
-import 'package:card_app/features/catalog/widgets/catalog_card_row.dart';
-import 'package:card_app/features/home/domain/card_layout_calculator.dart';
-import 'package:card_app/features/home/domain/card_stack_mode.dart';
+import 'package:cardfi/core/theme/app_colors.dart';
+import 'package:cardfi/features/catalog/domain/card_summary.dart';
+import 'package:cardfi/features/catalog/widgets/card_artwork.dart';
+import 'package:cardfi/features/catalog/widgets/catalog_card_row.dart';
+import 'package:cardfi/features/home/domain/card_stack_mode.dart';
 import 'package:flutter/material.dart';
 
 class WalletCardItem extends StatefulWidget {
@@ -14,12 +13,13 @@ class WalletCardItem extends StatefulWidget {
     required this.mode,
     required this.selected,
     required this.elevation,
-    required this.focusDepth,
+    required this.aspectRatio,
     required this.onLongPressStart,
     required this.onLongPressMoveUpdate,
     required this.onLongPressEnd,
     required this.onLongPressCancel,
     required this.onTap,
+    this.focusDepth = 0,
     this.onTapWithGeometry,
     this.sharedContentHidden = false,
     super.key,
@@ -29,6 +29,10 @@ class WalletCardItem extends StatefulWidget {
   final CardStackMode mode;
   final bool selected;
   final double elevation;
+  final double aspectRatio;
+
+  /// 离视觉焦点的层数（0 为选中卡）。聚焦模式据此做逐层的轻微模糊
+  /// 与浅蒙层，表达景深；0 时完全不加处理。
   final double focusDepth;
   final GestureLongPressStartCallback onLongPressStart;
   final GestureLongPressMoveUpdateCallback onLongPressMoveUpdate;
@@ -72,22 +76,12 @@ class _WalletCardItemState extends State<WalletCardItem> {
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
     final tint = Color(widget.card.tint);
     final shadowOpacity = AppColors.isDark ? .22 : .1;
-    final cardFilter = _cardColorFilter(
-      mode: widget.mode,
-      visualDepth: widget.focusDepth,
-    );
-    final blurSigma = _cardBlurSigma(
-      mode: widget.mode,
-      visualDepth: widget.focusDepth,
-    );
-    final veilStrength = _cardVeilStrength(
-      mode: widget.mode,
-      visualDepth: widget.focusDepth,
-    );
-    final artwork = ColorFiltered(
-      colorFilter: cardFilter,
-      child: CardArtwork(card: widget.card, alignment: Alignment.topCenter),
-    );
+    final depth = widget.focusDepth.clamp(0.0, 3.5).toDouble();
+    // 逐层高斯模糊让焦点卡始终最清晰，远层自然退后。
+    final blurSigma = depth <= .04 ? 0.0 : depth * .95;
+    final veilStrength = (depth * (AppColors.isDark ? .07 : .12))
+        .clamp(0.0, .42)
+        .toDouble();
     return Semantics(
       button: true,
       selected: widget.selected,
@@ -112,7 +106,7 @@ class _WalletCardItemState extends State<WalletCardItem> {
           curve: Curves.easeOutCubic,
           child: AspectRatio(
             key: _surfaceKey,
-            aspectRatio: CardLayoutCalculator.cardAspectRatio,
+            aspectRatio: widget.aspectRatio,
             child: Opacity(
               opacity: widget.sharedContentHidden ? 0 : 1,
               child: RepaintBoundary(
@@ -146,7 +140,10 @@ class _WalletCardItemState extends State<WalletCardItem> {
                       fit: StackFit.expand,
                       children: [
                         if (blurSigma == 0)
-                          artwork
+                          CardArtwork(
+                            card: widget.card,
+                            alignment: Alignment.topCenter,
+                          )
                         else
                           ImageFiltered(
                             key: Key('home-card-blur-${widget.card.id}'),
@@ -154,33 +151,17 @@ class _WalletCardItemState extends State<WalletCardItem> {
                               sigmaX: blurSigma,
                               sigmaY: blurSigma,
                             ),
-                            child: artwork,
+                            child: CardArtwork(
+                              card: widget.card,
+                              alignment: Alignment.topCenter,
+                            ),
                           ),
-                        if (widget.mode != CardStackMode.wallet)
+                        if (veilStrength > 0)
                           IgnorePointer(
-                            child: Opacity(
+                            child: ColoredBox(
                               key: Key('home-card-veil-${widget.card.id}'),
-                              opacity: veilStrength,
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topCenter,
-                                    end: Alignment.bottomCenter,
-                                    colors: [
-                                      Colors.white.withValues(
-                                        alpha: AppColors.isDark ? .32 : .72,
-                                      ),
-                                      Colors.white.withValues(
-                                        alpha: AppColors.isDark ? .22 : .5,
-                                      ),
-                                      Colors.white.withValues(
-                                        alpha: AppColors.isDark ? .13 : .28,
-                                      ),
-                                      Colors.white.withValues(alpha: 0),
-                                    ],
-                                    stops: const [0, .25, .82, 1],
-                                  ),
-                                ),
+                              color: Colors.white.withValues(
+                                alpha: veilStrength,
                               ),
                             ),
                           ),
@@ -218,79 +199,5 @@ class _WalletCardItemState extends State<WalletCardItem> {
         ),
       ),
     );
-  }
-
-  ColorFilter _cardColorFilter({
-    required CardStackMode mode,
-    required double visualDepth,
-  }) {
-    if (mode == CardStackMode.wallet || visualDepth <= .01) {
-      return const ColorFilter.mode(Colors.transparent, BlendMode.srcOver);
-    }
-    if (mode == CardStackMode.focus) {
-      final depth = visualDepth.clamp(0.0, 4.0);
-      final saturation = (1 - depth * .055).clamp(.78, .95).toDouble();
-      final lift = (depth * 6.5).clamp(0.0, 26.0).toDouble();
-      return ColorFilter.matrix(_saturationMatrix(saturation, lift));
-    }
-    final depth = visualDepth.clamp(0.0, 4.0);
-    final saturation = (1 - depth * .045).clamp(.82, .96).toDouble();
-    final lift = (depth * 5.75).clamp(0.0, 23.0).toDouble();
-    return ColorFilter.matrix(_saturationMatrix(saturation, lift));
-  }
-
-  double _cardBlurSigma({
-    required CardStackMode mode,
-    required double visualDepth,
-  }) {
-    if (mode == CardStackMode.wallet || visualDepth <= .01) return 0;
-    final depth = visualDepth.clamp(0.0, 4.0);
-    if (mode == CardStackMode.focus) {
-      // Focus mode uses a visibly stronger depth-of-field ramp: the nearest
-      // neighbour is already softened, while distant cards recede into the
-      // scene. Stack mode stays lighter so its compact card headers remain
-      // easy to identify.
-      return .28 + depth * .58;
-    }
-    return .18 + depth * .36;
-  }
-
-  double _cardVeilStrength({
-    required CardStackMode mode,
-    required double visualDepth,
-  }) {
-    if (mode == CardStackMode.wallet || visualDepth <= .01) return 0;
-    final depth = visualDepth.clamp(0.0, 4.0);
-    final base = mode == CardStackMode.focus ? .74 : .68;
-    return (depth * base).clamp(0.0, 1.0).toDouble();
-  }
-
-  List<double> _saturationMatrix(double saturation, double lift) {
-    final inverse = 1 - saturation;
-    const red = .213;
-    const green = .715;
-    const blue = .072;
-    return [
-      red * inverse + saturation,
-      green * inverse,
-      blue * inverse,
-      0,
-      lift,
-      red * inverse,
-      green * inverse + saturation,
-      blue * inverse,
-      0,
-      lift,
-      red * inverse,
-      green * inverse,
-      blue * inverse + saturation,
-      0,
-      lift,
-      0,
-      0,
-      0,
-      1,
-      0,
-    ];
   }
 }

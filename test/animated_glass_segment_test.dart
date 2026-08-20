@@ -1,5 +1,5 @@
-import 'package:card_app/core/theme/app_colors.dart';
-import 'package:card_app/features/shell/widgets/animated_glass_segment.dart';
+import 'package:cardfi/core/theme/app_colors.dart';
+import 'package:cardfi/features/shell/widgets/animated_glass_segment.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -43,6 +43,54 @@ void main() {
       Color(0x18798AAD),
     ]);
     expect((indicator.decoration as BoxDecoration).border, isNull);
+  });
+
+  testWidgets('primary tabs distinguish selection from reselection', (
+    tester,
+  ) async {
+    var selected = 0;
+    var reselectionCount = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 320,
+              child: StatefulBuilder(
+                builder: (context, setState) => AnimatedGlassSegment<int>(
+                  items: const [
+                    GlassSegmentItem(
+                      value: 0,
+                      label: '热门榜',
+                      key: Key('tab-ranking'),
+                    ),
+                    GlassSegmentItem(
+                      value: 1,
+                      label: '卡友榜',
+                      key: Key('tab-users'),
+                    ),
+                  ],
+                  selected: selected,
+                  onChanged: (value) => setState(() => selected = value),
+                  onReselected: (_) => reselectionCount++,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('tab-users')));
+    await tester.pumpAndSettle();
+    expect(selected, 1);
+    expect(reselectionCount, 0);
+
+    await tester.tap(find.byKey(const Key('tab-users')));
+    await tester.pump();
+    expect(selected, 1);
+    expect(reselectionCount, 1);
   });
 
   testWidgets('light secondary tabs have layered floating shadows', (

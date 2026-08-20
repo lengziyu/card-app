@@ -1,20 +1,24 @@
-import 'package:card_app/core/motion/app_bottom_sheet.dart';
-import 'package:card_app/core/motion/app_haptics.dart';
-import 'package:card_app/core/motion/motion_tokens.dart';
-import 'package:card_app/core/motion/motion_widgets.dart';
-import 'package:card_app/core/motion/staggered_reveal.dart';
-import 'package:card_app/core/theme/app_colors.dart';
-import 'package:card_app/core/widgets/app_feedback.dart';
-import 'package:card_app/features/catalog/domain/card_detail.dart';
-import 'package:card_app/features/catalog/domain/card_summary.dart';
-import 'package:card_app/features/catalog/widgets/interactive_card_artwork.dart';
-import 'package:card_app/features/catalog/widgets/global_account_cover.dart';
-import 'package:card_app/features/pro/widgets/pro_crown_badge.dart';
-import 'package:card_app/features/shell/widgets/sticky_page_header.dart';
+import 'dart:async';
+import 'dart:ui';
+
+import 'package:cardfi/core/motion/app_bottom_sheet.dart';
+import 'package:cardfi/core/motion/app_haptics.dart';
+import 'package:cardfi/core/motion/motion_tokens.dart';
+import 'package:cardfi/core/motion/motion_widgets.dart';
+import 'package:cardfi/core/motion/staggered_reveal.dart';
+import 'package:cardfi/core/theme/app_colors.dart';
+import 'package:cardfi/core/widgets/app_feedback.dart';
+import 'package:cardfi/features/catalog/domain/card_detail.dart';
+import 'package:cardfi/features/catalog/domain/card_summary.dart';
+import 'package:cardfi/features/catalog/widgets/interactive_card_artwork.dart';
+import 'package:cardfi/features/catalog/widgets/global_account_cover.dart';
+import 'package:cardfi/features/pro/widgets/pro_crown_badge.dart';
+import 'package:cardfi/features/shell/widgets/sticky_page_header.dart';
 import 'package:flutter/foundation.dart';
-import 'package:card_app/core/localization/localized_text.dart';
+import 'package:cardfi/core/localization/localized_text.dart';
 import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class CardPreviewPage extends StatefulWidget {
@@ -29,11 +33,13 @@ class CardPreviewPage extends StatefulWidget {
     required this.onCorrection,
     required this.onCompare,
     required this.onViewSimilar,
+    this.onOpenApplicationAssistant,
     this.watched = false,
     this.onWatchChanged,
     this.usingOfflineFallback = false,
     this.onRetry,
     this.entranceAnimation,
+    this.isPro = false,
     super.key,
   });
 
@@ -47,11 +53,13 @@ class CardPreviewPage extends StatefulWidget {
   final VoidCallback onCorrection;
   final VoidCallback onCompare;
   final VoidCallback onViewSimilar;
+  final VoidCallback? onOpenApplicationAssistant;
   final bool watched;
   final ValueChanged<bool>? onWatchChanged;
   final bool usingOfflineFallback;
   final VoidCallback? onRetry;
   final Animation<double>? entranceAnimation;
+  final bool isPro;
 
   @override
   State<CardPreviewPage> createState() => _CardPreviewPageState();
@@ -124,7 +132,12 @@ class CardPreviewSkeleton extends StatelessWidget {
           ),
           Align(
             alignment: Alignment.topCenter,
-            child: _StickyDetailNavigation(onBack: onBack, onMore: () {}),
+            child: _StickyDetailNavigation(
+              onBack: onBack,
+              onMore: () {},
+              onEffects: null,
+              isPro: false,
+            ),
           ),
         ],
       ),
@@ -170,20 +183,71 @@ class _SkeletonBox extends StatelessWidget {
 }
 
 class _CardPreviewPageState extends State<CardPreviewPage> {
+  static const _effectPreferenceKey = 'card-app-card-visual-effect-v1';
   CardVisualEffect _effect = CardVisualEffect.particle;
+  bool _effectChangedLocally = false;
+  bool _effectMenuOpen = false;
   late final ScrollController _scrollController;
   final ValueNotifier<double> _headerProgress = ValueNotifier(0);
+  final ValueNotifier<bool> _cardStageTickerEnabled = ValueNotifier(true);
 
   @override
   void initState() {
     super.initState();
     _scrollController = ScrollController()..addListener(_updateHeaderProgress);
+    unawaited(_restoreEffect());
   }
+
+  Future<void> _restoreEffect() async {
+    final preferences = await SharedPreferences.getInstance();
+    final savedName = preferences.getString(_effectPreferenceKey);
+    final savedEffect = CardVisualEffect.values
+        .where((effect) => effect.name == savedName)
+        .firstOrNull;
+    if (!mounted ||
+        _effectChangedLocally ||
+        savedEffect == null ||
+        (_isProEffect(savedEffect) && !widget.isPro)) {
+      return;
+    }
+    setState(() => _effect = savedEffect);
+  }
+
+  void _selectEffect(CardVisualEffect effect) {
+    setState(() {
+      _effect = effect;
+      _effectChangedLocally = true;
+      _effectMenuOpen = false;
+    });
+    unawaited(
+      SharedPreferences.getInstance().then(
+        (preferences) =>
+            preferences.setString(_effectPreferenceKey, effect.name),
+      ),
+    );
+  }
+
+  bool _isProEffect(CardVisualEffect effect) => switch (effect) {
+    CardVisualEffect.magnetic ||
+    CardVisualEffect.liquidMetal ||
+    CardVisualEffect.spaceFold ||
+    CardVisualEffect.shards ||
+    CardVisualEffect.scanReveal ||
+    CardVisualEffect.foldReveal ||
+    CardVisualEffect.photoEtch ||
+    CardVisualEffect.liquidCast ||
+    CardVisualEffect.bandAlign => true,
+    _ => false,
+  };
 
   void _updateHeaderProgress() {
     final next = (_scrollController.offset / 190).clamp(0.0, 1.0);
     if ((next - _headerProgress.value).abs() > .002) {
       _headerProgress.value = next;
+    }
+    final stageVisible = _scrollController.offset < 420;
+    if (_cardStageTickerEnabled.value != stageVisible) {
+      _cardStageTickerEnabled.value = stageVisible;
     }
   }
 
@@ -193,6 +257,7 @@ class _CardPreviewPageState extends State<CardPreviewPage> {
       ..removeListener(_updateHeaderProgress)
       ..dispose();
     _headerProgress.dispose();
+    _cardStageTickerEnabled.dispose();
     super.dispose();
   }
 
@@ -221,29 +286,16 @@ class _CardPreviewPageState extends State<CardPreviewPage> {
   }
 
   Future<void> _showActions() async {
-    await showAppDraggableSheet<void>(
+    await showAppBottomSheet<void>(
       context: context,
-      initialSize: .72,
-      minSize: .46,
-      maxSize: .94,
       barrierAlpha: .42,
-      builder: (sheetContext, scrollController) => _DetailActionSheet(
+      builder: (sheetContext) => _DetailActionSheet(
         card: widget.card,
-        scrollController: scrollController,
         added: widget.added,
         favorite: widget.favorite,
-        effect: _effect,
         onFavorite: () {
           Navigator.pop(sheetContext);
           widget.onFavoriteChanged(!widget.favorite);
-        },
-        onEffect: (effect) {
-          Navigator.pop(sheetContext);
-          setState(() => _effect = effect);
-          _showMessage(
-            '${_effectLabel(effect)}已启用',
-            tone: AppNoticeTone.success,
-          );
         },
         onViewSimilar: () {
           Navigator.pop(sheetContext);
@@ -253,6 +305,12 @@ class _CardPreviewPageState extends State<CardPreviewPage> {
           Navigator.pop(sheetContext);
           widget.onCompare();
         },
+        onOpenApplicationAssistant: widget.onOpenApplicationAssistant == null
+            ? null
+            : () {
+                Navigator.pop(sheetContext);
+                widget.onOpenApplicationAssistant!();
+              },
         watched: widget.watched,
         onWatch: widget.onWatchChanged == null
             ? null
@@ -277,13 +335,6 @@ class _CardPreviewPageState extends State<CardPreviewPage> {
       ),
     );
   }
-
-  String _effectLabel(CardVisualEffect effect) => switch (effect) {
-    CardVisualEffect.particle => '粒子效果',
-    CardVisualEffect.flame => '火焰效果',
-    CardVisualEffect.ice => '冰霜效果',
-    CardVisualEffect.none => '无效果',
-  };
 
   Widget _reveal(
     Widget child, {
@@ -322,13 +373,18 @@ class _CardPreviewPageState extends State<CardPreviewPage> {
               (card.isGlobalAccount ? 40 : 112) + bottomInset,
             ),
             children: [
-              _reveal(
-                card.isGlobalAccount
-                    ? _GlobalAccountStage(card: card)
-                    : _DetailCardStage(card: card, effect: _effect),
-                begin: .82,
-                end: 1,
-                offset: 0,
+              ValueListenableBuilder<bool>(
+                valueListenable: _cardStageTickerEnabled,
+                builder: (context, enabled, child) =>
+                    TickerMode(enabled: enabled, child: child!),
+                child: _reveal(
+                  card.isGlobalAccount
+                      ? _GlobalAccountStage(card: card, effect: _effect)
+                      : _DetailCardStage(card: card, effect: _effect),
+                  begin: .82,
+                  end: 1,
+                  offset: 0,
+                ),
               ),
               SizedBox(height: card.isGlobalAccount ? 18 : 25),
               _reveal(
@@ -359,13 +415,30 @@ class _CardPreviewPageState extends State<CardPreviewPage> {
                 end: .76,
                 offset: 8,
               ),
+              if (detail.rating != null) ...[
+                const SizedBox(height: 14),
+                _reveal(
+                  _CardRating(
+                    rating: detail.rating!,
+                    reviewCount: detail.reviewCount,
+                  ),
+                  begin: .54,
+                  end: .78,
+                  offset: 8,
+                ),
+              ],
               SizedBox(height: 16),
               _reveal(
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    for (final tag in detail.tags)
+                    // KYC is presented in its dedicated detail block below;
+                    // keeping it out of the title tags avoids repeating a
+                    // broad verification label such as “KYC：完整验证”.
+                    for (final tag in detail.tags.where(
+                      (tag) => !tag.startsWith('KYC：'),
+                    ))
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
@@ -397,6 +470,8 @@ class _CardPreviewPageState extends State<CardPreviewPage> {
                           ),
                         ),
                       ),
+                    if (card.isGlobalAccount && card.isCryptoRelated)
+                      const _CryptoRelatedBadge(),
                   ],
                 ),
                 begin: .56,
@@ -412,13 +487,22 @@ class _CardPreviewPageState extends State<CardPreviewPage> {
                 ),
               ],
               SizedBox(height: 18),
-              _reveal(_BasicInfo(detail: detail), begin: .6, end: .84),
-              SizedBox(height: 16),
               _reveal(
-                _KycBlock(card: card, detail: detail),
-                begin: .64,
-                end: .88,
+                _BasicInfo(card: card, detail: detail),
+                begin: .6,
+                end: .84,
               ),
+              // 全球账户的中国大陆资格包含地区、主体与材料条件，不能和
+              // 通用证件标签并列成两张 KYC 卡。若接口还没有该专门资料，
+              // 才回退到通用 KYC 展示。
+              if (!card.isGlobalAccount || detail.chinaKyc == null) ...[
+                SizedBox(height: 16),
+                _reveal(
+                  _KycBlock(card: card, detail: detail),
+                  begin: .64,
+                  end: .88,
+                ),
+              ],
               if (card.isGlobalAccount && detail.chinaKyc != null) ...[
                 const SizedBox(height: 16),
                 _reveal(
@@ -433,14 +517,61 @@ class _CardPreviewPageState extends State<CardPreviewPage> {
                   end: .9,
                 ),
               ],
-              SizedBox(height: 22),
-              _reveal(
-                _FeatureBlock(features: detail.features),
-                begin: .68,
-                end: .92,
-              ),
-              SizedBox(height: 28),
-              _reveal(_FeeBlock(detail: detail), begin: .7, end: .94),
+              if (card.isGlobalAccount &&
+                  detail.supportedCurrencies.isNotEmpty) ...[
+                const SizedBox(height: 18),
+                _reveal(
+                  _SupportedCurrenciesBlock(
+                    currencies: detail.supportedCurrencies,
+                  ),
+                  begin: .67,
+                  end: .91,
+                ),
+              ],
+              if (detail.features.isNotEmpty) ...[
+                SizedBox(height: 22),
+                _reveal(
+                  _FeatureBlock(features: detail.features),
+                  begin: .68,
+                  end: .92,
+                ),
+              ],
+              if (detail.rules.isNotEmpty) ...[
+                SizedBox(height: 22),
+                _reveal(
+                  _RuleBlock(
+                    key: const Key('detail-usage-rules'),
+                    title: '使用与返现规则',
+                    rules: detail.rules,
+                  ),
+                  begin: .69,
+                  end: .93,
+                ),
+              ],
+              if (detail.fees.isNotEmpty) ...[
+                SizedBox(height: 28),
+                _reveal(_FeeBlock(detail: detail), begin: .7, end: .94),
+              ],
+              if (detail.fees.any((fee) => fee.note?.isNotEmpty == true)) ...[
+                SizedBox(height: 20),
+                _reveal(
+                  _RuleBlock(
+                    key: const Key('detail-fee-notes'),
+                    title: '费用说明',
+                    rules: [
+                      for (final fee in detail.fees)
+                        if (fee.note?.isNotEmpty == true)
+                          DetailRule(
+                            label: fee.label,
+                            value: fee.note!,
+                            icon: DetailFeatureIcon.payments,
+                          ),
+                    ],
+                  ),
+                  begin: .71,
+                  end: .95,
+                ),
+              ],
               if (detail.paymentChannels.isNotEmpty) ...[
                 SizedBox(height: 20),
                 _reveal(
@@ -474,6 +605,9 @@ class _CardPreviewPageState extends State<CardPreviewPage> {
             _StickyDetailNavigation(
               onBack: onBack,
               onMore: _showActions,
+              onEffects: () =>
+                  setState(() => _effectMenuOpen = !_effectMenuOpen),
+              isPro: widget.isPro,
               title: card.name,
               progress: _headerProgress,
             ),
@@ -482,64 +616,104 @@ class _CardPreviewPageState extends State<CardPreviewPage> {
             offset: -8,
           ),
         ),
+        if (_effectMenuOpen) ...[
+          Positioned.fill(
+            child: GestureDetector(
+              key: const Key('detail-effects-menu-barrier'),
+              behavior: HitTestBehavior.translucent,
+              onTap: () => setState(() => _effectMenuOpen = false),
+            ),
+          ),
+          Positioned(
+            top: topInset + 66,
+            right: 80,
+            child: _CardEffectMenu(
+              selected: _effect,
+              isPro: widget.isPro,
+              onSelected: _selectEffect,
+              onProLocked: (label) => AppNotice.info(
+                context,
+                '开通 Pro 后即可使用$label效果。',
+                title: 'Pro 专属效果',
+              ),
+            ),
+          ),
+        ],
         if (!card.isGlobalAccount)
           Align(
             alignment: Alignment.bottomCenter,
             child: _reveal(
-              Padding(
-                padding: EdgeInsets.fromLTRB(24, 8, 24, 12 + bottomInset),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 342),
-                  child: SizedBox(
-                    width: double.infinity,
-                    height: 58,
-                    child: MotionPressEffect(
-                      scale: MotionTokens.pressedScale,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: added
-                                ? const [Color(0xFFEF5B66), Color(0xFFDA4351)]
-                                : const [Color(0xFF252B38), Color(0xFF0F1421)],
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      AppColors.canvas.withValues(alpha: 0),
+                      AppColors.canvas.withValues(alpha: .92),
+                      AppColors.canvas,
+                    ],
+                    stops: const [0, .35, 1],
+                  ),
+                ),
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(24, 24, 24, 12 + bottomInset),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 342),
+                    child: SizedBox(
+                      width: double.infinity,
+                      height: 58,
+                      child: MotionPressEffect(
+                        scale: MotionTokens.pressedScale,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: added
+                                  ? const [Color(0xFFEF5B66), Color(0xFFDA4351)]
+                                  : const [
+                                      Color(0xFF252B38),
+                                      Color(0xFF0F1421),
+                                    ],
+                            ),
+                            borderRadius: BorderRadius.circular(29),
+                            boxShadow: [
+                              BoxShadow(
+                                color:
+                                    (added
+                                            ? const Color(0xFFDA4351)
+                                            : const Color(0xFF141C30))
+                                        .withValues(alpha: 0.25),
+                                blurRadius: 20,
+                                offset: const Offset(0, 10),
+                              ),
+                            ],
                           ),
-                          borderRadius: BorderRadius.circular(29),
-                          boxShadow: [
-                            BoxShadow(
-                              color:
-                                  (added
-                                          ? const Color(0xFFDA4351)
-                                          : const Color(0xFF141C30))
-                                      .withValues(alpha: 0.25),
-                              blurRadius: 20,
-                              offset: const Offset(0, 10),
+                          child: FilledButton(
+                            key: Key('detail-toggle-card'),
+                            onPressed: added
+                                ? _showActions
+                                : () {
+                                    AppHaptics.selection();
+                                    onAddedChanged(true);
+                                  },
+                            style: FilledButton.styleFrom(
+                              backgroundColor: Colors.transparent,
+                              foregroundColor: Colors.white,
+                              shadowColor: Colors.transparent,
+                              textStyle: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w900,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(29),
+                              ),
                             ),
-                          ],
-                        ),
-                        child: FilledButton(
-                          key: Key('detail-toggle-card'),
-                          onPressed: added
-                              ? _showActions
-                              : () {
-                                  AppHaptics.selection();
-                                  onAddedChanged(true);
-                                },
-                          style: FilledButton.styleFrom(
-                            backgroundColor: Colors.transparent,
-                            foregroundColor: Colors.white,
-                            shadowColor: Colors.transparent,
-                            textStyle: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w900,
+                            child: MotionStateIcon(
+                              stateKey: added,
+                              child: Text(added ? '已加入我的卡片 · 管理' : '加入我的卡片'),
                             ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(29),
-                            ),
-                          ),
-                          child: MotionStateIcon(
-                            stateKey: added,
-                            child: Text(added ? '已在本机卡包 · 管理' : '添加到本机卡包'),
                           ),
                         ),
                       ),
@@ -662,9 +836,10 @@ class _DetailCardStage extends StatelessWidget {
 }
 
 class _GlobalAccountStage extends StatelessWidget {
-  const _GlobalAccountStage({required this.card});
+  const _GlobalAccountStage({required this.card, required this.effect});
 
   final CardSummary card;
+  final CardVisualEffect effect;
 
   @override
   Widget build(BuildContext context) {
@@ -685,9 +860,11 @@ class _GlobalAccountStage extends StatelessWidget {
             ),
           ],
         ),
-        child: ClipRRect(
+        child: InteractiveCardArtwork(
+          card: card,
+          effect: effect,
           borderRadius: BorderRadius.circular(14),
-          child: GlobalAccountCover(card: card),
+          artwork: GlobalAccountCover(card: card),
         ),
       ),
     );
@@ -723,12 +900,16 @@ class _StickyDetailNavigation extends StatelessWidget {
   const _StickyDetailNavigation({
     required this.onBack,
     required this.onMore,
+    required this.onEffects,
+    required this.isPro,
     this.title,
     this.progress,
   });
 
   final VoidCallback onBack;
   final VoidCallback onMore;
+  final VoidCallback? onEffects;
+  final bool isPro;
   final String? title;
   final ValueListenable<double>? progress;
 
@@ -742,6 +923,8 @@ class _StickyDetailNavigation extends StatelessWidget {
         child: _DetailNavigation(
           onBack: onBack,
           onMore: onMore,
+          onEffects: onEffects,
+          isPro: isPro,
           title: title,
           progress: progress,
         ),
@@ -784,12 +967,16 @@ class _DetailNavigation extends StatelessWidget {
   const _DetailNavigation({
     required this.onBack,
     required this.onMore,
+    required this.onEffects,
+    required this.isPro,
     this.title,
     this.progress,
   });
 
   final VoidCallback onBack;
   final VoidCallback onMore;
+  final VoidCallback? onEffects;
+  final bool isPro;
   final String? title;
   final ValueListenable<double>? progress;
 
@@ -825,6 +1012,32 @@ class _DetailNavigation extends StatelessWidget {
                   ),
                 ),
         ),
+        if (onEffects != null) ...[
+          const SizedBox(width: 8),
+          MotionPressEffect(
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                IconButton.filledTonal(
+                  key: const Key('detail-effects'),
+                  onPressed: onEffects,
+                  tooltip: '卡面效果',
+                  icon: const Icon(Icons.auto_awesome_rounded),
+                  style: IconButton.styleFrom(
+                    minimumSize: const Size(48, 48),
+                    foregroundColor: AppColors.text,
+                    backgroundColor: AppColors.glassStrong,
+                    side: BorderSide(color: AppColors.line),
+                  ),
+                ),
+                // The effect library is a Pro surface. Keep its crown visible
+                // after unlocking too, rather than making the entry disappear.
+                const Positioned(right: -3, top: -4, child: ProCrownBadge()),
+              ],
+            ),
+          ),
+        ],
+        const SizedBox(width: 8),
         MotionPressEffect(
           child: IconButton.filledTonal(
             key: const Key('detail-more'),
@@ -844,17 +1057,229 @@ class _DetailNavigation extends StatelessWidget {
   }
 }
 
+class _CardEffectMenu extends StatelessWidget {
+  const _CardEffectMenu({
+    required this.selected,
+    required this.isPro,
+    required this.onSelected,
+    required this.onProLocked,
+  });
+
+  static const _items = <(CardVisualEffect, IconData, String, bool)>[
+    (CardVisualEffect.particle, Icons.auto_awesome_rounded, '粒子', false),
+    (CardVisualEffect.flame, Icons.local_fire_department_rounded, '火焰', false),
+    (CardVisualEffect.none, Icons.visibility_off_outlined, '关闭', false),
+    (CardVisualEffect.fireworks, Icons.celebration_rounded, '烟花', false),
+    (CardVisualEffect.prism, Icons.diamond_outlined, '棱镜', false),
+    (
+      CardVisualEffect.supernova,
+      Icons.auto_awesome_motion_rounded,
+      '超新星',
+      false,
+    ),
+    (CardVisualEffect.magnetic, Icons.blur_circular_rounded, '磁场', true),
+    (CardVisualEffect.liquidMetal, Icons.water_drop_outlined, '液态金属', true),
+    (CardVisualEffect.spaceFold, Icons.all_inclusive_rounded, '空间折叠', true),
+    (CardVisualEffect.shards, Icons.grid_view_rounded, '碎片归位', true),
+    (CardVisualEffect.scanReveal, Icons.document_scanner_rounded, '扫描显影', true),
+    (CardVisualEffect.foldReveal, Icons.view_carousel_rounded, '折页展开', true),
+    (CardVisualEffect.photoEtch, Icons.gesture_rounded, '光刻成型', true),
+    (CardVisualEffect.liquidCast, Icons.water_rounded, '液态凝固', true),
+    (
+      CardVisualEffect.bandAlign,
+      Icons.align_horizontal_center_rounded,
+      '条带校准',
+      true,
+    ),
+  ];
+
+  final CardVisualEffect selected;
+  final bool isPro;
+  final ValueChanged<CardVisualEffect> onSelected;
+  final ValueChanged<String> onProLocked;
+
+  @override
+  Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: reduceMotion ? Duration.zero : MotionTokens.contentSwitch,
+      curve: MotionTokens.standardEnter,
+      builder: (context, value, child) => Opacity(
+        opacity: value.clamp(0, 1),
+        child: Transform.scale(
+          alignment: Alignment.topRight,
+          scale:
+              MotionTokens.incomingScale +
+              (1 - MotionTokens.incomingScale) * value,
+          child: child,
+        ),
+      ),
+      child: DecoratedBox(
+        key: const Key('detail-effects-menu'),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.isDark
+                  ? const Color(0x55000000)
+                  : const Color(0x2256678D),
+              blurRadius: 26,
+              offset: const Offset(0, 12),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+            child: Container(
+              width: 232,
+              padding: const EdgeInsets.fromLTRB(8, 9, 8, 8),
+              decoration: BoxDecoration(
+                color: AppColors.isDark
+                    ? const Color(0xEA272C3D)
+                    : const Color(0xF2F9FBFF),
+                border: Border.all(
+                  color: AppColors.isDark
+                      ? Colors.white.withValues(alpha: .18)
+                      : const Color(0x305C73FF),
+                ),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 7),
+                    child: Text(
+                      '卡面效果',
+                      style: TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  for (var row = 0; row < _items.length; row += 3) ...[
+                    Row(
+                      children: [
+                        for (final item in _items.skip(row).take(3))
+                          Expanded(
+                            child: _CardEffectMenuItem(
+                              effect: item.$1,
+                              icon: item.$2,
+                              label: item.$3,
+                              pro: item.$4,
+                              selected: selected == item.$1,
+                              locked: item.$4 && !isPro,
+                              onTap: () {
+                                if (item.$4 && !isPro) {
+                                  onProLocked(item.$3);
+                                  return;
+                                }
+                                onSelected(item.$1);
+                              },
+                            ),
+                          ),
+                      ],
+                    ),
+                    if (row + 3 < _items.length) const SizedBox(height: 3),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CardEffectMenuItem extends StatelessWidget {
+  const _CardEffectMenuItem({
+    required this.effect,
+    required this.icon,
+    required this.label,
+    required this.pro,
+    required this.selected,
+    required this.locked,
+    required this.onTap,
+  });
+
+  final CardVisualEffect effect;
+  final IconData icon;
+  final String label;
+  final bool pro;
+  final bool selected;
+  final bool locked;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => MotionPressEffect(
+    child: InkWell(
+      key: Key('detail-effect-${effect.name}'),
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(13),
+      child: AnimatedContainer(
+        duration: MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : MotionTokens.stateChange,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: selected
+              ? AppColors.violet.withValues(alpha: .18)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(13),
+          border: Border.all(
+            color: selected
+                ? AppColors.violet.withValues(alpha: .38)
+                : Colors.transparent,
+          ),
+        ),
+        child: Column(
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Icon(
+                  icon,
+                  color: selected ? AppColors.cyan : AppColors.textMuted,
+                  size: 19,
+                ),
+                if (pro)
+                  const Positioned(right: -10, top: -7, child: ProCrownBadge()),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: AppColors.text,
+                fontSize: 9.5,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
 class _DetailActionSheet extends StatelessWidget {
   const _DetailActionSheet({
     required this.card,
-    required this.scrollController,
     required this.added,
     required this.favorite,
-    required this.effect,
     required this.onFavorite,
-    required this.onEffect,
     required this.onViewSimilar,
     required this.onCompare,
+    required this.onOpenApplicationAssistant,
     required this.watched,
     required this.onWatch,
     required this.onOpenOfficial,
@@ -863,14 +1288,12 @@ class _DetailActionSheet extends StatelessWidget {
   });
 
   final CardSummary card;
-  final ScrollController scrollController;
   final bool added;
   final bool favorite;
-  final CardVisualEffect effect;
   final VoidCallback onFavorite;
-  final ValueChanged<CardVisualEffect> onEffect;
   final VoidCallback onViewSimilar;
   final VoidCallback onCompare;
+  final VoidCallback? onOpenApplicationAssistant;
   final bool watched;
   final VoidCallback? onWatch;
   final VoidCallback onOpenOfficial;
@@ -881,7 +1304,9 @@ class _DetailActionSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     return Container(
-      height: double.infinity,
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * .88,
+      ),
       margin: const EdgeInsets.fromLTRB(12, 0, 12, 10),
       padding: EdgeInsets.fromLTRB(16, 10, 16, 16 + bottomInset),
       decoration: BoxDecoration(
@@ -899,7 +1324,6 @@ class _DetailActionSheet extends StatelessWidget {
         ],
       ),
       child: SingleChildScrollView(
-        controller: scrollController,
         physics: const BouncingScrollPhysics(),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -938,162 +1362,384 @@ class _DetailActionSheet extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 10),
-            _ActionRow(
+            if (card.isGlobalAccount)
+              _GlobalAccountActionList(
+                watched: watched,
+                onWatch: onWatch,
+                onOpenOfficial: onOpenOfficial,
+                onCorrection: onCorrection,
+              )
+            else
+              _CardActionLayout(
+                added: added,
+                favorite: favorite,
+                onFavorite: onFavorite,
+                onViewSimilar: onViewSimilar,
+                onCompare: onCompare,
+                onOpenApplicationAssistant: onOpenApplicationAssistant,
+                watched: watched,
+                onWatch: onWatch,
+                onOpenOfficial: onOpenOfficial,
+                onCorrection: onCorrection,
+                onRemove: onRemove,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CardRating extends StatelessWidget {
+  const _CardRating({required this.rating, this.reviewCount});
+
+  final double rating;
+  final int? reviewCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final ratingLabel = rating == rating.roundToDouble()
+        ? rating.toStringAsFixed(0)
+        : rating.toStringAsFixed(1);
+    final reviews = reviewCount == null
+        ? ''
+        : ' (${_formatNumber(reviewCount!)})';
+    return Semantics(
+      label: reviewCount == null
+          ? '评分 $ratingLabel'
+          : '评分 $ratingLabel，共 $reviewCount 条评价',
+      child: Row(
+        key: const Key('detail-rating'),
+        children: [
+          const Icon(Icons.star_rounded, color: Color(0xFFFFB11A), size: 25),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Text(
+              '$ratingLabel$reviews',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: AppColors.textMuted,
+                fontSize: 17,
+                fontWeight: FontWeight.w900,
+                letterSpacing: -.2,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatNumber(int value) => value.toString().replaceAllMapped(
+    RegExp(r'\B(?=(\d{3})+(?!\d))'),
+    (_) => ',',
+  );
+}
+
+class _GlobalAccountActionList extends StatelessWidget {
+  const _GlobalAccountActionList({
+    required this.watched,
+    required this.onWatch,
+    required this.onOpenOfficial,
+    required this.onCorrection,
+  });
+
+  final bool watched;
+  final VoidCallback? onWatch;
+  final VoidCallback onOpenOfficial;
+  final VoidCallback onCorrection;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        _ActionRow(
+          key: const Key('detail-action-correction'),
+          icon: Icons.edit_note_rounded,
+          label: '提交信息纠正',
+          onTap: onCorrection,
+        ),
+        const SizedBox(height: 10),
+        _ActionRow(
+          key: const Key('detail-action-watch'),
+          icon: watched
+              ? Icons.notifications_active_rounded
+              : Icons.notifications_none_rounded,
+          label: watched ? '取消规则变更关注' : '关注规则变更',
+          onTap: onWatch,
+          pro: true,
+        ),
+        const SizedBox(height: 10),
+        _ActionRow(
+          key: const Key('detail-action-official'),
+          icon: Icons.open_in_new_rounded,
+          label: '打开官网',
+          onTap: onOpenOfficial,
+        ),
+      ],
+    );
+  }
+}
+
+class _CardActionLayout extends StatelessWidget {
+  const _CardActionLayout({
+    required this.added,
+    required this.favorite,
+    required this.onFavorite,
+    required this.onViewSimilar,
+    required this.onCompare,
+    required this.onOpenApplicationAssistant,
+    required this.watched,
+    required this.onWatch,
+    required this.onOpenOfficial,
+    required this.onCorrection,
+    required this.onRemove,
+  });
+
+  final bool added;
+  final bool favorite;
+  final VoidCallback onFavorite;
+  final VoidCallback onViewSimilar;
+  final VoidCallback onCompare;
+  final VoidCallback? onOpenApplicationAssistant;
+  final bool watched;
+  final VoidCallback? onWatch;
+  final VoidCallback onOpenOfficial;
+  final VoidCallback onCorrection;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final proActions = <Widget>[
+      if (onOpenApplicationAssistant != null)
+        _ActionTile(
+          key: const Key('detail-action-application-assistant'),
+          icon: Icons.auto_awesome_rounded,
+          label: 'AI 协助开卡',
+          onTap: onOpenApplicationAssistant,
+        ),
+      _ActionTile(
+        key: const Key('detail-action-compare'),
+        icon: Icons.compare_arrows_rounded,
+        label: '加入卡片对比',
+        onTap: onCompare,
+      ),
+      _ActionTile(
+        key: const Key('detail-action-watch'),
+        icon: watched
+            ? Icons.notifications_active_rounded
+            : Icons.notifications_none_rounded,
+        label: watched ? '取消规则关注' : '关注规则变更',
+        onTap: onWatch,
+        showProBadge: true,
+      ),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _ActionTileGrid(
+          children: [
+            _ActionTile(
               key: const Key('detail-action-favorite'),
               icon: favorite ? Icons.star_rounded : Icons.star_border_rounded,
               label: favorite ? '取消收藏' : '收藏卡片',
               onTap: onFavorite,
             ),
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.glassStrong,
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: AppColors.line),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '卡面效果',
-                    style: TextStyle(
-                      color: AppColors.textMuted,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      for (final item in const [
-                        (
-                          CardVisualEffect.particle,
-                          Icons.auto_awesome_rounded,
-                          '粒子',
-                        ),
-                        (
-                          CardVisualEffect.flame,
-                          Icons.local_fire_department_rounded,
-                          '火焰',
-                        ),
-                        (CardVisualEffect.ice, Icons.ac_unit_rounded, '冰霜'),
-                        (
-                          CardVisualEffect.none,
-                          Icons.visibility_off_outlined,
-                          '关闭',
-                        ),
-                      ])
-                        Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 3),
-                            child: MotionPressEffect(
-                              child: InkWell(
-                                key: Key('detail-effect-${item.$1.name}'),
-                                onTap: () => onEffect(item.$1),
-                                borderRadius: BorderRadius.circular(14),
-                                child: AnimatedContainer(
-                                  duration:
-                                      MediaQuery.disableAnimationsOf(context)
-                                      ? Duration.zero
-                                      : MotionTokens.stateChange,
-                                  curve: MotionTokens.standardEnter,
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 10,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: effect == item.$1
-                                        ? AppColors.violet.withValues(
-                                            alpha: 0.24,
-                                          )
-                                        : Colors.transparent,
-                                    borderRadius: BorderRadius.circular(14),
-                                    border: Border.all(
-                                      color: effect == item.$1
-                                          ? AppColors.violet.withValues(
-                                              alpha: 0.5,
-                                            )
-                                          : Colors.transparent,
-                                    ),
-                                  ),
-                                  child: Column(
-                                    children: [
-                                      Icon(
-                                        item.$2,
-                                        color: effect == item.$1
-                                            ? AppColors.cyan
-                                            : AppColors.textMuted,
-                                        size: 20,
-                                      ),
-                                      const SizedBox(height: 5),
-                                      Text(
-                                        item.$3,
-                                        style: TextStyle(
-                                          color: AppColors.text,
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w800,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-            _ActionRow(
+            _ActionTile(
               key: const Key('detail-action-similar'),
               icon: Icons.storefront_outlined,
-              label: '查看同类卡片',
+              label: '查看同类',
               onTap: onViewSimilar,
             ),
-            const SizedBox(height: 10),
-            _ActionRow(
-              key: const Key('detail-action-correction'),
-              icon: Icons.edit_note_rounded,
-              label: '提交信息纠正',
-              onTap: onCorrection,
-            ),
-            const SizedBox(height: 10),
-            _ActionRow(
-              key: const Key('detail-action-compare'),
-              icon: Icons.compare_arrows_rounded,
-              label: '加入卡片对比',
-              onTap: onCompare,
-              pro: true,
-            ),
-            const SizedBox(height: 10),
-            _ActionRow(
-              key: const Key('detail-action-watch'),
-              icon: watched
-                  ? Icons.notifications_active_rounded
-                  : Icons.notifications_none_rounded,
-              label: watched ? '取消规则变更关注' : '关注规则变更',
-              onTap: onWatch,
-              pro: true,
-            ),
-            const SizedBox(height: 10),
-            _ActionRow(
+            _ActionTile(
               key: const Key('detail-action-official'),
               icon: Icons.open_in_new_rounded,
               label: '打开官网',
               onTap: onOpenOfficial,
             ),
-            const SizedBox(height: 10),
-            _ActionRow(
-              key: const Key('detail-action-remove'),
-              icon: Icons.remove_circle_outline_rounded,
-              label: added ? '从我的卡片移除' : '尚未添加到我的卡片',
-              onTap: onRemove,
-              danger: true,
+            _ActionTile(
+              key: const Key('detail-action-correction'),
+              icon: Icons.edit_note_rounded,
+              label: '信息纠正',
+              onTap: onCorrection,
             ),
           ],
+        ),
+        const SizedBox(height: 14),
+        _ProActionGroup(children: proActions),
+        if (added && onRemove != null) ...[
+          const SizedBox(height: 14),
+          _ActionRow(
+            key: const Key('detail-action-remove'),
+            icon: Icons.remove_circle_outline_rounded,
+            label: '从我的卡片移除',
+            onTap: onRemove,
+            danger: true,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _ProActionGroup extends StatelessWidget {
+  const _ProActionGroup({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const Key('detail-action-pro-group'),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(
+          0xFFF4A51C,
+        ).withValues(alpha: AppColors.isDark ? .10 : .075),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: const Color(
+            0xFFF4A51C,
+          ).withValues(alpha: AppColors.isDark ? .26 : .20),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.tune_rounded, size: 20, color: AppColors.cyan),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '卡片工具',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: AppColors.text,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 2,
+                child: Text(
+                  '对比、AI 与规则管理',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.end,
+                  style: TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _ActionTileGrid(gap: 8, children: children),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionTileGrid extends StatelessWidget {
+  const _ActionTileGrid({required this.children, this.gap = 10});
+
+  final List<Widget> children;
+  final double gap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        for (var index = 0; index < children.length; index += 2) ...[
+          Row(
+            children: [
+              Expanded(child: children[index]),
+              if (index + 1 < children.length) ...[
+                SizedBox(width: gap),
+                Expanded(child: children[index + 1]),
+              ],
+            ],
+          ),
+          if (index + 2 < children.length) SizedBox(height: gap),
+        ],
+      ],
+    );
+  }
+}
+
+class _ActionTile extends StatelessWidget {
+  const _ActionTile({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.showProBadge = false,
+    super.key,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+  final bool showProBadge;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+    return MotionPressEffect(
+      enabled: enabled,
+      scale: MotionTokens.pressedScale,
+      child: Material(
+        color: AppColors.glassStrong,
+        borderRadius: BorderRadius.circular(15),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(15),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 58),
+            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(color: AppColors.line),
+            ),
+            child: Row(
+              children: [
+                MotionStateIcon(
+                  stateKey: icon,
+                  child: Icon(
+                    icon,
+                    size: 20,
+                    color: enabled ? AppColors.text : AppColors.textMuted,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    label,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: enabled ? AppColors.text : AppColors.textMuted,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      height: 1.18,
+                    ),
+                  ),
+                ),
+                if (showProBadge) ...[
+                  const SizedBox(width: 5),
+                  const ProCrownBadge(),
+                ],
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -1277,9 +1923,129 @@ class _InviteLine extends StatelessWidget {
   }
 }
 
-class _BasicInfo extends StatelessWidget {
-  const _BasicInfo({required this.detail});
+class _CryptoRelatedBadge extends StatelessWidget {
+  const _CryptoRelatedBadge();
 
+  @override
+  Widget build(BuildContext context) => Container(
+    key: const Key('detail-crypto-related-badge'),
+    height: 30,
+    padding: const EdgeInsets.only(left: 12, right: 2),
+    decoration: BoxDecoration(
+      color: const Color(0xFFFFB15C).withValues(alpha: .13),
+      borderRadius: BorderRadius.circular(999),
+      border: Border.all(color: const Color(0xFFFFB15C).withValues(alpha: .32)),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text(
+          '加密相关',
+          style: TextStyle(
+            color: Color(0xFFE58524),
+            fontSize: 12,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        IconButton(
+          key: const Key('detail-crypto-related-info'),
+          tooltip: '查看加密相关说明',
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints.tightFor(width: 28, height: 30),
+          visualDensity: VisualDensity.compact,
+          onPressed: () {
+            AppHaptics.selection();
+            showAppBottomSheet<void>(
+              context: context,
+              builder: (sheetContext) => const _CryptoRelatedInfoSheet(),
+            );
+          },
+          icon: const Icon(
+            Icons.info_outline_rounded,
+            color: Color(0xFFE58524),
+            size: 16,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _CryptoRelatedInfoSheet extends StatelessWidget {
+  const _CryptoRelatedInfoSheet();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    key: const Key('detail-crypto-related-sheet'),
+    decoration: BoxDecoration(
+      color: AppColors.surfaceRaised,
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      border: Border.all(color: AppColors.line),
+    ),
+    child: SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 10, 10, 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.textMuted.withValues(alpha: .45),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+            ),
+            Row(
+              children: [
+                const Icon(
+                  Icons.currency_bitcoin_rounded,
+                  color: Color(0xFFE58524),
+                  size: 21,
+                ),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Text(
+                    '加密相关',
+                    style: TextStyle(
+                      color: AppColors.text,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: '关闭',
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: Icon(Icons.close_rounded, color: AppColors.text),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '可能涉及数字资产价格、托管、链上转账及地区合规风险；不等同于存款账户，功能与资格以官方实时流程为准。',
+              style: TextStyle(
+                color: AppColors.textMuted,
+                fontSize: 14,
+                height: 1.55,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _BasicInfo extends StatelessWidget {
+  const _BasicInfo({required this.card, required this.detail});
+
+  final CardSummary card;
   final CardDetail detail;
 
   @override
@@ -1292,29 +2058,194 @@ class _BasicInfo extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: AppColors.line),
       ),
+      child: card.isGlobalAccount
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _MetaCell(label: '适用地区', value: detail.region),
+                Divider(height: 1, color: AppColors.line),
+                _MetaCell(label: '入金方式', value: detail.funding),
+                Divider(height: 1, color: AppColors.line),
+                _MetaCell(label: '开放状态', value: detail.availability),
+              ],
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _CompactMetaCell(
+                  label: '适用地区',
+                  value: detail.region,
+                  fullValueKey: const Key('detail-region-value'),
+                ),
+                if (card.cashbackRate.trim().isNotEmpty) ...[
+                  Divider(height: 1, color: AppColors.line),
+                  _CompactMetaCell(
+                    label: '返现概览',
+                    value: card.cashbackRate,
+                    maxLines: 2,
+                  ),
+                ],
+                Divider(height: 1, color: AppColors.line),
+                IntrinsicHeight(
+                  child: Row(
+                    key: const Key('detail-funding-availability'),
+                    children: [
+                      Expanded(
+                        child: _CompactMetaCell(
+                          label: '入金方式',
+                          value: detail.funding,
+                          maxLines: 2,
+                          fullValueKey: const Key('detail-funding-value'),
+                        ),
+                      ),
+                      VerticalDivider(width: 1, color: AppColors.line),
+                      Expanded(
+                        child: _CompactMetaCell(
+                          label: '开放状态',
+                          value: detail.availability,
+                          maxLines: 2,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
+}
+
+class _CompactMetaCell extends StatelessWidget {
+  const _CompactMetaCell({
+    required this.label,
+    required this.value,
+    this.maxLines = 3,
+    this.fullValueKey,
+  });
+
+  final String label;
+  final String value;
+  final int maxLines;
+  final Key? fullValueKey;
+
+  @override
+  Widget build(BuildContext context) {
+    final content = Padding(
+      padding: const EdgeInsets.fromLTRB(14, 11, 14, 12),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          _MetaCell(label: '适用地区', value: detail.region),
+          Text(
+            label,
+            style: TextStyle(
+              color: AppColors.textMuted,
+              fontSize: 10.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
           const SizedBox(height: 2),
-          Row(
-            children: [
-              Expanded(
-                child: _MetaCell(
-                  label: '入金方式',
-                  value: detail.funding,
-                  compact: true,
+          Text(
+            value,
+            maxLines: maxLines,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: AppColors.text,
+              fontSize: 12.5,
+              fontWeight: FontWeight.w800,
+              height: 1.25,
+            ),
+          ),
+        ],
+      ),
+    );
+    if (fullValueKey == null) return content;
+    return Semantics(
+      button: true,
+      label: '查看完整$label信息',
+      child: GestureDetector(
+        key: fullValueKey,
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          AppHaptics.selection();
+          showAppBottomSheet<void>(
+            context: context,
+            builder: (sheetContext) =>
+                _FullDetailValueSheet(label: label, value: value),
+          );
+        },
+        child: content,
+      ),
+    );
+  }
+}
+
+class _FullDetailValueSheet extends StatelessWidget {
+  const _FullDetailValueSheet({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const Key('detail-full-value-sheet'),
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * .62,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceRaised,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        border: Border.all(color: AppColors.line),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 36,
+            height: 4,
+            margin: const EdgeInsets.only(top: 10),
+            decoration: BoxDecoration(
+              color: AppColors.textMuted.withValues(alpha: .45),
+              borderRadius: BorderRadius.circular(999),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 8, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      color: AppColors.text,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: '关闭',
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: Icon(Icons.close_rounded, color: AppColors.text),
+                ),
+              ],
+            ),
+          ),
+          Divider(height: 1, color: AppColors.line),
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
+              child: SelectableText(
+                value,
+                style: TextStyle(
+                  color: AppColors.text,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  height: 1.55,
                 ),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _MetaCell(
-                  label: '开放状态',
-                  value: detail.availability,
-                  compact: true,
-                ),
-              ),
-            ],
+            ),
           ),
         ],
       ),
@@ -1323,15 +2254,10 @@ class _BasicInfo extends StatelessWidget {
 }
 
 class _MetaCell extends StatelessWidget {
-  const _MetaCell({
-    required this.label,
-    required this.value,
-    this.compact = false,
-  });
+  const _MetaCell({required this.label, required this.value});
 
   final String label;
   final String value;
-  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -1345,20 +2271,20 @@ class _MetaCell extends StatelessWidget {
             label,
             style: TextStyle(
               color: AppColors.textMuted,
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(height: 7),
+          const SizedBox(height: 6),
           Text(
             value,
-            maxLines: compact ? 2 : 3,
+            maxLines: 3,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: AppColors.text,
-              fontSize: compact ? 13 : 16,
+              fontSize: 14,
               fontWeight: FontWeight.w900,
-              height: 1.25,
+              height: 1.35,
             ),
           ),
         ],
@@ -1458,14 +2384,14 @@ class _ChinaKycBlock extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.location_city_rounded, color: color, size: 21),
+              Icon(Icons.location_city_rounded, color: color, size: 19),
               const SizedBox(width: 9),
               Expanded(
                 child: Text(
                   '中国大陆申请与 KYC',
                   style: TextStyle(
                     color: AppColors.text,
-                    fontSize: 18,
+                    fontSize: 16,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -1485,7 +2411,7 @@ class _ChinaKycBlock extends StatelessWidget {
             info.note,
             style: TextStyle(
               color: AppColors.textMuted,
-              fontSize: 12,
+              fontSize: 11.5,
               fontWeight: FontWeight.w700,
               height: 1.5,
             ),
@@ -1500,7 +2426,7 @@ class _ChinaKycBlock extends StatelessWidget {
                       : '官方来源 · 核验于 ${_dateLabel(info.checkedAt!)}',
                   style: TextStyle(
                     color: AppColors.textMuted,
-                    fontSize: 11,
+                    fontSize: 10.5,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -1544,7 +2470,7 @@ class _ChinaKycLine extends StatelessWidget {
           label,
           style: TextStyle(
             color: AppColors.textMuted,
-            fontSize: 11,
+            fontSize: 10.5,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -1553,9 +2479,9 @@ class _ChinaKycLine extends StatelessWidget {
           value,
           style: TextStyle(
             color: color ?? AppColors.text,
-            fontSize: 13,
+            fontSize: 12,
             fontWeight: FontWeight.w800,
-            height: 1.3,
+            height: 1.35,
           ),
         ),
       ],
@@ -1609,6 +2535,16 @@ class _PaymentBlock extends StatelessWidget {
 
   final Set<PaymentChannel> channels;
 
+  String _asset(PaymentChannel channel) => switch (channel) {
+    PaymentChannel.applePay => 'assets/payment-logos/apple-pay.png',
+    PaymentChannel.googlePay =>
+      AppColors.isDark
+          ? 'assets/payment-logos/google-pay-dark.png'
+          : 'assets/payment-logos/google-pay.png',
+    PaymentChannel.wechatPay => 'assets/payment-logos/wechat-pay.png',
+    PaymentChannel.alipay => 'assets/payment-logos/alipay.png',
+  };
+
   @override
   Widget build(BuildContext context) {
     return _DetailPanel(
@@ -1620,19 +2556,61 @@ class _PaymentBlock extends StatelessWidget {
         runSpacing: 10,
         children: [
           for (final channel in channels)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.07),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppColors.line),
-              ),
-              child: Text(
-                channel.label,
-                style: TextStyle(
-                  color: AppColors.text,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
+            Semantics(
+              label: channel.label,
+              child: Container(
+                key: Key('detail-payment-${channel.name}'),
+                constraints: const BoxConstraints(minHeight: 48),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  gradient: AppColors.isDark
+                      ? const LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [Color(0x8A3A4560), Color(0xD1181C28)],
+                        )
+                      : LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Colors.white.withValues(alpha: .34),
+                            Colors.white.withValues(alpha: .14),
+                          ],
+                        ),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: AppColors.isDark
+                        ? const Color(0x24C6D8FF)
+                        : Colors.white.withValues(alpha: .30),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.isDark
+                          ? const Color(0x3D050810)
+                          : const Color(0x160D1C42),
+                      blurRadius: AppColors.isDark ? 30 : 18,
+                      offset: const Offset(0, 7),
+                    ),
+                    if (AppColors.isDark)
+                      const BoxShadow(
+                        color: Color(0x14FFFFFF),
+                        blurRadius: 0,
+                        spreadRadius: 1,
+                        offset: Offset(0, 1),
+                      ),
+                  ],
+                ),
+                child: Image.asset(
+                  _asset(channel),
+                  height: 26,
+                  fit: BoxFit.contain,
+                  color: AppColors.isDark && channel == PaymentChannel.applePay
+                      ? Colors.white
+                      : null,
+                  colorBlendMode: BlendMode.srcIn,
                 ),
               ),
             ),
@@ -1641,6 +2619,155 @@ class _PaymentBlock extends StatelessWidget {
     );
   }
 }
+
+class _SupportedCurrenciesBlock extends StatelessWidget {
+  const _SupportedCurrenciesBlock({required this.currencies});
+
+  final List<String> currencies;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      key: const Key('detail-supported-currencies'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                '支持的具体货币',
+                style: TextStyle(
+                  color: AppColors.text,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            Text(
+              '${currencies.length}',
+              style: TextStyle(
+                color: AppColors.textMuted,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppColors.glass,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: AppColors.line),
+          ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              const gap = 8.0;
+              final itemWidth = (constraints.maxWidth - gap * 3) / 4;
+              return Wrap(
+                key: const Key('detail-currency-grid'),
+                spacing: gap,
+                runSpacing: gap,
+                children: [
+                  for (final currency in currencies)
+                    SizedBox(
+                      width: itemWidth,
+                      child: Container(
+                        key: Key('detail-currency-$currency'),
+                        padding: const EdgeInsets.symmetric(vertical: 7),
+                        decoration: BoxDecoration(
+                          color: AppColors.cyan.withValues(alpha: .10),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: AppColors.cyan.withValues(alpha: .20),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              _currencyFlag(currency),
+                              style: const TextStyle(fontSize: 14),
+                            ),
+                            const SizedBox(width: 5),
+                            Text(
+                              currency,
+                              style: TextStyle(
+                                color: AppColors.text,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: .2,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 9),
+        Text(
+          '币种能力会因注册地区、账户类型和审核结果不同，以官网及实际账户页面为准。',
+          style: TextStyle(
+            color: AppColors.textMuted,
+            fontSize: 11.5,
+            fontWeight: FontWeight.w700,
+            height: 1.45,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+String _currencyFlag(String currency) => switch (currency.toUpperCase()) {
+  'AED' => '🇦🇪',
+  'AUD' => '🇦🇺',
+  'BRL' => '🇧🇷',
+  'CAD' => '🇨🇦',
+  'CHF' => '🇨🇭',
+  'CLP' => '🇨🇱',
+  'CNY' => '🇨🇳',
+  'COP' => '🇨🇴',
+  'CZK' => '🇨🇿',
+  'DKK' => '🇩🇰',
+  'EGP' => '🇪🇬',
+  'EUR' => '🇪🇺',
+  'GBP' => '🇬🇧',
+  'HKD' => '🇭🇰',
+  'HUF' => '🇭🇺',
+  'IDR' => '🇮🇩',
+  'ILS' => '🇮🇱',
+  'INR' => '🇮🇳',
+  'ISK' => '🇮🇸',
+  'JPY' => '🇯🇵',
+  'KRW' => '🇰🇷',
+  'KZT' => '🇰🇿',
+  'MAD' => '🇲🇦',
+  'MXN' => '🇲🇽',
+  'MYR' => '🇲🇾',
+  'NOK' => '🇳🇴',
+  'NZD' => '🇳🇿',
+  'PHP' => '🇵🇭',
+  'PLN' => '🇵🇱',
+  'QAR' => '🇶🇦',
+  'RON' => '🇷🇴',
+  'RSD' => '🇷🇸',
+  'SAR' => '🇸🇦',
+  'SEK' => '🇸🇪',
+  'SGD' => '🇸🇬',
+  'THB' => '🇹🇭',
+  'TRY' => '🇹🇷',
+  'USD' => '🇺🇸',
+  'VND' => '🇻🇳',
+  'ZAR' => '🇿🇦',
+  _ => '💱',
+};
 
 class _FeatureBlock extends StatelessWidget {
   const _FeatureBlock({required this.features});
@@ -1738,6 +2865,82 @@ class _FeatureBlock extends StatelessWidget {
     DetailFeatureIcon.shield =>
       AppColors.isDark ? const Color(0xFFA28CFF) : const Color(0xFF7767FF),
   };
+}
+
+class _RuleBlock extends StatelessWidget {
+  const _RuleBlock({required this.title, required this.rules, super.key});
+
+  final String title;
+  final List<DetailRule> rules;
+
+  IconData _icon(DetailFeatureIcon icon) => switch (icon) {
+    DetailFeatureIcon.wallet => Icons.account_balance_wallet_outlined,
+    DetailFeatureIcon.shield => Icons.shield_outlined,
+    DetailFeatureIcon.payments => Icons.payments_outlined,
+    DetailFeatureIcon.globe => Icons.public_rounded,
+  };
+
+  Color _color(DetailFeatureIcon icon) => switch (icon) {
+    DetailFeatureIcon.wallet =>
+      AppColors.isDark ? const Color(0xFF8F96FF) : const Color(0xFF5F6DFF),
+    DetailFeatureIcon.payments =>
+      AppColors.isDark ? const Color(0xFFA98AFF) : const Color(0xFF8668FF),
+    DetailFeatureIcon.globe =>
+      AppColors.isDark ? const Color(0xFF67D4FF) : const Color(0xFF2DA9C7),
+    DetailFeatureIcon.shield =>
+      AppColors.isDark ? const Color(0xFFA28CFF) : const Color(0xFF7767FF),
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return _DetailPanel(
+      key: key,
+      title: title,
+      child: Column(
+        children: [
+          for (var index = 0; index < rules.length; index++) ...[
+            if (index > 0) Divider(height: 24, color: AppColors.line),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  _icon(rules[index].icon),
+                  color: _color(rules[index].icon),
+                  size: 20,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        rules[index].label,
+                        style: TextStyle(
+                          color: AppColors.textMuted,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        rules[index].value,
+                        style: TextStyle(
+                          color: AppColors.text,
+                          fontSize: 13,
+                          height: 1.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }
 
 class _FeeBlock extends StatelessWidget {
@@ -1844,7 +3047,7 @@ class _SourceBlock extends StatelessWidget {
                     ),
                     const SizedBox(height: 7),
                     Text(
-                      '公开资料整理，具体信息以发卡方为准。',
+                      '公开资料整理，具体信息以发卡方为准。如有错误、侵权或冒犯，可从更多操作提交更正或下架请求。',
                       style: TextStyle(
                         color: AppColors.textMuted,
                         fontSize: 11,

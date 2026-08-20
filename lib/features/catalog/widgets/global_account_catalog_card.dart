@@ -1,9 +1,10 @@
-import 'package:card_app/core/motion/pressable_scale.dart';
-import 'package:card_app/core/theme/app_colors.dart';
-import 'package:card_app/features/catalog/domain/card_summary.dart';
-import 'package:card_app/features/catalog/widgets/catalog_card_row.dart';
-import 'package:card_app/features/catalog/widgets/global_account_cover.dart';
-import 'package:card_app/core/localization/localized_text.dart';
+import 'package:cardfi/core/motion/pressable_scale.dart';
+import 'package:cardfi/core/localization/app_localizations.dart';
+import 'package:cardfi/core/theme/app_colors.dart';
+import 'package:cardfi/features/catalog/domain/card_summary.dart';
+import 'package:cardfi/features/catalog/widgets/catalog_card_row.dart';
+import 'package:cardfi/features/catalog/widgets/global_account_cover.dart';
+import 'package:cardfi/core/localization/localized_text.dart';
 import 'package:flutter/material.dart' hide Text;
 
 class GlobalAccountCatalogCard extends StatelessWidget {
@@ -24,6 +25,11 @@ class GlobalAccountCatalogCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final coverKey = GlobalKey();
     final titleKey = GlobalKey();
+    final localizations = AppLocalizations.of(context);
+    final transferCurrencies = card.transferCurrencies;
+    final transferCurrencyText = transferCurrencies.isEmpty
+        ? localizations.text('支持转账币种以官方实时页面为准')
+        : '${localizations.text('支持转账币种')}：${transferCurrencies.join(' · ')}';
 
     void handleTap() {
       final coverBox = coverKey.currentContext?.findRenderObject();
@@ -120,7 +126,7 @@ class GlobalAccountCatalogCard extends StatelessWidget {
             ),
             const SizedBox(height: 7),
             Text(
-              card.label.isEmpty ? '多币种账户服务' : card.label,
+              transferCurrencyText,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
@@ -140,7 +146,7 @@ class GlobalAccountCatalogCard extends StatelessWidget {
                 const SizedBox(width: 7),
                 Expanded(
                   child: Text(
-                    '仅供资料浏览 · 不加入本机卡包',
+                    '查看支持币种、收款能力与开户条件',
                     style: TextStyle(
                       color: AppColors.textMuted,
                       fontSize: 10.5,

@@ -1,9 +1,12 @@
 import 'dart:async';
 
-import 'package:card_app/core/theme/app_colors.dart';
-import 'package:card_app/core/widgets/app_feedback.dart';
-import 'package:card_app/features/auth/data/auth_controller.dart';
-import 'package:card_app/core/localization/localized_text.dart';
+import 'package:cardfi/core/theme/app_colors.dart';
+import 'package:cardfi/core/widgets/app_feedback.dart';
+import 'package:cardfi/core/motion/celebration_effects.dart';
+import 'package:cardfi/features/auth/data/auth_controller.dart';
+import 'package:cardfi/features/catalog/domain/card_summary.dart';
+import 'package:cardfi/core/localization/app_localizations.dart';
+import 'package:cardfi/core/localization/localized_text.dart';
 import 'package:flutter/material.dart' hide Text;
 
 enum AuthMode { login, register }
@@ -14,6 +17,9 @@ class AuthPage extends StatefulWidget {
     required this.mode,
     required this.onBack,
     required this.onModeChanged,
+    required this.celebrationCards,
+    this.referralEnabled = false,
+    this.onReferralCodeAccepted,
     super.key,
   });
 
@@ -21,6 +27,9 @@ class AuthPage extends StatefulWidget {
   final AuthController controller;
   final VoidCallback onBack;
   final ValueChanged<AuthMode> onModeChanged;
+  final List<CardSummary> celebrationCards;
+  final bool referralEnabled;
+  final Future<void> Function(String code)? onReferralCodeAccepted;
 
   @override
   State<AuthPage> createState() => _AuthPageState();
@@ -30,12 +39,17 @@ class _AuthPageState extends State<AuthPage> {
   final _formKey = GlobalKey<FormState>();
   final _accountController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _referralCodeController = TextEditingController();
   bool _passwordVisible = false;
+  late int _registrationCelebrationVersion;
+  bool _showRegistrationCelebration = false;
   bool get _isLogin => widget.mode == AuthMode.login;
 
   @override
   void initState() {
     super.initState();
+    _registrationCelebrationVersion =
+        widget.controller.registrationCelebrationVersion;
     widget.controller.addListener(_handleControllerChanged);
   }
 
@@ -52,10 +66,16 @@ class _AuthPageState extends State<AuthPage> {
     widget.controller.removeListener(_handleControllerChanged);
     _accountController.dispose();
     _passwordController.dispose();
+    _referralCodeController.dispose();
     super.dispose();
   }
 
   void _handleControllerChanged() {
+    final nextVersion = widget.controller.registrationCelebrationVersion;
+    if (nextVersion != _registrationCelebrationVersion) {
+      _registrationCelebrationVersion = nextVersion;
+      _showRegistrationCelebration = true;
+    }
     if (mounted) setState(() {});
   }
 
@@ -76,6 +96,10 @@ class _AuthPageState extends State<AuthPage> {
       await widget.controller.signIn(email: email, password: password);
     } else {
       await widget.controller.register(email: email, password: password);
+      final code = _referralCodeController.text.trim();
+      if (code.isNotEmpty && widget.controller.user != null) {
+        await widget.onReferralCodeAccepted?.call(code);
+      }
     }
     if (widget.controller.isVerified) _passwordController.clear();
     if (mounted) setState(() => _passwordVisible = false);
@@ -92,12 +116,13 @@ class _AuthPageState extends State<AuthPage> {
     if (mounted) setState(() => _passwordVisible = false);
   }
 
-  Future<void> _switchMode() async {
+  void _switchMode() {
     FocusScope.of(context).unfocus();
-    await widget.controller.resetAuthenticationFlow();
+    widget.controller.resetAuthenticationFlow();
     _formKey.currentState?.reset();
     _accountController.clear();
     _passwordController.clear();
+    _referralCodeController.clear();
     if (!mounted) return;
     setState(() => _passwordVisible = false);
     widget.onModeChanged(_isLogin ? AuthMode.register : AuthMode.login);
@@ -138,7 +163,7 @@ class _AuthPageState extends State<AuthPage> {
       borderSide: BorderSide(color: AppColors.line),
     );
     return InputDecoration(
-      hintText: hint,
+      hintText: AppLocalizations.of(context).text(hint),
       hintStyle: TextStyle(color: AppColors.textMuted),
       prefixIcon: Icon(icon, color: AppColors.textMuted, size: 21),
       suffixIcon: suffixIcon,
@@ -168,158 +193,217 @@ class _AuthPageState extends State<AuthPage> {
         MediaQuery.sizeOf(context).width < 340;
     final awaitingEmailVerification =
         widget.controller.user?.emailVerified == false;
-    return CustomScrollView(
-      key: Key(_isLogin ? 'login-page' : 'register-page'),
-      physics: const BouncingScrollPhysics(),
-      slivers: [
-        SliverPadding(
-          padding: EdgeInsets.fromLTRB(20, topInset + 24, 20, 28 + bottomInset),
-          sliver: SliverFillRemaining(
-            hasScrollBody: false,
-            child: Align(
-              alignment: const Alignment(0, -0.12),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 460),
-                child: Container(
-                  padding: const EdgeInsets.fromLTRB(22, 22, 22, 20),
-                  decoration: _authPanelDecoration(),
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (compactLayout)
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const _BrandMark(),
-                              const SizedBox(height: 14),
-                              _HomeButton(
-                                key: const Key('auth-home'),
-                                onPressed: widget.onBack,
+    return Stack(
+      children: [
+        CustomScrollView(
+          key: Key(_isLogin ? 'login-page' : 'register-page'),
+          physics: const BouncingScrollPhysics(),
+          slivers: [
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(
+                20,
+                topInset + 24,
+                20,
+                28 + bottomInset,
+              ),
+              sliver: SliverFillRemaining(
+                hasScrollBody: false,
+                child: Align(
+                  alignment: const Alignment(0, -0.12),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 460),
+                    child: Container(
+                      padding: const EdgeInsets.fromLTRB(22, 22, 22, 20),
+                      decoration: _authPanelDecoration(),
+                      child: Form(
+                        key: _formKey,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (compactLayout)
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const _BrandMark(),
+                                  const SizedBox(height: 14),
+                                  _HomeButton(
+                                    key: const Key('auth-home'),
+                                    onPressed: widget.onBack,
+                                  ),
+                                ],
+                              )
+                            else
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Expanded(child: _BrandMark()),
+                                  const SizedBox(width: 12),
+                                  _HomeButton(
+                                    key: const Key('auth-home'),
+                                    onPressed: widget.onBack,
+                                  ),
+                                ],
                               ),
-                            ],
-                          )
-                        else
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Expanded(child: _BrandMark()),
-                              const SizedBox(width: 12),
-                              _HomeButton(
-                                key: const Key('auth-home'),
-                                onPressed: widget.onBack,
+                            const SizedBox(height: 28),
+                            TextFormField(
+                              key: Key('auth-account-field'),
+                              controller: _accountController,
+                              keyboardType: TextInputType.emailAddress,
+                              textInputAction: TextInputAction.next,
+                              autofillHints: [
+                                AutofillHints.username,
+                                AutofillHints.email,
+                              ],
+                              autocorrect: false,
+                              enableSuggestions: false,
+                              decoration: _decoration(
+                                hint: '用户名 / 邮箱',
+                                icon: Icons.person_outline_rounded,
                               ),
-                            ],
-                          ),
-                        const SizedBox(height: 28),
-                        TextFormField(
-                          key: Key('auth-account-field'),
-                          controller: _accountController,
-                          keyboardType: TextInputType.emailAddress,
-                          textInputAction: TextInputAction.next,
-                          autofillHints: [
-                            AutofillHints.username,
-                            AutofillHints.email,
-                          ],
-                          autocorrect: false,
-                          enableSuggestions: false,
-                          decoration: _decoration(
-                            hint: '用户名 / 邮箱',
-                            icon: Icons.person_outline_rounded,
-                          ),
-                          validator: _validateAccount,
-                        ),
-                        const SizedBox(height: 14),
-                        TextFormField(
-                          key: Key('auth-password-field'),
-                          controller: _passwordController,
-                          textInputAction: _isLogin
-                              ? TextInputAction.done
-                              : TextInputAction.next,
-                          autofillHints: [
-                            _isLogin
-                                ? AutofillHints.password
-                                : AutofillHints.newPassword,
-                          ],
-                          autocorrect: false,
-                          enableSuggestions: false,
-                          obscureText: !_passwordVisible,
-                          onFieldSubmitted: _isLogin
-                              ? (_) => unawaited(_submit())
-                              : null,
-                          decoration: _decoration(
-                            hint: _isLogin ? '密码' : '至少 8 位',
-                            icon: Icons.lock_outline_rounded,
-                            suffixIcon: _VisibilityButton(
-                              key: Key('password-visibility'),
-                              visible: _passwordVisible,
-                              onPressed: () => setState(
-                                () => _passwordVisible = !_passwordVisible,
-                              ),
+                              validator: _validateAccount,
                             ),
-                          ),
-                          validator: _validatePassword,
-                        ),
-                        const SizedBox(height: 12),
-                        _AuthOptions(
-                          compact: compactLayout,
-                          isLogin: _isLogin,
-                          onForgotPassword: _resetPassword,
-                          onModeChanged: () => unawaited(_switchMode()),
-                        ),
-                        if (widget.controller.message case final message?) ...[
-                          const SizedBox(height: 8),
-                          _AuthStatusCard(message: message),
-                        ],
-                        if (widget.controller.user case final user?
-                            when !user.emailVerified) ...[
-                          const SizedBox(height: 10),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _VerificationSecondaryButton(
-                                  key: const Key('auth-resend-verification'),
-                                  onPressed: widget.controller.loading
-                                      ? null
-                                      : widget.controller.resendVerification,
-                                  label: '重发验证邮件',
+                            const SizedBox(height: 14),
+                            TextFormField(
+                              key: Key('auth-password-field'),
+                              controller: _passwordController,
+                              textInputAction: _isLogin
+                                  ? TextInputAction.done
+                                  : TextInputAction.next,
+                              autofillHints: [
+                                _isLogin
+                                    ? AutofillHints.password
+                                    : AutofillHints.newPassword,
+                              ],
+                              autocorrect: false,
+                              enableSuggestions: false,
+                              obscureText: !_passwordVisible,
+                              onFieldSubmitted: _isLogin
+                                  ? (_) => unawaited(_submit())
+                                  : null,
+                              decoration: _decoration(
+                                hint: _isLogin ? '密码' : '至少 8 位',
+                                icon: Icons.lock_outline_rounded,
+                                suffixIcon: _VisibilityButton(
+                                  key: Key('password-visibility'),
+                                  visible: _passwordVisible,
+                                  onPressed: () => setState(
+                                    () => _passwordVisible = !_passwordVisible,
+                                  ),
                                 ),
                               ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: _VerificationPrimaryButton(
-                                  key: const Key('auth-refresh-verification'),
-                                  onPressed: widget.controller.loading
-                                      ? null
-                                      : _checkEmailVerification,
-                                  label: '我已完成验证',
+                              validator: _validatePassword,
+                            ),
+                            if (!_isLogin && widget.referralEnabled) ...[
+                              const SizedBox(height: 14),
+                              TextFormField(
+                                key: const Key('auth-referral-code-field'),
+                                controller: _referralCodeController,
+                                textInputAction: TextInputAction.next,
+                                textCapitalization:
+                                    TextCapitalization.characters,
+                                autocorrect: false,
+                                enableSuggestions: false,
+                                maxLength: 8,
+                                decoration: _decoration(
+                                  hint: '邀请码（可选）',
+                                  icon: Icons.card_giftcard_rounded,
                                 ),
+                                validator: (value) {
+                                  final code = value?.trim() ?? '';
+                                  if (code.isEmpty) return null;
+                                  return RegExp(
+                                        r'^[A-Za-z2-9]{8}$',
+                                      ).hasMatch(code)
+                                      ? null
+                                      : '请输入 8 位邀请码';
+                                },
                               ),
                             ],
-                          ),
-                        ],
-                        const SizedBox(height: 16),
-                        _GradientSubmitButton(
-                          key: Key('auth-submit'),
-                          onPressed: widget.controller.loading ? null : _submit,
-                          label: widget.controller.loading
-                              ? '请稍候…'
-                              : awaitingEmailVerification
-                              ? '检查验证并登录'
-                              : _isLogin
-                              ? '登录'
-                              : '注册并验证邮箱',
+                            const SizedBox(height: 12),
+                            _AuthOptions(
+                              compact: compactLayout,
+                              isLogin: _isLogin,
+                              onForgotPassword: _resetPassword,
+                              onModeChanged: _switchMode,
+                            ),
+                            if (widget.controller.message
+                                case final message?) ...[
+                              const SizedBox(height: 8),
+                              _AuthStatusCard(message: message),
+                            ],
+                            if (widget.controller.user case final user?
+                                when !user.emailVerified) ...[
+                              const SizedBox(height: 10),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _VerificationSecondaryButton(
+                                      key: const Key(
+                                        'auth-resend-verification',
+                                      ),
+                                      onPressed: widget.controller.loading
+                                          ? null
+                                          : widget
+                                                .controller
+                                                .resendVerification,
+                                      label: '重发验证邮件',
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: _VerificationPrimaryButton(
+                                      key: const Key(
+                                        'auth-refresh-verification',
+                                      ),
+                                      onPressed: widget.controller.loading
+                                          ? null
+                                          : _checkEmailVerification,
+                                      label: '我已完成验证',
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                            const SizedBox(height: 16),
+                            _GradientSubmitButton(
+                              key: Key('auth-submit'),
+                              onPressed: widget.controller.loading
+                                  ? null
+                                  : _submit,
+                              label: widget.controller.loading
+                                  ? '请稍候…'
+                                  : awaitingEmailVerification
+                                  ? '检查验证并登录'
+                                  : _isLogin
+                                  ? '登录'
+                                  : '注册并验证邮箱',
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
+          ],
         ),
+        if (_showRegistrationCelebration)
+          Positioned.fill(
+            child: CardBurstCelebration(
+              key: ValueKey(
+                'registration-success-card-burst-$_registrationCelebrationVersion',
+              ),
+              trigger: _registrationCelebrationVersion,
+              cards: widget.celebrationCards,
+              onFinished: () {
+                if (mounted) {
+                  setState(() => _showRegistrationCelebration = false);
+                }
+              },
+            ),
+          ),
       ],
     );
   }
@@ -383,7 +467,7 @@ class _BrandMark extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  '集卡',
+                  'CardFi',
                   style: TextStyle(
                     color: AppColors.text,
                     fontSize: 22,

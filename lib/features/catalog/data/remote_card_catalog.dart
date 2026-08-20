@@ -1,5 +1,5 @@
-import 'package:card_app/core/network/api_client.dart';
-import 'package:card_app/features/catalog/domain/card_summary.dart';
+import 'package:cardfi/core/network/api_client.dart';
+import 'package:cardfi/features/catalog/domain/card_summary.dart';
 
 class RemoteCardCatalogRepository implements CardCatalogRepository {
   RemoteCardCatalogRepository(this._apiClient);
@@ -79,6 +79,9 @@ class RemoteCardCatalogRepository implements CardCatalogRepository {
           else if (value.toString().toLowerCase().contains('id'))
             KycDocument.idCard,
       },
+      kycSummary: json['kycSummary']?.toString() ?? '',
+      cashbackRate: json['cashbackRate']?.toString() ?? '',
+      updatedAt: DateTime.tryParse(json['updatedAt']?.toString() ?? ''),
       isNew: _isNew(json['launchTimestamp'], json['createdAt']),
       kind: _kindFromJson(json['catalogKind'] ?? json['productKind']),
     );

@@ -1,20 +1,51 @@
-import 'package:card_app/core/motion/app_bottom_sheet.dart';
-import 'package:card_app/core/motion/app_haptics.dart';
-import 'package:card_app/core/motion/motion_widgets.dart';
-import 'package:card_app/core/theme/app_colors.dart';
-import 'package:card_app/core/widgets/app_feedback.dart';
-import 'package:card_app/features/catalog/domain/card_detail.dart';
-import 'package:card_app/features/catalog/domain/card_summary.dart';
-import 'package:card_app/features/catalog/widgets/card_artwork.dart';
-import 'package:card_app/features/catalog/widgets/catalog_card_row.dart';
-import 'package:card_app/features/pro/widgets/pro_crown_badge.dart';
-import 'package:card_app/features/pro/data/pro_workspace_controller.dart';
-import 'package:card_app/features/shell/widgets/sticky_page_header.dart';
-import 'package:card_app/core/localization/localized_text.dart';
+import 'package:cardfi/core/icons/app_icons.dart';
+import 'package:cardfi/core/motion/app_bottom_sheet.dart';
+import 'package:cardfi/core/motion/app_haptics.dart';
+import 'package:cardfi/core/motion/motion_widgets.dart';
+import 'package:cardfi/core/theme/app_colors.dart';
+import 'package:cardfi/core/widgets/app_feedback.dart';
+import 'package:cardfi/features/catalog/domain/card_detail.dart';
+import 'package:cardfi/features/catalog/domain/card_summary.dart';
+import 'package:cardfi/features/catalog/widgets/card_artwork.dart';
+import 'package:cardfi/features/catalog/widgets/catalog_card_row.dart';
+import 'package:cardfi/features/pro/widgets/pro_crown_badge.dart';
+import 'package:cardfi/features/pro/data/pro_workspace_controller.dart';
+import 'package:cardfi/features/shell/widgets/sticky_page_header.dart';
+import 'package:cardfi/core/localization/localized_text.dart';
 import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/services.dart';
 
 typedef ComparisonDetailLoader = Future<CardDetail> Function(CardSummary card);
+
+String comparisonCashback(CardSummary card) {
+  final value = card.cashbackRate.trim();
+  return value.isEmpty ? '未提供' : value;
+}
+
+String comparisonTier(CardDetail detail) {
+  return detail.tags.firstWhere(
+    (tag) => tag.trim().startsWith('评级：'),
+    orElse: () => '未提供',
+  );
+}
+
+List<String> orderedComparisonFeeLabels(Iterable<CardDetail> details) {
+  final labels = <String>{
+    for (final detail in details)
+      for (final fee in detail.fees) fee.label,
+  }.toList();
+  const priorities = <String>['开卡费', '年费', '月费', '外汇费', '取现手续费'];
+  int rank(String label) {
+    final index = priorities.indexOf(label);
+    return index < 0 ? priorities.length : index;
+  }
+
+  labels.sort((left, right) {
+    final rankComparison = rank(left).compareTo(rank(right));
+    return rankComparison != 0 ? rankComparison : left.compareTo(right);
+  });
+  return labels;
+}
 
 class CardComparisonPage extends StatefulWidget {
   const CardComparisonPage({
@@ -24,6 +55,7 @@ class CardComparisonPage extends StatefulWidget {
     this.initialCard,
     this.initialCards,
     this.workspaceController,
+    this.maxCards = 2,
     super.key,
   });
 
@@ -31,6 +63,7 @@ class CardComparisonPage extends StatefulWidget {
   final CardSummary? initialCard;
   final List<CardSummary>? initialCards;
   final ProWorkspaceController? workspaceController;
+  final int maxCards;
   final ComparisonDetailLoader loadDetail;
   final VoidCallback onBack;
 
@@ -39,7 +72,6 @@ class CardComparisonPage extends StatefulWidget {
 }
 
 class _CardComparisonPageState extends State<CardComparisonPage> {
-  static const _maxCards = 4;
   final List<CardSummary> _selectedCards = [];
   Future<List<CardDetail>>? _details;
 
@@ -79,7 +111,7 @@ class _CardComparisonPageState extends State<CardComparisonPage> {
         requestedCards
             .map((card) => byId[card.id] ?? card)
             .where((card) => selectedIds.add(card.id))
-            .take(_maxCards),
+            .take(widget.maxCards),
       );
     if (_selectedCards.isEmpty) _selectedCards.add(cards.first);
     if (_selectedCards.length < 2) {
@@ -160,7 +192,9 @@ class _CardComparisonPageState extends State<CardComparisonPage> {
           padding: EdgeInsets.fromLTRB(20, topInset + 88, 20, bottomInset + 40),
           children: [
             Text(
-              '可同时选择 2–4 张卡片，差异项会被轻量标记。申请前仍请以官方最新规则为准。',
+              widget.maxCards > 2
+                  ? 'Pro 可同时选择 2–4 张卡片，差异项会被轻量标记。申请前仍请以官方最新规则为准。'
+                  : '普通版支持同时对比 2 张卡片。申请前仍请以官方最新规则为准。',
               style: TextStyle(
                 color: AppColors.textMuted,
                 fontSize: 12,
@@ -171,7 +205,7 @@ class _CardComparisonPageState extends State<CardComparisonPage> {
             const SizedBox(height: 14),
             _CardSelectionPanel(
               cards: _selectedCards,
-              maxCards: _maxCards,
+              maxCards: widget.maxCards,
               onChoose: (index) => _chooseCard(index: index),
               onAdd: () => _chooseCard(),
               onRemove: _removeCard,
@@ -191,7 +225,7 @@ class _CardComparisonPageState extends State<CardComparisonPage> {
                   key: const Key('comparison-back'),
                   onPressed: widget.onBack,
                   tooltip: '返回',
-                  icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+                  icon: const Icon(AppIcons.back, size: 20),
                   style: IconButton.styleFrom(
                     minimumSize: const Size(44, 44),
                     foregroundColor: AppColors.text,
@@ -225,7 +259,7 @@ class _CardComparisonPageState extends State<CardComparisonPage> {
   Widget _buildComparison() {
     if (_selectedCards.length < 2 || _details == null) {
       return _ComparisonMessage(
-        icon: Icons.compare_arrows_rounded,
+        icon: AppIcons.compare,
         title: '至少需要两张卡片',
         description: '当前目录中的卡片不足，暂时无法生成对比。',
       );
@@ -240,7 +274,7 @@ class _CardComparisonPageState extends State<CardComparisonPage> {
         if (snapshot.hasError ||
             snapshot.data?.length != _selectedCards.length) {
           return _ComparisonMessage(
-            icon: Icons.cloud_off_rounded,
+            icon: AppIcons.cloudUnavailable,
             title: '对比信息加载失败',
             description: '请检查网络后重试，本地已有资料仍可在详情页查看。',
             actionLabel: '重新加载',
@@ -330,7 +364,7 @@ class _CardSelectionPanel extends StatelessWidget {
                 TextButton.icon(
                   key: const Key('comparison-add-card'),
                   onPressed: onAdd,
-                  icon: const Icon(Icons.add_rounded, size: 18),
+                  icon: const Icon(AppIcons.add, size: 18),
                   label: const Text('添加卡片'),
                   style: TextButton.styleFrom(
                     minimumSize: const Size(108, 44),
@@ -369,7 +403,7 @@ class _CardSelectionPanel extends StatelessWidget {
             child: TextButton.icon(
               key: const Key('comparison-swap'),
               onPressed: cards.length < 2 ? null : onSwap,
-              icon: const Icon(Icons.swap_horiz_rounded, size: 19),
+              icon: const Icon(AppIcons.swap, size: 19),
               label: const Text('交换前两张'),
               style: TextButton.styleFrom(
                 minimumSize: const Size(132, 44),
@@ -432,7 +466,7 @@ class _CardSlot extends StatelessWidget {
                             key: Key('comparison-remove-${card.id}'),
                             onPressed: onRemove,
                             tooltip: '移除 ${card.name}',
-                            icon: const Icon(Icons.close_rounded, size: 16),
+                            icon: const Icon(AppIcons.close, size: 16),
                             style: IconButton.styleFrom(
                               minimumSize: const Size(32, 32),
                               maximumSize: const Size(32, 32),
@@ -510,7 +544,7 @@ class _ComparisonResults extends StatelessWidget {
       for (final detail in details)
         {for (final fee in detail.fees) fee.label: fee.value},
     ];
-    final feeLabels = <String>{for (final fees in feeMaps) ...fees.keys};
+    final feeLabels = orderedComparisonFeeLabels(details);
     return LayoutBuilder(
       builder: (context, constraints) {
         final minimumWidth = cards.length * 142.0;
@@ -543,6 +577,14 @@ class _ComparisonResults extends StatelessWidget {
                     _ComparisonRow(
                       label: '卡组织',
                       values: cards.map(_network).toList(),
+                    ),
+                    _ComparisonRow(
+                      label: '返现概览',
+                      values: cards.map(comparisonCashback).toList(),
+                    ),
+                    _ComparisonRow(
+                      label: '评级',
+                      values: details.map(comparisonTier).toList(),
                     ),
                     _ComparisonRow(
                       label: '适用地区',
@@ -646,6 +688,8 @@ class _ComparisonActions extends StatelessWidget {
       ['字段', ...cards.map((card) => card.name)],
       ['发行方', ...cards.map((card) => card.issuer)],
       ['卡片类型', ...cards.map((card) => card.category.label)],
+      ['返现概览', ...cards.map(comparisonCashback)],
+      ['评级', ...details.map(comparisonTier)],
       ['适用地区', ...details.map((detail) => detail.region)],
       ['入金方式', ...details.map((detail) => detail.funding)],
       ['开放状态', ...details.map((detail) => detail.availability)],
@@ -658,11 +702,16 @@ class _ComparisonActions extends StatelessWidget {
               : detail.paymentChannels.map((item) => item.label).join('、'),
         ),
       ],
+      [
+        '主要特点',
+        ...details.map(
+          (detail) => detail.features.isEmpty
+              ? '未提供'
+              : detail.features.map((feature) => feature.text).join('；'),
+        ),
+      ],
     ];
-    final feeLabels = <String>{
-      for (final detail in details)
-        for (final fee in detail.fees) fee.label,
-    };
+    final feeLabels = orderedComparisonFeeLabels(details);
     for (final label in feeLabels) {
       rows.add([
         label,
@@ -697,7 +746,7 @@ class _ComparisonActions extends StatelessWidget {
             child: OutlinedButton.icon(
               key: const Key('comparison-save-preset'),
               onPressed: onSave,
-              icon: const Icon(Icons.bookmark_add_outlined, size: 18),
+              icon: const Icon(AppIcons.bookmarkAdd, size: 18),
               label: const Text('保存方案'),
               style: OutlinedButton.styleFrom(
                 minimumSize: const Size.fromHeight(44),
@@ -709,7 +758,7 @@ class _ComparisonActions extends StatelessWidget {
             child: OutlinedButton.icon(
               key: const Key('comparison-export-csv'),
               onPressed: () => _copy(context),
-              icon: const Icon(Icons.ios_share_rounded, size: 18),
+              icon: const Icon(AppIcons.export, size: 18),
               label: const Text('导出 CSV'),
               style: OutlinedButton.styleFrom(
                 minimumSize: const Size.fromHeight(44),
@@ -1307,7 +1356,7 @@ class _CardPickerSheetState extends State<_CardPickerSheet> {
               IconButton(
                 onPressed: () => Navigator.pop(context),
                 tooltip: '关闭',
-                icon: const Icon(Icons.close_rounded),
+                icon: const Icon(AppIcons.close),
               ),
             ],
           ),
@@ -1318,7 +1367,7 @@ class _CardPickerSheetState extends State<_CardPickerSheet> {
             textInputAction: TextInputAction.search,
             decoration: InputDecoration(
               hintText: '搜索卡片或发行方',
-              prefixIcon: const Icon(Icons.search_rounded),
+              prefixIcon: const Icon(AppIcons.search),
               filled: true,
               fillColor: AppColors.glassStrong,
               border: OutlineInputBorder(
@@ -1359,7 +1408,7 @@ class _CardPickerSheetState extends State<_CardPickerSheet> {
                               top: 10,
                               child: IgnorePointer(
                                 child: Icon(
-                                  Icons.check_circle_rounded,
+                                  AppIcons.checkCircle,
                                   color: AppColors.mint,
                                 ),
                               ),

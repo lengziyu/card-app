@@ -1,13 +1,15 @@
-import 'package:card_app/core/motion/app_haptics.dart';
-import 'package:card_app/core/motion/motion_tokens.dart';
-import 'package:card_app/core/motion/motion_widgets.dart';
-import 'package:card_app/core/theme/app_colors.dart';
-import 'package:card_app/features/pro/data/pro_config.dart';
-import 'package:card_app/features/pro/data/pro_controller.dart';
-import 'package:card_app/features/pro/domain/pro_models.dart';
-import 'package:card_app/features/pro/widgets/pro_crown_badge.dart';
-import 'package:card_app/features/shell/widgets/sticky_page_header.dart';
-import 'package:card_app/core/localization/localized_text.dart';
+import 'package:cardfi/core/motion/app_haptics.dart';
+import 'package:cardfi/core/motion/celebration_effects.dart';
+import 'package:cardfi/core/motion/motion_tokens.dart';
+import 'package:cardfi/core/motion/motion_widgets.dart';
+import 'package:cardfi/core/theme/app_colors.dart';
+import 'package:cardfi/core/widgets/premium_motion.dart';
+import 'package:cardfi/features/pro/data/pro_config.dart';
+import 'package:cardfi/features/pro/data/pro_controller.dart';
+import 'package:cardfi/features/pro/domain/pro_models.dart';
+import 'package:cardfi/features/pro/widgets/pro_crown_badge.dart';
+import 'package:cardfi/features/shell/widgets/sticky_page_header.dart';
+import 'package:cardfi/core/localization/localized_text.dart';
 import 'package:flutter/material.dart' hide Text;
 
 class ProPage extends StatelessWidget {
@@ -53,13 +55,6 @@ class ProPage extends StatelessWidget {
             ),
             children: [
               _ProHero(controller: controller, onPurchase: onPurchase),
-              const SizedBox(height: 18),
-              const Text(
-                'Pro 权益',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
-              ),
-              const SizedBox(height: 10),
-              const _FeatureCard(),
               if (controller.isActive &&
                   (onOpenWorkspace != null || onOpenComparison != null)) ...[
                 const SizedBox(height: 14),
@@ -68,6 +63,15 @@ class ProPage extends StatelessWidget {
                   onOpenComparison: onOpenComparison,
                 ),
               ],
+              const SizedBox(height: 18),
+              const Text(
+                'Pro 权益',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 10),
+              const _AiQuotaNotice(),
+              const SizedBox(height: 10),
+              const _FeatureCard(),
               if (ProConfig.showDiagnostics) ...[
                 const SizedBox(height: 14),
                 _ConnectionCard(controller: controller),
@@ -130,7 +134,7 @@ class ProPage extends StatelessWidget {
                   const SizedBox(width: 6),
                   const Expanded(
                     child: Text(
-                      '集卡 Pro',
+                      'CardFi Pro',
                       style: TextStyle(
                         fontSize: 19,
                         fontWeight: FontWeight.w900,
@@ -140,6 +144,11 @@ class ProPage extends StatelessWidget {
                   ProCrownBadge(showLabel: controller.isActive),
                 ],
               ),
+            ),
+          ),
+          Positioned.fill(
+            child: ProGiftCelebration(
+              trigger: controller.activationCelebrationVersion,
             ),
           ),
         ],
@@ -156,143 +165,158 @@ class _ProHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: AppColors.isDark
-              ? const [Color(0xFF303752), Color(0xFF1C223A)]
-              : const [Color(0xFFFFFBF0), Color(0xFFF0F3FF)],
+    return LiquidMetalSurface(
+      selected: controller.isActive,
+      radius: 24,
+      colors: const [
+        Color(0xFFF4A51C),
+        Color(0xFFFFF2B0),
+        Color(0xFFD36D2B),
+        Color(0xFF8264F6),
+        Color(0xFFF4A51C),
+      ],
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: controller.isActive
+                ? (AppColors.isDark
+                      ? const [Color(0xFF3D2A0D), Color(0xFF211B39)]
+                      : const [Color(0xFFFFF9E6), Color(0xFFF1EEFF)])
+                : (AppColors.isDark
+                      ? const [Color(0xFF303752), Color(0xFF1C223A)]
+                      : const [Color(0xFFFFFBF0), Color(0xFFF0F3FF)]),
+          ),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: AppColors.isDark
+                ? Colors.white.withValues(alpha: .12)
+                : const Color(0x45F4A51C),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFF4A51C).withValues(alpha: .10),
+              blurRadius: 24,
+              offset: const Offset(0, 10),
+            ),
+          ],
         ),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: AppColors.isDark
-              ? Colors.white.withValues(alpha: .12)
-              : const Color(0x45F4A51C),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFFF4A51C).withValues(alpha: .10),
-            blurRadius: 24,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const ProCrownBadge(showLabel: true),
-          const SizedBox(height: 14),
-          AnimatedSwitcher(
-            duration: MediaQuery.disableAnimationsOf(context)
-                ? Duration.zero
-                : const Duration(milliseconds: 220),
-            child: Text(
-              controller.isActive ? 'Pro 已开通' : '让卡包更好用',
-              key: ValueKey(controller.isActive),
-              style: TextStyle(
-                color: AppColors.text,
-                fontSize: 26,
-                fontWeight: FontWeight.w900,
-                letterSpacing: -.8,
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            controller.isActive
-                ? _activeCopy(controller.entitlement)
-                : '解锁高级卡包布局、多卡对比、费用测算、长周期数据、离线资料、变更关注与工作区备份。',
-            style: TextStyle(
-              color: AppColors.textMuted,
-              fontSize: 13,
-              height: 1.5,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          if (!controller.isActive) ...[
-            const SizedBox(height: 18),
-            Row(
-              children: [
-                for (final offer in controller.offers) ...[
-                  Expanded(
-                    child: _PlanCard(
-                      offer: offer,
-                      selected: controller.selectedPlan == offer.plan,
-                      onTap: () => controller.selectPlan(offer.plan),
-                    ),
-                  ),
-                  if (offer != controller.offers.last)
-                    const SizedBox(width: 10),
-                ],
-              ],
-            ),
-            AnimatedSize(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const ProCrownBadge(showLabel: true),
+            const SizedBox(height: 14),
+            AnimatedSwitcher(
               duration: MediaQuery.disableAnimationsOf(context)
                   ? Duration.zero
-                  : const Duration(milliseconds: 180),
-              curve: Curves.easeOutCubic,
-              child: controller.message == null
-                  ? const SizedBox.shrink()
-                  : Padding(
-                      padding: const EdgeInsets.only(top: 12),
-                      child: _InlineMessage(message: controller.message!),
-                    ),
-            ),
-            const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                key: const Key('pro-preview-purchase'),
-                onPressed: controller.canPurchase ? onPurchase : null,
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size.fromHeight(50),
-                  elevation: controller.canPurchase ? 3 : 0,
-                  shadowColor: const Color(0xFFF4A51C).withValues(alpha: .3),
-                ),
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 160),
-                  child: Text(
-                    controller.purchasePending
-                        ? '等待商店确认…'
-                        : _purchaseLabel(controller),
-                    key: ValueKey(
-                      '${controller.purchasePending}-${controller.selectedPlan.name}-${controller.canPurchase}',
-                    ),
-                  ),
+                  : const Duration(milliseconds: 220),
+              child: Text(
+                controller.isActive ? 'Pro 已开通' : '让卡包更好用',
+                key: ValueKey(controller.isActive),
+                style: TextStyle(
+                  color: AppColors.text,
+                  fontSize: 26,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -.8,
                 ),
               ),
             ),
             const SizedBox(height: 8),
-            Center(
-              child: Text(
-                _purchaseHint(controller),
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: AppColors.textMuted,
-                  fontSize: 10.5,
-                  height: 1.35,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
             Text(
-              '订阅会按所选周期自动续费；可随时前往系统订阅管理页取消。实际价格、扣款时间与续费规则以商店确认页为准。',
+              controller.isActive
+                  ? _activeCopy(controller.entitlement)
+                  : '将 AI 精选好卡、AI 协助开卡和账单识别的每月额度提升至 30、30、20 次，并解锁高级卡包布局、2–4 卡对比、费用测算、长周期数据、离线资料与工作区备份。',
               style: TextStyle(
                 color: AppColors.textMuted,
-                fontSize: 10.5,
-                height: 1.45,
+                fontSize: 13,
+                height: 1.5,
                 fontWeight: FontWeight.w600,
               ),
             ),
-          ] else if (controller.message != null) ...[
-            const SizedBox(height: 12),
-            _InlineMessage(message: controller.message!),
+            if (!controller.isActive) ...[
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  for (final offer in controller.offers) ...[
+                    Expanded(
+                      child: _PlanCard(
+                        offer: offer,
+                        selected: controller.selectedPlan == offer.plan,
+                        onTap: () => controller.selectPlan(offer.plan),
+                      ),
+                    ),
+                    if (offer != controller.offers.last)
+                      const SizedBox(width: 10),
+                  ],
+                ],
+              ),
+              AnimatedSize(
+                duration: MediaQuery.disableAnimationsOf(context)
+                    ? Duration.zero
+                    : const Duration(milliseconds: 180),
+                curve: Curves.easeOutCubic,
+                child: controller.message == null
+                    ? const SizedBox.shrink()
+                    : Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: _InlineMessage(message: controller.message!),
+                      ),
+              ),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  key: const Key('pro-preview-purchase'),
+                  onPressed: controller.canPurchase ? onPurchase : null,
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(50),
+                    elevation: controller.canPurchase ? 3 : 0,
+                    shadowColor: const Color(0xFFF4A51C).withValues(alpha: .3),
+                  ),
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 160),
+                    child: Text(
+                      controller.purchasePending
+                          ? '等待商店确认…'
+                          : _purchaseLabel(controller),
+                      key: ValueKey(
+                        '${controller.purchasePending}-${controller.selectedPlan.name}-${controller.canPurchase}',
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Center(
+                child: Text(
+                  _purchaseHint(controller),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 10.5,
+                    height: 1.35,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                '订阅会按所选周期自动续费；可随时前往系统订阅管理页取消。实际价格、扣款时间与续费规则以商店确认页为准。',
+                style: TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 10.5,
+                  height: 1.45,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ] else if (controller.message != null) ...[
+              const SizedBox(height: 12),
+              _InlineMessage(message: controller.message!),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -337,81 +361,81 @@ class _PlanCard extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
-    return MotionPressEffect(
-      child: InkWell(
-        key: Key('pro-plan-${offer.plan.name}'),
-        onTap: () {
-          AppHaptics.selection();
-          onTap();
-        },
-        borderRadius: BorderRadius.circular(16),
-        child: AnimatedContainer(
-          duration: MotionTokens.stateChange,
-          padding: const EdgeInsets.all(13),
-          decoration: BoxDecoration(
+  Widget build(BuildContext context) => MotionPressEffect(
+    child: InkWell(
+      key: Key('pro-plan-${offer.plan.name}'),
+      onTap: () {
+        AppHaptics.selection();
+        onTap();
+      },
+      borderRadius: BorderRadius.circular(16),
+      child: AnimatedContainer(
+        duration: MotionTokens.stateChange,
+        padding: const EdgeInsets.all(13),
+        decoration: BoxDecoration(
+          color: selected
+              ? const Color(0xFFF4A51C).withValues(alpha: .065)
+              : AppColors.glass,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
             color: selected
-                ? const Color(0xFFF4A51C).withValues(alpha: .12)
-                : AppColors.glass,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: selected ? const Color(0xFFF4A51C) : AppColors.line,
-              width: selected ? 1.4 : 1,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      offer.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: AppColors.text,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ),
-                  MotionStateIcon(
-                    stateKey: selected,
-                    child: selected
-                        ? const Icon(
-                            Icons.check_circle_rounded,
-                            size: 17,
-                            color: Color(0xFFF4A51C),
-                          )
-                        : const SizedBox(width: 17, height: 17),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 7),
-              Text(
-                offer.price ?? '价格待商店返回',
-                style: const TextStyle(
-                  color: Color(0xFFF4A51C),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                offer.periodLabel,
-                style: TextStyle(
-                  color: AppColors.textMuted,
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
+                ? const Color(0xFFF4A51C).withValues(alpha: .52)
+                : AppColors.line.withValues(alpha: .42),
+            width: 1,
           ),
         ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    offer.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: AppColors.text,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                MotionStateIcon(
+                  stateKey: selected,
+                  child: selected
+                      ? const Icon(
+                          Icons.check_circle_rounded,
+                          size: 17,
+                          color: Color(0xFFD79B3C),
+                        )
+                      : const SizedBox(width: 17, height: 17),
+                ),
+              ],
+            ),
+            const SizedBox(height: 7),
+            Text(
+              offer.price ?? '价格待商店返回',
+              style: const TextStyle(
+                color: Color(0xFFF4A51C),
+                fontSize: 13,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              offer.periodLabel,
+              style: TextStyle(
+                color: AppColors.textMuted,
+                fontSize: 10.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
       ),
-    );
-  }
+    ),
+  );
 }
 
 class _InlineMessage extends StatelessWidget {
@@ -707,28 +731,37 @@ class _ProQuickActions extends StatelessWidget {
       children: [
         if (onOpenWorkspace != null)
           Expanded(
-            child: FilledButton.icon(
+            child: _MetalQuickAction(
               key: const Key('pro-open-workspace'),
               onPressed: onOpenWorkspace,
-              icon: const Icon(Icons.dashboard_customize_outlined, size: 19),
-              label: const Text('Pro 工作区'),
-              style: FilledButton.styleFrom(
-                minimumSize: const Size.fromHeight(48),
-              ),
+              icon: Icons.dashboard_customize_outlined,
+              label: 'Pro 工作区',
+              filled: true,
+              colors: const [
+                Color(0xFFF4A51C),
+                Color(0xFFFFF1AB),
+                Color(0xFFB7722B),
+                Color(0xFF7D66F6),
+                Color(0xFFF4A51C),
+              ],
             ),
           ),
         if (onOpenWorkspace != null && onOpenComparison != null)
           const SizedBox(width: 10),
         if (onOpenComparison != null)
           Expanded(
-            child: OutlinedButton.icon(
+            child: _MetalQuickAction(
               key: const Key('pro-open-comparison'),
               onPressed: onOpenComparison,
-              icon: const Icon(Icons.compare_arrows_rounded, size: 19),
-              label: const Text('开始对比'),
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size.fromHeight(48),
-              ),
+              icon: Icons.compare_arrows_rounded,
+              label: '开始对比',
+              colors: const [
+                Color(0xFFF4A51C),
+                Color(0xFFFFF7C8),
+                Color(0xFF61CFEA),
+                Color(0xFF9A71F4),
+                Color(0xFFF4A51C),
+              ],
             ),
           ),
       ],
@@ -736,13 +769,100 @@ class _ProQuickActions extends StatelessWidget {
   }
 }
 
+class _MetalQuickAction extends StatelessWidget {
+  const _MetalQuickAction({
+    required this.onPressed,
+    required this.icon,
+    required this.label,
+    required this.colors,
+    this.filled = false,
+    super.key,
+  });
+
+  final VoidCallback? onPressed;
+  final IconData icon;
+  final String label;
+  final List<Color> colors;
+  final bool filled;
+
+  @override
+  Widget build(BuildContext context) => LiquidMetalSurface(
+    selected: onPressed != null,
+    radius: 24,
+    colors: colors,
+    child: MotionPressEffect(
+      enabled: onPressed != null,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(24),
+          child: Ink(
+            height: 48,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(24),
+              gradient: filled
+                  ? const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color(0xFFF0AD32), Color(0xFFC87818)],
+                    )
+                  : LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        const Color(0xFFFFF9E5),
+                        const Color(0xFFF1D486),
+                      ],
+                    ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  icon,
+                  size: 19,
+                  color: filled ? Colors.white : const Color(0xFF765114),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: filled ? Colors.white : const Color(0xFF69440C),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
 class _FeatureCard extends StatelessWidget {
   const _FeatureCard();
 
   static const features = [
+    (
+      Icons.manage_search_rounded,
+      'AI精选好卡',
+      '普通版每月 5 次；Pro 每月 30 次。填写所在地区、可用证件、KYC 偏好和主要用途，从已收录的公开资料中筛出值得进一步了解的卡片。',
+    ),
+    (
+      Icons.fact_check_outlined,
+      'AI 协助开卡',
+      '普通版每月 5 次；Pro 每月 30 次。选定一张卡后整理公开申请材料、步骤、费用与风险提醒；不代办、不提交申请，也不保证审核结果。',
+    ),
     (Icons.layers_outlined, '堆叠模式', '用纵向层叠展示多张卡片，快速浏览整个卡包'),
     (Icons.view_day_outlined, '聚焦模式', '突出当前卡片，获得更强的层次与浏览体验'),
-    (Icons.compare_arrows_rounded, '多卡对比', '最多同时对比四张卡片的地区、入金、KYC、费用与支付渠道'),
+    (
+      Icons.compare_arrows_rounded,
+      '多卡对比',
+      '普通版支持 2 张卡片；Pro 支持 2–4 张卡片的地区、入金、KYC、费用与支付渠道',
+    ),
     (Icons.calculate_outlined, '费用场景与导出', '透明展示可识别费用的场景测算，并导出 CSV 报告'),
     (Icons.timeline_rounded, '长周期数据', '查看 90 天与全部历史区间，免费版继续保留 7 天和 30 天'),
     (Icons.notifications_active_outlined, '规则变更关注', '管理卡片关注列表；正式推送接入后同步接收变化提醒'),
@@ -804,4 +924,60 @@ class _FeatureCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _AiQuotaNotice extends StatelessWidget {
+  const _AiQuotaNotice();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    key: const Key('pro-ai-quota-notice'),
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+    decoration: BoxDecoration(
+      color: const Color(
+        0xFFF4A51C,
+      ).withValues(alpha: AppColors.isDark ? .12 : .08),
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(
+        color: const Color(
+          0xFFF4A51C,
+        ).withValues(alpha: AppColors.isDark ? .42 : .30),
+      ),
+    ),
+    child: const Row(
+      children: [
+        Icon(Icons.auto_awesome_rounded, color: Color(0xFFF4A51C), size: 20),
+        SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Pro AI 使用额度 · 每月 80 次',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900),
+              ),
+              SizedBox(height: 2),
+              Text(
+                'AI精选好卡、AI 协助开卡各每月 30 次；每分钟最多 3 次。',
+                style: TextStyle(
+                  fontSize: 10.5,
+                  height: 1.35,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              SizedBox(height: 5),
+              Text(
+                '账单识别每月 20 次，和以上额度独立计算；每月月初重置。',
+                style: TextStyle(
+                  fontSize: 10.5,
+                  height: 1.35,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
 }

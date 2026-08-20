@@ -1,19 +1,20 @@
 import 'dart:math' as math;
 
-import 'package:card_app/core/motion/app_bottom_sheet.dart';
-import 'package:card_app/core/motion/app_haptics.dart';
-import 'package:card_app/core/motion/motion_widgets.dart';
-import 'package:card_app/core/theme/app_colors.dart';
-import 'package:card_app/core/widgets/app_feedback.dart';
-import 'package:card_app/features/catalog/domain/card_summary.dart';
-import 'package:card_app/features/catalog/widgets/global_account_catalog_card.dart';
-import 'package:card_app/features/ranking/data/remote_ranking_repository.dart';
-import 'package:card_app/features/ranking/domain/local_article.dart';
-import 'package:card_app/features/ranking/domain/ranking_data.dart';
-import 'package:card_app/features/pro/widgets/pro_crown_badge.dart';
-import 'package:card_app/features/shell/widgets/animated_glass_segment.dart';
+import 'package:cardfi/core/motion/app_bottom_sheet.dart';
+import 'package:cardfi/core/motion/app_haptics.dart';
+import 'package:cardfi/core/motion/motion_tokens.dart';
+import 'package:cardfi/core/motion/motion_widgets.dart';
+import 'package:cardfi/core/theme/app_colors.dart';
+import 'package:cardfi/core/widgets/app_feedback.dart';
+import 'package:cardfi/core/widgets/scroll_to_top_button.dart';
+import 'package:cardfi/features/catalog/domain/card_summary.dart';
+import 'package:cardfi/features/ranking/data/remote_ranking_repository.dart';
+import 'package:cardfi/features/ranking/domain/local_article.dart';
+import 'package:cardfi/features/ranking/domain/ranking_data.dart';
+import 'package:cardfi/features/pro/widgets/pro_crown_badge.dart';
+import 'package:cardfi/features/shell/widgets/animated_glass_segment.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:card_app/core/localization/localized_text.dart';
+import 'package:cardfi/core/localization/localized_text.dart';
 import 'package:flutter/material.dart' hide Text;
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -21,7 +22,7 @@ enum RankingTab { ranking, users, metrics, articles }
 
 enum _UserRankingRange { monthly, contribution }
 
-enum ArticleTab { news, globalAccount, openCard }
+enum ArticleTab { news, globalAccount, openCard, communityTips }
 
 const _metricCollapseDuration = Duration(milliseconds: 280);
 const _metricCollapseCurve = Cubic(0.22, 0.82, 0.28, 1);
@@ -126,7 +127,7 @@ final _testMetricsDashboard = CardMetricsDashboard(
 
 final _testUserRankingDashboard = UserRankingDashboard(
   periodLabel: '本月',
-  methodology: '贡献 40% · 有效活跃 25% · 社区反馈 20% · 持续参与 15%',
+  methodology: '贡献 40% · 有效活跃天数 25% · 社区反馈 20% · 持续参与 15%',
   updatedAt: null,
   isPreview: true,
   items: const [
@@ -176,6 +177,8 @@ class RankingPage extends StatefulWidget {
     required this.enableRemoteData,
     this.isPro = false,
     this.onOpenPro,
+    this.onOpenTipSubmission,
+    this.onCurrentTabReselected,
     super.key,
   });
 
@@ -186,12 +189,15 @@ class RankingPage extends StatefulWidget {
   final bool enableRemoteData;
   final bool isPro;
   final VoidCallback? onOpenPro;
+  final VoidCallback? onOpenTipSubmission;
+  final VoidCallback? onCurrentTabReselected;
 
   @override
   State<RankingPage> createState() => _RankingPageState();
 }
 
 class _RankingPageState extends State<RankingPage> {
+  late final ScrollController _scrollController;
   RankingTab _tab = RankingTab.ranking;
   List<RankingGroup>? _groups;
   StablecoinDashboard? _stablecoins;
@@ -204,19 +210,55 @@ class _RankingPageState extends State<RankingPage> {
   ArticleTab _articleTab = ArticleTab.news;
   String _stablecoinRange = '30d';
   _UserRankingRange _userRange = _UserRankingRange.monthly;
+  bool _showScrollTop = false;
+  Locale? _contentLocale;
 
   @override
   void initState() {
     super.initState();
+    _scrollController = ScrollController()
+      ..addListener(_updateScrollTopVisibility);
     if (!widget.enableRemoteData) {
       _failed.addAll([RankingTab.ranking, RankingTab.articles]);
       _stablecoins = _testStablecoinDashboard;
       _users = _testUserRankingDashboard;
       _metrics = _testMetricsDashboard;
-    } else {
-      _loadAll();
     }
   }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!widget.enableRemoteData) return;
+    final locale = Localizations.maybeLocaleOf(context);
+    if (_contentLocale == locale) return;
+    _contentLocale = locale;
+    _loadAll();
+  }
+
+  @override
+  void dispose() {
+    _scrollController
+      ..removeListener(_updateScrollTopVisibility)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _updateScrollTopVisibility() {
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    final next = position.pixels > position.viewportDimension;
+    if (next == _showScrollTop || !mounted) return;
+    setState(() => _showScrollTop = next);
+  }
+
+  Future<void> _scrollToTop() => _scrollController.animateTo(
+    0,
+    duration: MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : MotionTokens.page,
+    curve: MotionTokens.standardEnter,
+  );
 
   Future<void> _loadAll() async {
     await Future.wait([
@@ -238,7 +280,7 @@ class _RankingPageState extends State<RankingPage> {
       ),
       _load(
         RankingTab.articles,
-        widget.repository.loadArticles,
+        () => widget.repository.loadArticles(locale: _contentLocale),
         (value) => _articles = value,
       ),
     ]);
@@ -280,58 +322,71 @@ class _RankingPageState extends State<RankingPage> {
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
     return AppPullToRefresh(
       onRefresh: _refreshAll,
-      child: CustomScrollView(
-        key: const Key('ranking-page'),
-        physics: const AlwaysScrollableScrollPhysics(
-          parent: BouncingScrollPhysics(),
-        ),
-        slivers: [
-          SliverPersistentHeader(
-            pinned: true,
-            delegate: PinnedGlassHeaderDelegate(
-              height: 56,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
-                child: _RankingTabs(selected: _tab, onChanged: _selectTab),
-              ),
+      child: Stack(
+        children: [
+          CustomScrollView(
+            key: const Key('ranking-page'),
+            controller: _scrollController,
+            physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics(),
             ),
-          ),
-          SliverPadding(
-            padding: EdgeInsets.fromLTRB(
-              20,
-              _tab == RankingTab.ranking ? 14 : 4,
-              20,
-              132 + bottomInset,
-            ),
-            sliver: SliverList.list(
-              children: [
-                AnimatedSwitcher(
-                  duration: reduceMotion
-                      ? Duration.zero
-                      : const Duration(milliseconds: 320),
-                  switchInCurve: Curves.easeOutCubic,
-                  switchOutCurve: Curves.easeInCubic,
-                  transitionBuilder: (child, animation) {
-                    final slide = Tween<Offset>(
-                      begin: Offset(0.055 * _contentDirection, 0),
-                      end: Offset.zero,
-                    ).animate(animation);
-                    return FadeTransition(
-                      opacity: animation,
-                      child: SlideTransition(position: slide, child: child),
-                    );
-                  },
-                  child: KeyedSubtree(
-                    key: ValueKey(_tab),
-                    child: switch (_tab) {
-                      RankingTab.ranking => _rankingContent(),
-                      RankingTab.users => _userRankingContent(),
-                      RankingTab.metrics => _metricsContent(),
-                      RankingTab.articles => _articleContent(),
-                    },
+            slivers: [
+              SliverPersistentHeader(
+                pinned: true,
+                delegate: PinnedGlassHeaderDelegate(
+                  height: 56,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
+                    child: _RankingTabs(
+                      selected: _tab,
+                      onChanged: _selectTab,
+                      onReselected: widget.onCurrentTabReselected,
+                    ),
                   ),
                 ),
-              ],
+              ),
+              SliverPadding(
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  _tab == RankingTab.ranking ? 14 : 4,
+                  20,
+                  132 + bottomInset,
+                ),
+                sliver: SliverList.list(
+                  children: [
+                    TweenAnimationBuilder<double>(
+                      key: ValueKey('ranking-content-${_tab.name}'),
+                      tween: Tween(begin: reduceMotion ? 1 : 0, end: 1),
+                      duration: reduceMotion
+                          ? Duration.zero
+                          : const Duration(milliseconds: 240),
+                      curve: Curves.easeOutCubic,
+                      builder: (context, value, child) => Transform.translate(
+                        offset: Offset((1 - value) * 12 * _contentDirection, 0),
+                        child: child,
+                      ),
+                      child: KeyedSubtree(
+                        key: ValueKey(_tab),
+                        child: switch (_tab) {
+                          RankingTab.ranking => _rankingContent(),
+                          RankingTab.users => _userRankingContent(),
+                          RankingTab.metrics => _metricsContent(),
+                          RankingTab.articles => _articleContent(),
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          Positioned(
+            key: const Key('ranking-scroll-to-top'),
+            right: 20,
+            bottom: bottomInset + 88,
+            child: ScrollToTopButton(
+              visible: _showScrollTop,
+              onTap: _scrollToTop,
             ),
           ),
         ],
@@ -383,7 +438,10 @@ class _RankingPageState extends State<RankingPage> {
     );
   }
 
-  Widget _stablecoinContent({BuildContext? sheetContext}) {
+  Widget _stablecoinContent({
+    BuildContext? sheetContext,
+    StateSetter? onSheetState,
+  }) {
     if (_stablecoinsFailed) {
       return const _H5EmptyState(title: '稳定币数据暂时不可用', description: '稍后刷新看看。');
     }
@@ -405,43 +463,72 @@ class _RankingPageState extends State<RankingPage> {
           return;
         }
         setState(() => _stablecoinRange = range);
+        // The draggable sheet lives in a route above this page. Rebuild its
+        // local subtree too; otherwise the parent only becomes visible after
+        // closing the sheet, which made range selection appear ineffective.
+        onSheetState?.call(() {});
       },
     );
   }
 
   Widget _userRankingContent() {
-    if (_failed.contains(RankingTab.users)) {
-      return const _H5EmptyState(
-        key: ValueKey('user-ranking-unavailable'),
-        title: '卡友榜正在准备中',
-        description: '公开昵称、贡献计分与会员身份核验完成后，这里会展示榜单。',
-      );
-    }
-    if (_users == null) return const _LoadingPanel();
-    return _UserRankingPanel(
-      dashboard: _users!,
-      range: _userRange,
-      onRangeChanged: (range) => setState(() => _userRange = range),
+    final ranking = _failed.contains(RankingTab.users)
+        ? const _H5EmptyState(
+            key: ValueKey('user-ranking-unavailable'),
+            title: '卡友榜正在准备中',
+            description: '公开昵称、贡献计分与会员身份核验完成后，这里会展示榜单。',
+          )
+        : _users == null
+        ? const _LoadingPanel()
+        : _UserRankingPanel(
+            dashboard: _users!,
+            range: _userRange,
+            onRangeChanged: (range) => setState(() => _userRange = range),
+          );
+    return Column(
+      children: [
+        _CommunityPlazaEntry(onOpen: _openCommunityPlaza),
+        const SizedBox(height: 12),
+        ranking,
+      ],
     );
   }
 
+  void _openCommunityPlaza() {
+    AppHaptics.selection();
+    setState(() {
+      _contentDirection = 1;
+      _tab = RankingTab.articles;
+      _articleTab = ArticleTab.communityTips;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _scrollController.hasClients) {
+        _scrollController.jumpTo(0);
+      }
+    });
+  }
+
   Widget _articleContent() {
-    if (_failed.contains(RankingTab.articles)) {
-      return const _H5EmptyState(
-        title: '文章暂时没加载出来',
-        description: '稍后刷新看看，或者等后台发布新的文章。',
-      );
-    }
     final articles = _articles;
-    final globalAccounts = widget.cards
-        .where((card) => card.isGlobalAccount)
-        .toList(growable: false);
     final feedCategory = _articleTab.feedCategory;
-    final visibleItems = feedCategory == null
-        ? null
-        : articles
-              ?.where((item) => item.category == feedCategory)
-              .toList(growable: false);
+    var visibleItems = articles
+        ?.where((item) => item.category == feedCategory)
+        .toList(growable: false);
+    if (_articleTab == ArticleTab.communityTips &&
+        (visibleItems == null || visibleItems.isEmpty)) {
+      visibleItems = [
+        for (final article in localCommunityTipArticles)
+          ArticleFeedItem(
+            slug: article.id,
+            article: article,
+            coverImageUrl: null,
+            viewCount: 0,
+            likeCount: 0,
+            category: ArticleFeedCategory.communityTip,
+          ),
+      ];
+    }
+    final failed = _failed.contains(RankingTab.articles);
     return Column(
       key: const Key('article-content'),
       children: [
@@ -450,17 +537,15 @@ class _RankingPageState extends State<RankingPage> {
           onChanged: (tab) => setState(() => _articleTab = tab),
         ),
         const SizedBox(height: 6),
-        if (_articleTab == ArticleTab.globalAccount)
-          if (globalAccounts.isEmpty)
-            _ArticleEmptyState(
-              title: _articleTab.emptyTitle,
-              description: _articleTab.emptyDescription,
-            )
-          else
-            _GlobalAccountArticleList(
-              cards: globalAccounts,
-              onOpen: widget.onOpenCard,
-            )
+        if (_articleTab == ArticleTab.communityTips) ...[
+          _CommunityTipsIntro(onSubmit: widget.onOpenTipSubmission),
+          const SizedBox(height: 10),
+        ],
+        if (failed && _articleTab != ArticleTab.communityTips)
+          const _H5EmptyState(
+            title: '文章暂时没加载出来',
+            description: '稍后刷新看看，或者等后台发布新的文章。',
+          )
         else if (visibleItems == null)
           const _ArticleListSkeleton()
         else if (visibleItems.isEmpty)
@@ -496,42 +581,47 @@ class _RankingPageState extends State<RankingPage> {
       initialSize: .9,
       minSize: .58,
       maxSize: .96,
-      builder: (sheetContext, scrollController) => Container(
-        margin: const EdgeInsets.fromLTRB(10, 0, 10, 8),
-        padding: const EdgeInsets.fromLTRB(14, 10, 14, 20),
-        decoration: BoxDecoration(
-          color: AppColors.isDark
-              ? const Color(0xF21C2030)
-              : const Color(0xF7F8FAFF),
-          borderRadius: BorderRadius.circular(28),
-          border: Border.all(color: AppColors.line),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x40000000),
-              blurRadius: 36,
-              offset: Offset(0, 18),
-            ),
-          ],
-        ),
-        child: Column(
-          children: [
-            Container(
-              width: 42,
-              height: 5,
-              decoration: BoxDecoration(
-                color: AppColors.textMuted.withValues(alpha: .4),
-                borderRadius: BorderRadius.circular(99),
+      builder: (sheetContext, scrollController) => StatefulBuilder(
+        builder: (context, setSheetState) => Container(
+          margin: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 20),
+          decoration: BoxDecoration(
+            color: AppColors.isDark
+                ? const Color(0xF21C2030)
+                : const Color(0xF7F8FAFF),
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: AppColors.line),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x40000000),
+                blurRadius: 36,
+                offset: Offset(0, 18),
               ),
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: SingleChildScrollView(
-                controller: scrollController,
-                physics: const BouncingScrollPhysics(),
-                child: _stablecoinContent(sheetContext: sheetContext),
+            ],
+          ),
+          child: Column(
+            children: [
+              Container(
+                width: 42,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: AppColors.textMuted.withValues(alpha: .4),
+                  borderRadius: BorderRadius.circular(99),
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 8),
+              Expanded(
+                child: SingleChildScrollView(
+                  controller: scrollController,
+                  physics: const BouncingScrollPhysics(),
+                  child: _stablecoinContent(
+                    sheetContext: sheetContext,
+                    onSheetState: setSheetState,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -539,60 +629,126 @@ class _RankingPageState extends State<RankingPage> {
 }
 
 extension on ArticleTab {
-  ArticleFeedCategory? get feedCategory => switch (this) {
+  ArticleFeedCategory get feedCategory => switch (this) {
     ArticleTab.news => ArticleFeedCategory.news,
-    ArticleTab.globalAccount => null,
+    ArticleTab.globalAccount => ArticleFeedCategory.globalAccount,
     ArticleTab.openCard => ArticleFeedCategory.openCard,
+    ArticleTab.communityTips => ArticleFeedCategory.communityTip,
   };
 
   String get label => switch (this) {
     ArticleTab.news => '资讯',
     ArticleTab.globalAccount => '全球账户',
     ArticleTab.openCard => '开卡',
+    ArticleTab.communityTips => '技巧',
   };
 
   String get emptyTitle => switch (this) {
     ArticleTab.news => '暂无资讯',
-    ArticleTab.globalAccount => '暂无全球账户',
+    ArticleTab.globalAccount => '暂无全球账户文章',
     ArticleTab.openCard => '暂无开卡内容',
+    ArticleTab.communityTips => '暂无卡友技巧',
   };
 
   String get emptyDescription => switch (this) {
     ArticleTab.news => '后台发布资讯后，这里会展示最新内容。',
-    ArticleTab.globalAccount => '全球账户资料发布后，这里会展示最新内容。',
+    ArticleTab.globalAccount => '后台发布全球账户文章后，这里会展示最新内容。',
     ArticleTab.openCard => '后台发布开卡文章后，这里会展示最新内容。',
+    ArticleTab.communityTips => '审核通过的卡友技巧会展示在这里。',
   };
-}
-
-class _GlobalAccountArticleList extends StatelessWidget {
-  const _GlobalAccountArticleList({required this.cards, required this.onOpen});
-
-  final List<CardSummary> cards;
-  final ValueChanged<CardSummary> onOpen;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      key: const Key('article-global-account-list'),
-      children: [
-        for (var index = 0; index < cards.length; index++) ...[
-          GlobalAccountCatalogCard(
-            card: cards[index],
-            onTap: () => onOpen(cards[index]),
-          ),
-          if (index != cards.length - 1) const SizedBox(height: 12),
-        ],
-      ],
-    );
-  }
 }
 
 class _LoadingPanel extends StatelessWidget {
   const _LoadingPanel();
 
   @override
-  Widget build(BuildContext context) =>
-      const AppLoadingPanel(height: 104, label: '正在同步最新排行');
+  Widget build(BuildContext context) => Semantics(
+    label: '正在同步最新排行',
+    child: AppShimmer(
+      key: const Key('ranking-loading-skeleton'),
+      child: Column(
+        children: [
+          for (var index = 0; index < 3; index++) ...[
+            _LoadingTierRow(index: index),
+            if (index < 2) const SizedBox(height: 8),
+          ],
+        ],
+      ),
+    ),
+  );
+}
+
+class _LoadingTierRow extends StatelessWidget {
+  const _LoadingTierRow({required this.index});
+
+  final int index;
+
+  @override
+  Widget build(BuildContext context) {
+    final base = AppColors.isDark
+        ? Colors.white.withValues(alpha: .08)
+        : const Color(0xFFE7EAF3);
+    final accent = AppColors.violet.withValues(
+      alpha: AppColors.isDark ? .16 : .12,
+    );
+    return SizedBox(
+      height: 96,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            width: 52,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [accent, base],
+              ),
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(12, 13, 12, 10),
+              decoration: _panelDecoration(radius: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  for (var item = 0; item < 4; item++)
+                    SizedBox(
+                      width: 48,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            width: 42,
+                            height: 42,
+                            decoration: BoxDecoration(
+                              color: item == index ? accent : base,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          const SizedBox(height: 7),
+                          Container(
+                            width: item.isEven ? 35 : 28,
+                            height: 7,
+                            decoration: BoxDecoration(
+                              color: base,
+                              borderRadius: BorderRadius.circular(99),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _LiveTierList extends StatelessWidget {
@@ -1099,7 +1255,9 @@ class _LiveArticleList extends StatelessWidget {
                     ),
                     const SizedBox(height: 9),
                     Text(
-                      '浏览 ${item.viewCount}  ·  点赞 ${item.likeCount}  ·  ${item.article.publishedLabel}',
+                      item.article.isCommunityTip
+                          ? '${item.article.author ?? '匿名卡友'}  ·  有帮助 ${item.likeCount}  ·  ${item.article.verifiedLabel ?? item.article.publishedLabel}'
+                          : '浏览 ${item.viewCount}  ·  点赞 ${item.likeCount}  ·  ${item.article.publishedLabel}',
                       style: TextStyle(
                         color: AppColors.textMuted,
                         fontSize: 9.5,
@@ -1113,6 +1271,166 @@ class _LiveArticleList extends StatelessWidget {
           const SizedBox(height: 10),
         ],
       ],
+    );
+  }
+}
+
+class _CommunityPlazaEntry extends StatelessWidget {
+  const _CommunityPlazaEntry({required this.onOpen});
+
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      key: const Key('community-plaza-entry'),
+      color: Colors.transparent,
+      child: InkWell(
+        key: const Key('open-community-plaza'),
+        onTap: onOpen,
+        borderRadius: BorderRadius.circular(18),
+        child: Ink(
+          padding: const EdgeInsets.all(16),
+          decoration: _panelDecoration(radius: 18),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      AppColors.violet.withValues(alpha: .95),
+                      AppColors.mint.withValues(alpha: .9),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: const Icon(
+                  Icons.forum_outlined,
+                  color: Colors.white,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '卡友广场',
+                      style: TextStyle(
+                        color: AppColors.text,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '看卡友真实经验，也可以分享自己的使用心得。',
+                      style: TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 11.5,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                color: AppColors.textMuted,
+                size: 17,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CommunityTipsIntro extends StatelessWidget {
+  const _CommunityTipsIntro({this.onSubmit});
+
+  final VoidCallback? onSubmit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const Key('community-tips-intro'),
+      padding: const EdgeInsets.all(16),
+      decoration: _panelDecoration(radius: 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: AppColors.mint.withValues(alpha: .12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.tips_and_updates_outlined,
+                  color: AppColors.mint,
+                  size: 21,
+                ),
+              ),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '卡友技巧库',
+                      style: TextStyle(
+                        color: AppColors.text,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '真实经验投稿，审核并完成基础核验后发布。',
+                      style: TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 10.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            '用户经验不代表发卡方官方说明；费用、地区、KYC 和功能可用性仍以官方最新规则为准。',
+            style: TextStyle(
+              color: AppColors.textMuted,
+              fontSize: 11.5,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 13),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              key: const Key('community-tip-submit'),
+              onPressed: onSubmit,
+              icon: const Icon(Icons.edit_note_rounded, size: 19),
+              label: const Text('投稿一个技巧'),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+                shape: const StadiumBorder(),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1301,8 +1619,11 @@ class _UserRankingPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final items = [...dashboard.items]
-      ..sort((left, right) => _score(right).compareTo(_score(left)));
+    final items =
+        ([...dashboard.items]
+              ..sort((left, right) => _score(right).compareTo(_score(left))))
+            .take(20)
+            .toList(growable: false);
     return Container(
       key: const Key('user-ranking-panel'),
       padding: const EdgeInsets.fromLTRB(14, 16, 14, 14),
@@ -1319,12 +1640,17 @@ class _UserRankingPanel extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Text(
-                          '卡友贡献活跃榜',
-                          style: TextStyle(
-                            color: AppColors.text,
-                            fontSize: 17,
-                            fontWeight: FontWeight.w900,
+                        Flexible(
+                          child: Text(
+                            '卡友贡献与活跃榜',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: AppColors.text,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w900,
+                              height: 1.15,
+                            ),
                           ),
                         ),
                         if (dashboard.isPreview) ...[
@@ -1335,7 +1661,7 @@ class _UserRankingPanel extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${dashboard.periodLabel} · 会员身份不参与计分',
+                      '${dashboard.periodLabel} · 按活跃与有效贡献综合计算',
                       style: TextStyle(
                         color: AppColors.textMuted,
                         fontSize: 10.5,
@@ -1345,21 +1671,27 @@ class _UserRankingPanel extends StatelessWidget {
                   ],
                 ),
               ),
-              Tooltip(
-                message: dashboard.methodology,
-                child: Container(
-                  width: 44,
-                  height: 44,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: AppColors.glassStrong,
-                    borderRadius: BorderRadius.circular(15),
-                    border: Border.all(color: AppColors.line),
-                  ),
-                  child: Icon(
-                    Icons.info_outline_rounded,
-                    color: AppColors.textMuted,
-                    size: 20,
+              Semantics(
+                button: true,
+                label: '查看卡友榜计算说明',
+                child: InkWell(
+                  key: const Key('user-ranking-methodology'),
+                  onTap: () => _showMethodology(context),
+                  borderRadius: BorderRadius.circular(15),
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: AppColors.glassStrong,
+                      borderRadius: BorderRadius.circular(15),
+                      border: Border.all(color: AppColors.line),
+                    ),
+                    child: Icon(
+                      Icons.info_outline_rounded,
+                      color: AppColors.textMuted,
+                      size: 20,
+                    ),
                   ),
                 ),
               ),
@@ -1373,7 +1705,7 @@ class _UserRankingPanel extends StatelessWidget {
             items: const [
               GlassSegmentItem(
                 value: _UserRankingRange.monthly,
-                label: '本月活跃',
+                label: '本月活跃度',
                 key: Key('user-ranking-monthly'),
               ),
               GlassSegmentItem(
@@ -1442,6 +1774,159 @@ class _UserRankingPanel extends StatelessWidget {
     _UserRankingRange.monthly => entry.monthlyActivityScore,
     _UserRankingRange.contribution => entry.totalContributionScore,
   };
+
+  void _showMethodology(BuildContext context) {
+    showAppBottomSheet<void>(
+      context: context,
+      barrierAlpha: .34,
+      builder: (_) => _UserRankingMethodologySheet(dashboard: dashboard),
+    );
+  }
+}
+
+class _UserRankingMethodologySheet extends StatelessWidget {
+  const _UserRankingMethodologySheet({required this.dashboard});
+
+  final UserRankingDashboard dashboard;
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return SafeArea(
+      top: false,
+      child: Container(
+        key: const Key('user-ranking-methodology-sheet'),
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(22, 10, 22, 24),
+        decoration: BoxDecoration(
+          color: dark ? const Color(0xFF171C2D) : const Color(0xFFFAFBFF),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          border: Border.all(color: AppColors.line),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: dark ? .34 : .16),
+              blurRadius: 32,
+              offset: const Offset(0, -8),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 42,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.textMuted.withValues(alpha: .34),
+                  borderRadius: BorderRadius.circular(99),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              '卡友榜计算说明',
+              style: TextStyle(
+                color: AppColors.text,
+                fontSize: 20,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 16),
+            _MethodologyItem(
+              icon: Icons.functions_rounded,
+              label: '计算公式',
+              value: dashboard.methodology,
+            ),
+            const SizedBox(height: 12),
+            _MethodologyItem(
+              icon: Icons.calendar_month_outlined,
+              label: '统计周期',
+              value: dashboard.periodLabel,
+            ),
+            const SizedBox(height: 12),
+            _MethodologyItem(
+              icon: Icons.schedule_rounded,
+              label: '数据更新时间',
+              value: _userRankingTimestamp(dashboard.updatedAt),
+            ),
+            const SizedBox(height: 12),
+            _MethodologyItem(
+              icon: Icons.emoji_events_outlined,
+              label: '展示范围',
+              value: '仅展示得分最高的前 20 名卡友',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MethodologyItem extends StatelessWidget {
+  const _MethodologyItem({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(13),
+    decoration: BoxDecoration(
+      color: AppColors.glassStrong,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: AppColors.line),
+    ),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: AppColors.violet, size: 19),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                value,
+                style: TextStyle(
+                  color: AppColors.text,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+String _userRankingTimestamp(DateTime? value) {
+  if (value == null) return '暂未提供更新时间';
+  final local = value.toLocal();
+  final month = local.month.toString().padLeft(2, '0');
+  final day = local.day.toString().padLeft(2, '0');
+  final hour = local.hour.toString().padLeft(2, '0');
+  final minute = local.minute.toString().padLeft(2, '0');
+  return '${local.year}-$month-$day $hour:$minute';
 }
 
 class _PreviewBadge extends StatelessWidget {
@@ -1528,7 +2013,7 @@ class _UserRankingRow extends StatelessWidget {
                 Text(
                   contributionMode
                       ? '已采纳 ${entry.acceptedContributions} 条贡献'
-                      : '活跃 ${entry.activeDays} 天 · 采纳 ${entry.acceptedContributions} 条',
+                      : '活跃天数 ${entry.activeDays} 天 · 已采纳 ${entry.acceptedContributions} 条',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -1554,7 +2039,7 @@ class _UserRankingRow extends StatelessWidget {
               ),
               const SizedBox(height: 2),
               Text(
-                contributionMode ? '贡献分' : '活跃分',
+                contributionMode ? '贡献分' : '活跃度',
                 style: TextStyle(color: AppColors.textMuted, fontSize: 9),
               ),
             ],
@@ -1622,48 +2107,58 @@ class _UserAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final source = entry.avatarUrl?.trim();
+    final dark = Theme.of(context).brightness == Brightness.dark;
     final fallback = Center(
       child: Text(
         entry.displayName.trim().isEmpty
             ? '?'
             : entry.displayName.trim().substring(0, 1).toUpperCase(),
-        style: const TextStyle(
-          color: Colors.white,
+        style: TextStyle(
+          color: dark ? const Color(0xFFF2F5FF) : const Color(0xFF10131B),
           fontSize: 16,
           fontWeight: FontWeight.w900,
+          letterSpacing: -.3,
         ),
       ),
     );
-    return Container(
-      width: 44,
-      height: 44,
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF7F8CFF), Color(0xFF50C8E8)],
-        ),
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: AppColors.line),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.violet.withValues(alpha: .14),
-            blurRadius: 13,
-            offset: const Offset(0, 6),
+    return RepaintBoundary(
+      child: Container(
+        width: 44,
+        height: 44,
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: dark
+                ? const [Color(0xFF454B61), Color(0xFF252A40)]
+                : const [Color(0xF7FFFFFF), Color(0xEBF5FAFF)],
           ),
-        ],
+          border: Border.all(
+            color: dark ? const Color(0x885B637B) : const Color(0xE6FFFFFF),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: dark
+                  ? const Color.fromRGBO(0, 0, 0, .20)
+                  : const Color.fromRGBO(98, 110, 174, .08),
+              blurRadius: dark ? 18 : 14,
+              offset: Offset(0, dark ? 7 : 5),
+            ),
+          ],
+        ),
+        child: source != null && source.isNotEmpty
+            ? CachedNetworkImage(
+                imageUrl: source,
+                fit: BoxFit.cover,
+                memCacheWidth: 132,
+                memCacheHeight: 132,
+                placeholder: (_, _) => fallback,
+                errorWidget: (_, _, _) => fallback,
+              )
+            : fallback,
       ),
-      child: source != null && source.isNotEmpty
-          ? CachedNetworkImage(
-              imageUrl: source,
-              fit: BoxFit.cover,
-              memCacheWidth: 132,
-              memCacheHeight: 132,
-              placeholder: (_, _) => fallback,
-              errorWidget: (_, _, _) => fallback,
-            )
-          : fallback,
     );
   }
 }
@@ -1690,10 +2185,15 @@ class _CurrentUserBadge extends StatelessWidget {
 }
 
 class _RankingTabs extends StatelessWidget {
-  const _RankingTabs({required this.selected, required this.onChanged});
+  const _RankingTabs({
+    required this.selected,
+    required this.onChanged,
+    this.onReselected,
+  });
 
   final RankingTab selected;
   final ValueChanged<RankingTab> onChanged;
+  final VoidCallback? onReselected;
 
   static const labels = <RankingTab, String>{
     RankingTab.ranking: '热门榜',
@@ -1718,6 +2218,7 @@ class _RankingTabs extends StatelessWidget {
       ],
       selected: selected,
       onChanged: onChanged,
+      onReselected: onReselected == null ? null : (_) => onReselected!(),
       fontSize: 11,
     );
   }
@@ -1833,7 +2334,7 @@ class _StablecoinRangeChip extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
-      label: _requiresPro && !isPro ? '$label，Pro 会员功能' : label,
+      label: _requiresPro ? '$label，Pro 会员功能' : label,
       child: GestureDetector(
         key: Key('stablecoin-range-$range'),
         behavior: HitTestBehavior.opaque,
@@ -1845,6 +2346,7 @@ class _StablecoinRangeChip extends StatelessWidget {
           height: 44,
           child: Center(
             child: AnimatedContainer(
+              key: Key('stablecoin-range-surface-$range'),
               duration: reduceMotion
                   ? Duration.zero
                   : const Duration(milliseconds: 180),
@@ -1886,10 +2388,10 @@ class _StablecoinRangeChip extends StatelessWidget {
                       fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
                     ),
                   ),
-                  if (_requiresPro && !isPro)
+                  if (_requiresPro)
                     const Positioned(
-                      right: 2,
-                      top: -11,
+                      right: -4,
+                      top: -17,
                       child: ProCrownBadge(),
                     ),
                 ],
@@ -2836,10 +3338,10 @@ class _PeriodSelector extends StatelessWidget {
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    if ((item.$1 == '90d' || item.$1 == 'all') && !isPro)
+                    if (item.$1 == '90d' || item.$1 == 'all')
                       const Positioned(
-                        right: 0,
-                        top: -8,
+                        right: -4,
+                        top: -14,
                         child: ProCrownBadge(),
                       ),
                   ],
@@ -2867,7 +3369,7 @@ class _SharePanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _PanelHeading(index: '02', label: '供应占比', title: '市占率'),
+          _PanelHeading(index: '02', label: '市值占比', title: '稳定币市值占比'),
           const SizedBox(height: 14),
           for (final entry in entries) ...[
             InkWell(
@@ -3039,23 +3541,27 @@ class _MetricsTable extends StatelessWidget {
   final StablecoinDashboard? stablecoins;
   final VoidCallback onOpenStablecoins;
 
-  List<_MetricDisplayRow> get rows => dashboard.items
-      .map(
-        (item) => _MetricDisplayRow(
-          item: item,
-          logoText: item.logoText.isNotEmpty
-              ? item.logoText
-              : item.name.isNotEmpty
-              ? item.name.substring(0, 1)
-              : '?',
-          sevenDay: _number(item.sevenDay),
-          thirtyDay: _number(item.thirtyDay),
-          total: _number(item.total),
-          transactions: _number(item.transactions),
-          addresses: _number(item.addresses),
-        ),
-      )
-      .toList(growable: false);
+  List<_MetricDisplayRow> get rows {
+    final items = [...dashboard.items]
+      ..sort((left, right) => right.thirtyDay.compareTo(left.thirtyDay));
+    return items
+        .map(
+          (item) => _MetricDisplayRow(
+            item: item,
+            logoText: item.logoText.isNotEmpty
+                ? item.logoText
+                : item.name.isNotEmpty
+                ? item.name.substring(0, 1)
+                : '?',
+            sevenDay: _number(item.sevenDay),
+            thirtyDay: _number(item.thirtyDay),
+            total: _number(item.total),
+            transactions: _number(item.transactions),
+            addresses: _number(item.addresses),
+          ),
+        )
+        .toList(growable: false);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -3082,7 +3588,7 @@ class _MetricsTable extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '按 30 天充值量排序 · 来源 ${dashboard.source}   ${_time(dashboard.updatedAt)}',
+                      '来源 ${_sourceName(dashboard.source)}   ${_time(dashboard.updatedAt)}',
                       style: TextStyle(
                         color: AppColors.textMuted,
                         fontSize: 10,
@@ -3133,6 +3639,12 @@ class _MetricsTable extends StatelessWidget {
     final local = value.toLocal();
     return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
   }
+
+  String _sourceName(String source) => switch (source.toLowerCase()) {
+    'paymentscan' => 'Paymentscan',
+    'demo' => '演示数据',
+    _ => source.isEmpty ? '—' : source,
+  };
 }
 
 class _StablecoinShortcut extends StatelessWidget {
@@ -3297,9 +3809,20 @@ class _MetricsDataGridState extends State<_MetricsDataGrid> {
     setState(() => _collapsed = next);
   }
 
+  double _maximum(num Function(_MetricDisplayRow row) select) =>
+      widget.rows.fold<double>(
+        1,
+        (current, row) => math.max(current, select(row).toDouble()).toDouble(),
+      );
+
   @override
   Widget build(BuildContext context) {
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final maxSevenDay = _maximum((row) => row.item.sevenDay);
+    final maxThirtyDay = _maximum((row) => row.item.thirtyDay);
+    final maxTotal = _maximum((row) => row.item.total);
+    final maxTransactions = _maximum((row) => row.item.transactions);
+    final maxAddresses = _maximum((row) => row.item.addresses);
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
       child: Row(
@@ -3351,7 +3874,15 @@ class _MetricsDataGridState extends State<_MetricsDataGrid> {
                   children: [
                     const _MetricValuesHeader(),
                     for (var index = 0; index < widget.rows.length; index++)
-                      _MetricValuesRow(index: index, row: widget.rows[index]),
+                      _MetricValuesRow(
+                        index: index,
+                        row: widget.rows[index],
+                        maxSevenDay: maxSevenDay,
+                        maxThirtyDay: maxThirtyDay,
+                        maxTotal: maxTotal,
+                        maxTransactions: maxTransactions,
+                        maxAddresses: maxAddresses,
+                      ),
                   ],
                 ),
               ),
@@ -3648,11 +4179,11 @@ class _MetricValuesHeader extends StatelessWidget {
       color: _metricsTableSurface(context),
       child: const Row(
         children: [
-          _TableCell(width: 144, text: '7 天充值量', header: true),
-          _TableCell(width: 160, text: '30 天充值量', header: true),
-          _TableCell(width: 182, text: '累计充值量', header: true),
-          _TableCell(width: 168, text: '链上交互笔数', header: true),
-          _TableCell(width: 150, text: '可观测地址', header: true),
+          _TableCell(width: 144, text: '近 7 天入金量', header: true),
+          _TableCell(width: 160, text: '近 30 天入金量', header: true),
+          _TableCell(width: 182, text: '累计入金量', header: true),
+          _TableCell(width: 168, text: '链上交易笔数', header: true),
+          _TableCell(width: 150, text: '活跃地址数', header: true),
         ],
       ),
     );
@@ -3779,15 +4310,26 @@ class _MetricIdentityRow extends StatelessWidget {
 }
 
 class _MetricValuesRow extends StatelessWidget {
-  const _MetricValuesRow({required this.index, required this.row});
+  const _MetricValuesRow({
+    required this.index,
+    required this.row,
+    required this.maxSevenDay,
+    required this.maxThirtyDay,
+    required this.maxTotal,
+    required this.maxTransactions,
+    required this.maxAddresses,
+  });
 
   final int index;
   final _MetricDisplayRow row;
+  final double maxSevenDay;
+  final double maxThirtyDay;
+  final double maxTotal;
+  final double maxTransactions;
+  final double maxAddresses;
 
   @override
   Widget build(BuildContext context) {
-    final max = 67520000.0;
-    final current = double.tryParse(row.sevenDay.replaceAll(',', '')) ?? 0;
     return Material(
       color: _metricsTableSurface(context, index: index),
       child: SizedBox(
@@ -3797,45 +4339,40 @@ class _MetricValuesRow extends StatelessWidget {
             _MetricValueCell(
               width: 144,
               value: row.sevenDay,
-              ratio: math.max(.02, current / max),
+              ratio: _ratio(row.item.sevenDay, maxSevenDay),
               color: const Color(0xFF75D29F),
             ),
             _MetricValueCell(
               width: 160,
               value: row.thirtyDay,
-              ratio: math.max(.02, current / max),
+              ratio: _ratio(row.item.thirtyDay, maxThirtyDay),
               color: const Color(0xFF76A8EA),
             ),
             _MetricValueCell(
               width: 182,
               value: row.total,
-              ratio: math.max(.02, current / max),
+              ratio: _ratio(row.item.total, maxTotal),
               color: const Color(0xFFAB8CE9),
             ),
             _MetricValueCell(
               width: 168,
               value: row.transactions,
-              ratio: math.max(
-                .02,
-                (double.tryParse(row.transactions.replaceAll(',', '')) ?? 0) /
-                    max,
-              ),
+              ratio: _ratio(row.item.transactions, maxTransactions),
               color: const Color(0xFF60D8B8),
             ),
-            _MetricValueCell(
+            _MetricAddressCell(
               width: 150,
               value: row.addresses,
-              ratio: math.max(
-                .02,
-                (double.tryParse(row.addresses.replaceAll(',', '')) ?? 0) / max,
-              ),
-              color: const Color(0xFFFFC45D),
+              heat: _ratio(row.item.addresses, maxAddresses),
             ),
           ],
         ),
       ),
     );
   }
+
+  double _ratio(num value, double maximum) =>
+      math.max(.02, value.toDouble() / maximum).clamp(0, 1).toDouble();
 }
 
 class _MetricValueCell extends StatelessWidget {
@@ -3894,6 +4431,45 @@ class _MetricValueCell extends StatelessWidget {
   }
 }
 
+class _MetricAddressCell extends StatelessWidget {
+  const _MetricAddressCell({
+    required this.width,
+    required this.value,
+    required this.heat,
+  });
+
+  final double width;
+  final String value;
+  final double heat;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = switch (heat) {
+      >= .75 => const [Color(0x2EFF7F72), Color(0xB8FF7567)],
+      >= .42 => const [Color(0x29FFC266), Color(0x9EFFAB4C)],
+      >= .14 => const [Color(0x1FEFE06F), Color(0x7AEBDA5D)],
+      _ => const [Color(0x1A52BE7E), Color(0x8A52BE7E)],
+    };
+    return Container(
+      width: width,
+      decoration: BoxDecoration(
+        border: Border(left: BorderSide(color: AppColors.line)),
+        gradient: LinearGradient(colors: colors),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
+      alignment: Alignment.centerRight,
+      child: Text(
+        value,
+        style: TextStyle(
+          color: AppColors.text,
+          fontSize: 11,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+}
+
 class _TableCell extends StatelessWidget {
   const _TableCell({
     required this.width,
@@ -3918,7 +4494,11 @@ class _TableCell extends StatelessWidget {
       child: Text(
         text,
         style: TextStyle(
-          color: header ? AppColors.text : AppColors.textMuted,
+          color: header
+              ? (Theme.of(context).brightness == Brightness.dark
+                    ? Colors.white
+                    : AppColors.text)
+              : AppColors.textMuted,
           fontSize: 10,
           fontWeight: FontWeight.w800,
         ),

@@ -1,4 +1,4 @@
-import 'package:card_app/core/localization/localized_text.dart';
+import 'package:cardfi/core/localization/localized_text.dart';
 import 'package:flutter/material.dart' hide Text;
 
 class ProCrownBadge extends StatelessWidget {

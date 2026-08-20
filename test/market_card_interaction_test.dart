@@ -1,10 +1,12 @@
-import 'package:card_app/core/theme/app_colors.dart';
-import 'package:card_app/core/theme/app_theme.dart';
-import 'package:card_app/features/catalog/data/local_card_catalog.dart';
-import 'package:card_app/features/catalog/domain/card_summary.dart';
-import 'package:card_app/features/catalog/widgets/catalog_card_row.dart';
-import 'package:card_app/features/market/presentation/market_page.dart';
-import 'package:card_app/features/market/widgets/market_card_transition.dart';
+import 'package:cardfi/core/theme/app_colors.dart';
+import 'package:cardfi/core/theme/app_theme.dart';
+import 'package:cardfi/core/widgets/scroll_to_top_button.dart';
+import 'package:cardfi/core/localization/app_localizations.dart';
+import 'package:cardfi/features/catalog/data/local_card_catalog.dart';
+import 'package:cardfi/features/catalog/domain/card_summary.dart';
+import 'package:cardfi/features/catalog/widgets/catalog_card_row.dart';
+import 'package:cardfi/features/market/presentation/market_page.dart';
+import 'package:cardfi/features/market/widgets/market_card_transition.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -54,6 +56,106 @@ void main() {
     expect(sourceTitleRect, isNotNull);
   });
 
+  testWidgets('market row puts cashback before application facts', (
+    tester,
+  ) async {
+    const card = CardSummary(
+      id: 'decision-card',
+      name: 'Decision Card',
+      issuer: 'Decision',
+      category: CardCategory.uCard,
+      label: 'VISA',
+      tint: 0xFF112233,
+      kycSummary: '身份证 / 护照',
+      cashbackRate: '最高 2%',
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MarketPage(
+          repository: const _CardsRepository([card]),
+          onSearch: () {},
+          onOpenCard: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('最高返现 2% · 证件：身份证 / 护照'), findsOneWidget);
+    expect(find.text('Decision · U 卡'), findsNothing);
+  });
+
+  testWidgets('market decision subtitle is localized in English', (
+    tester,
+  ) async {
+    const card = CardSummary(
+      id: 'localized-card',
+      name: 'Localized Card',
+      issuer: 'Issuer',
+      category: CardCategory.uCard,
+      label: 'VISA',
+      tint: 0xFF112233,
+      kycSummary: '身份证 / 护照',
+      cashbackRate: '最高 2%',
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('en', 'US'),
+        supportedLocales: const [Locale('en', 'US')],
+        localizationsDelegates: const [AppLocalizations.delegate],
+        home: MarketPage(
+          repository: const _CardsRepository([card]),
+          onSearch: () {},
+          onOpenCard: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Cashback up to 2% · Documents: National ID / Passport'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('market row keeps restrictions and falls back to freshness', (
+    tester,
+  ) async {
+    final cards = [
+      CardSummary(
+        id: 'restricted-card',
+        name: 'Restricted Card',
+        issuer: 'Issuer',
+        category: CardCategory.uCard,
+        label: 'VISA',
+        tint: 0xFF112233,
+        kycSummary: '大陆不可用',
+        cashbackRate: '3%',
+      ),
+      CardSummary(
+        id: 'unknown-card',
+        name: 'Unknown Card',
+        issuer: 'Issuer',
+        category: CardCategory.uCard,
+        label: 'VISA',
+        tint: 0xFF112233,
+        updatedAt: DateTime(2026, 7, 21),
+      ),
+    ];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MarketPage(
+          repository: _CardsRepository(cards),
+          onSearch: () {},
+          onOpenCard: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('返现 3% · 大陆不可用'), findsOneWidget);
+    expect(find.text('申请条件待确认 · 7月21日更新'), findsOneWidget);
+  });
+
   testWidgets('vertical scrolling cancels the market card tap', (tester) async {
     var openCount = 0;
     await tester.pumpWidget(
@@ -93,14 +195,25 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    final uCardTab = find.byKey(const Key('market-group-ucard'));
+    final uCardTabTop = tester.getTopLeft(uCardTab).dy;
+
     final globalTab = find.byKey(const Key('market-group-global-account'));
     await tester.tap(globalTab);
     await tester.pumpAndSettle();
 
     final account = find.byKey(const Key('global-account-card-wise-account'));
     expect(account, findsOneWidget);
+    // The main tabs stay put. Global accounts add their own three-filter
+    // panel directly below the tabs before the directory begins.
+    final filter = find.byKey(const Key('global-account-filter-panel'));
+    expect(tester.getTopLeft(globalTab).dy, closeTo(uCardTabTop, 1));
     expect(
-      tester.getTopLeft(account).dy - tester.getBottomLeft(globalTab).dy,
+      tester.getTopLeft(filter).dy - tester.getBottomLeft(globalTab).dy,
+      greaterThanOrEqualTo(12),
+    );
+    expect(
+      tester.getTopLeft(account).dy - tester.getBottomLeft(filter).dy,
       greaterThanOrEqualTo(12),
     );
     expect(
@@ -114,6 +227,22 @@ void main() {
     expect(cover, findsOneWidget);
     final coverSize = tester.getSize(cover);
     expect(coverSize.width / coverSize.height, closeTo(16 / 9, .01));
+    expect(
+      find.descendant(
+        of: account,
+        matching: find.byKey(const Key('global-account-logo-wise-account')),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: account,
+        matching: find.byKey(
+          const Key('global-account-bank-mark-wise-account'),
+        ),
+      ),
+      findsOneWidget,
+    );
 
     await tester.tap(account);
     await tester.pump(const Duration(milliseconds: 120));
@@ -122,9 +251,302 @@ void main() {
       geometry!.artworkRect.width / geometry!.artworkRect.height,
       closeTo(16 / 9, .01),
     );
+
+    await tester.drag(
+      find.byKey(const Key('market-page')),
+      const Offset(0, -560),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(globalTab).dy, lessThanOrEqualTo(12));
   });
 
-  testWidgets('global account article card supports the dark theme', (
+  testWidgets(
+    'global accounts preserve the provider-curated order and mark crypto',
+    (tester) async {
+      const traditionalZ = CardSummary(
+        id: 'traditional-z',
+        name: 'Zulu Account',
+        issuer: 'Zulu',
+        category: CardCategory.bankAccount,
+        label: '多币种账户',
+        tint: 0xFF112233,
+        kind: CatalogItemKind.globalAccount,
+        accountType: 'multiCurrency',
+      );
+      const crypto = CardSummary(
+        id: 'crypto-account',
+        name: 'Crypto Account',
+        issuer: 'Crypto',
+        category: CardCategory.bankAccount,
+        label: '数字资产账户',
+        tint: 0xFF112233,
+        kind: CatalogItemKind.globalAccount,
+        accountType: 'cryptoPlatform',
+      );
+      const traditionalA = CardSummary(
+        id: 'traditional-a',
+        name: 'Alpha Account',
+        issuer: 'Alpha',
+        category: CardCategory.bankAccount,
+        label: '多币种账户',
+        tint: 0xFF112233,
+        kind: CatalogItemKind.globalAccount,
+        accountType: 'multiCurrency',
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MarketPage(
+            repository: const _CardsRepository([
+              traditionalZ,
+              crypto,
+              traditionalA,
+            ]),
+            onSearch: () {},
+            onOpenCard: (_) {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('market-group-global-account')));
+      await tester.pumpAndSettle();
+
+      final zulu = find.byKey(const Key('global-account-card-traditional-z'));
+      final alpha = find.byKey(const Key('global-account-card-traditional-a'));
+      final cryptoCard = find.byKey(
+        const Key('global-account-card-crypto-account'),
+      );
+      expect(
+        tester.getTopLeft(zulu).dy,
+        lessThan(tester.getTopLeft(cryptoCard).dy),
+      );
+      expect(
+        tester.getTopLeft(cryptoCard).dy,
+        lessThan(tester.getTopLeft(alpha).dy),
+      );
+      expect(
+        find.byKey(const Key('global-account-crypto-crypto-account')),
+        findsOneWidget,
+      );
+      expect(find.text('加密相关'), findsOneWidget);
+      expect(find.text('加密相关 · 非银行账户'), findsNothing);
+    },
+  );
+
+  testWidgets('global account dropdown filters the published directory', (
+    tester,
+  ) async {
+    const traditional = CardSummary(
+      id: 'traditional-account',
+      name: 'Traditional Account',
+      issuer: 'Traditional',
+      category: CardCategory.bankAccount,
+      label: '多币种账户',
+      tint: 0xFF112233,
+      kind: CatalogItemKind.globalAccount,
+      accountType: 'multiCurrency',
+      transferCurrencies: ['USD'],
+      receivingMethods: ['wire'],
+      chinaKycStatus: 'available',
+    );
+    const crypto = CardSummary(
+      id: 'crypto-account',
+      name: 'Crypto Account',
+      issuer: 'Crypto',
+      category: CardCategory.bankAccount,
+      label: '数字资产账户',
+      tint: 0xFF112233,
+      kind: CatalogItemKind.globalAccount,
+      accountType: 'cryptoPlatform',
+      receivingMethods: ['crypto'],
+      chinaKycStatus: 'unavailable',
+    );
+    const usdCrypto = CardSummary(
+      id: 'usd-crypto-account',
+      name: 'USD Crypto Account',
+      issuer: 'USD Crypto',
+      category: CardCategory.bankAccount,
+      label: '数字资产账户',
+      tint: 0xFF112233,
+      kind: CatalogItemKind.globalAccount,
+      accountType: 'cryptoIntegratedAccount',
+      transferCurrencies: ['USD'],
+      receivingMethods: ['crypto'],
+      chinaKycStatus: 'unknown',
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MarketPage(
+          repository: const _CardsRepository([traditional, crypto, usdCrypto]),
+          onSearch: () {},
+          onOpenCard: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('market-group-global-account')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('global-account-filter-panel')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('global-account-type-filter')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('加密相关 (2)').last);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('global-account-card-traditional-account')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('global-account-card-crypto-account')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('global-account-card-usd-crypto-account')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('global-account-kyc-filter')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('大陆不可用 (1)').last);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('global-account-card-usd-crypto-account')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('global-account-card-crypto-account')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('U-card scrolling pins only its secondary filter', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MarketPage(
+          repository: _CardsRepository(localCardCatalog),
+          onSearch: () {},
+          onOpenCard: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final primaryTab = find.byKey(const Key('market-group-ucard'));
+    final filterTab = find.byKey(const Key('market-filter-all'));
+    await tester.drag(
+      find.byKey(const Key('market-page')),
+      const Offset(0, -560),
+    );
+    await tester.pumpAndSettle();
+
+    expect(filterTab, findsOneWidget);
+    expect(tester.getTopLeft(filterTab).dy, lessThanOrEqualTo(24));
+    // The primary category segment scrolls with the U-card content instead
+    // of occupying a second fixed row above the filters.
+    expect(tester.getTopLeft(primaryTab).dy, lessThan(0));
+  });
+
+  testWidgets('market header keeps all actions visible on narrow screens', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MarketPage(
+          repository: _CardsRepository(localCardCatalog),
+          onSearch: () {},
+          onOpenCard: (_) {},
+          onCompare: () {},
+          onOpenCanvas: () {},
+          onOpenAiAdvisor: () {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('market-compare-button')), findsOneWidget);
+    expect(find.byKey(const Key('market-ai-advisor-button')), findsOneWidget);
+    expect(find.byKey(const Key('market-canvas-button')), findsOneWidget);
+    expect(find.byKey(const Key('market-search-button')), findsOneWidget);
+    final actionTop = tester
+        .getTopLeft(find.byKey(const Key('market-compare-button')))
+        .dy;
+    for (final key in const [
+      Key('market-ai-advisor-button'),
+      Key('market-canvas-button'),
+      Key('market-search-button'),
+    ]) {
+      expect(tester.getTopLeft(find.byKey(key)).dy, actionTop);
+    }
+    for (final key in const [
+      Key('market-compare-button'),
+      Key('market-ai-advisor-button'),
+      Key('market-canvas-button'),
+      Key('market-search-button'),
+    ]) {
+      final ink = tester.widget<Ink>(
+        find.descendant(of: find.byKey(key), matching: find.byType(Ink)),
+      );
+      final decoration = ink.decoration as BoxDecoration;
+      // Header actions stay lightweight: a border supplies separation without
+      // four simultaneous large blur shadows on narrow devices.
+      expect(decoration.boxShadow, isNull);
+      expect(decoration.border, isNotNull);
+    }
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'market reveals the floating return-to-top control after one screen',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MarketPage(
+            repository: _CardsRepository([
+              ...localCardCatalog,
+              ...localCardCatalog,
+              ...localCardCatalog,
+              ...localCardCatalog,
+            ]),
+            onSearch: () {},
+            onOpenCard: (_) {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final control = find.byType(ScrollToTopButton);
+      final opacity = find.descendant(
+        of: control,
+        matching: find.byType(AnimatedOpacity),
+      );
+      expect(tester.widget<AnimatedOpacity>(opacity).opacity, 0);
+
+      await tester.drag(
+        find.byKey(const Key('market-page')),
+        const Offset(0, -1100),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.widget<AnimatedOpacity>(opacity).opacity, 1);
+
+      await tester.tap(control);
+      await tester.pumpAndSettle();
+      expect(tester.widget<AnimatedOpacity>(opacity).opacity, 0);
+    },
+  );
+
+  testWidgets('global account directory card supports the dark theme', (
     tester,
   ) async {
     AppColors.configure(Brightness.dark);
@@ -145,7 +567,10 @@ void main() {
 
     final account = find.byKey(const Key('global-account-card-wise-account'));
     expect(account, findsOneWidget);
-    expect(find.text('仅供资料浏览 · 不加入本机卡包'), findsOneWidget);
+    expect(
+      find.descendant(of: account, matching: find.text('查看支持币种、收款能力与开户条件')),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 

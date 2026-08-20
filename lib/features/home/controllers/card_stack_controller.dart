@@ -1,8 +1,8 @@
 import 'dart:math' as math;
 
-import 'package:card_app/features/home/domain/card_layout_calculator.dart';
-import 'package:card_app/features/home/domain/card_stack_mode.dart';
-import 'package:card_app/features/home/domain/card_transform_state.dart';
+import 'package:cardfi/features/home/domain/card_layout_calculator.dart';
+import 'package:cardfi/features/home/domain/card_stack_mode.dart';
+import 'package:cardfi/features/home/domain/card_transform_state.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
@@ -14,7 +14,10 @@ class CardStackController extends ChangeNotifier {
     double initialRevealScale = 1,
   }) : _cardIds = List.of(cardIds),
        _mode = initialMode,
-       _selectedId = cardIds.isEmpty ? null : cardIds[cardIds.length ~/ 2],
+       _selectedId = initialMode == CardStackMode.focus && cardIds.isNotEmpty
+           ? cardIds[cardIds.length ~/ 2]
+           : null,
+       _hasUserSelected = initialMode == CardStackMode.focus,
        _walletExpanded = initialMode != CardStackMode.wallet,
        _revealScale = initialRevealScale,
        _motion = AnimationController(
@@ -67,8 +70,16 @@ class CardStackController extends ChangeNotifier {
     return index < 0 ? 0 : index;
   }
 
-  int get layoutSelectedIndex =>
-      _mode == CardStackMode.wallet && !_walletExpanded ? -1 : selectedIndex;
+  int get layoutSelectedIndex {
+    if (_mode == CardStackMode.wallet && !_walletExpanded) return -1;
+    if (_mode == CardStackMode.stack && !_hasUserSelected) return -1;
+    if (_selectedId == null) return -1;
+    return selectedIndex;
+  }
+
+  bool get isAnimating => _motion.isAnimating;
+
+  CardTransformState? targetTransformFor(String id) => _target[id];
 
   void configureLayout({required Size screenSize, required Size cardSize}) {
     if (_screenSize == screenSize && _cardSize == cardSize) return;
@@ -101,8 +112,13 @@ class CardStackController extends ChangeNotifier {
     if (listEquals(_cardIds, merged)) return;
     _transition(() {
       _cardIds = merged;
-      if (!_hasUserSelected || !_cardIds.contains(_selectedId)) {
+      if (_cardIds.contains(_selectedId)) return;
+      if (_mode == CardStackMode.focus) {
         _selectedId = _defaultSelectedId();
+        _hasUserSelected = true;
+      } else {
+        _selectedId = null;
+        _hasUserSelected = false;
       }
     });
   }
@@ -112,14 +128,15 @@ class CardStackController extends ChangeNotifier {
     _transition(() {
       _mode = nextMode;
       _dragOffset = 0;
-      if (nextMode == CardStackMode.wallet) {
-        _walletExpanded = false;
-      } else {
-        _walletExpanded = true;
-        if (!_hasUserSelected || _selectedId == null) {
-          _selectedId = _defaultSelectedId();
-        }
-      }
+      _reorderingId = null;
+      _reorderOriginTop = 0;
+      _reorderDragTop = 0;
+      _hasUserSelected = nextMode == CardStackMode.focus;
+      _selectedId = switch (nextMode) {
+        CardStackMode.focus => _defaultSelectedId(),
+        CardStackMode.stack || CardStackMode.wallet => null,
+      };
+      _walletExpanded = nextMode != CardStackMode.wallet;
     }, animate: animate);
   }
 
@@ -156,6 +173,7 @@ class CardStackController extends ChangeNotifier {
   void startDrag() {
     if (_reorderingId != null ||
         (_mode == CardStackMode.wallet && !_walletExpanded) ||
+        (_mode == CardStackMode.stack && !_hasUserSelected) ||
         _cardIds.length < 2) {
       return;
     }
@@ -175,12 +193,35 @@ class CardStackController extends ChangeNotifier {
         delta == 0) {
       return;
     }
-    final atFirst = selectedIndex == 0 && _dragOffset + delta > 0;
-    final atLast =
-        selectedIndex == _cardIds.length - 1 && _dragOffset + delta < 0;
-    final appliedDelta = atFirst || atLast ? delta * .28 : delta;
-    final limit = math.max(72.0, _cardSize.height * .62);
-    _dragOffset = (_dragOffset + appliedDelta).clamp(-limit, limit).toDouble();
+    if (_mode == CardStackMode.stack && !_hasUserSelected) {
+      // The first direct swipe is also the selection gesture. Establish the
+      // active card before calculating transforms so the card visibly follows
+      // the finger instead of only reacting after it is released.
+      _hasUserSelected = true;
+      _selectedId = _cardIds.first;
+    }
+    if (_mode == CardStackMode.wallet) {
+      final atFirst = selectedIndex == 0 && _dragOffset + delta > 0;
+      final atLast =
+          selectedIndex == _cardIds.length - 1 && _dragOffset + delta < 0;
+      final appliedDelta = atFirst || atLast ? delta * .28 : delta;
+      final limit = math.max(72.0, _cardSize.height * .62);
+      _dragOffset = (_dragOffset + appliedDelta)
+          .clamp(-limit, limit)
+          .toDouble();
+    } else {
+      // 堆叠/聚焦是连续卡列：拖拽量按"一次卡片切换的手指位移"换算成
+      // 小数位置，可以一口气滑过多张卡；越过两端时给阻尼并只允许轻微越界。
+      final step = _fanDragStep();
+      final maxOffset = selectedIndex * step;
+      final minOffset = (selectedIndex - (_cardIds.length - 1)) * step;
+      final beyondStart = _dragOffset >= maxOffset && delta > 0;
+      final beyondEnd = _dragOffset <= minOffset && delta < 0;
+      final appliedDelta = beyondStart || beyondEnd ? delta * .28 : delta;
+      _dragOffset = (_dragOffset + appliedDelta)
+          .clamp(minOffset - step * .4, maxOffset + step * .4)
+          .toDouble();
+    }
     final next = _calculateTarget();
     _from = next;
     _target = next;
@@ -195,21 +236,42 @@ class CardStackController extends ChangeNotifier {
       return selectedIndex;
     }
     final current = _snapshotCurrent();
-    final distancePassed =
-        _dragOffset.abs() >= _cardSize.height * distanceThresholdFactor;
-    final velocityPassed = velocity.abs() >= velocityThreshold;
-    final directionSource = velocityPassed ? velocity : _dragOffset;
     var nextIndex = selectedIndex;
-    if (distancePassed || velocityPassed) {
-      nextIndex += directionSource < 0 ? 1 : -1;
-      nextIndex = nextIndex.clamp(0, _cardIds.length - 1);
+    if (_mode == CardStackMode.wallet) {
+      final distancePassed =
+          _dragOffset.abs() >= _cardSize.height * distanceThresholdFactor;
+      final velocityPassed = velocity.abs() >= velocityThreshold;
+      final directionSource = velocityPassed ? velocity : _dragOffset;
+      if (distancePassed || velocityPassed) {
+        nextIndex += directionSource < 0 ? 1 : -1;
+      }
+    } else {
+      // 松手时把当前小数位置沿速度方向做惯性投影，再吸附到最近的卡。
+      final step = _fanDragStep();
+      final position = selectedIndex - _dragOffset / step;
+      final projected = position - velocity * .12 / step;
+      nextIndex = projected.round();
+      if (nextIndex == selectedIndex) {
+        final distancePassed = _dragOffset.abs() >= step * .24;
+        final velocityPassed = velocity.abs() >= velocityThreshold;
+        if (distancePassed || velocityPassed) {
+          nextIndex += (velocityPassed ? velocity : _dragOffset) < 0 ? 1 : -1;
+        }
+      }
     }
+    nextIndex = nextIndex.clamp(0, _cardIds.length - 1);
     _hasUserSelected = true;
     _selectedId = _cardIds[nextIndex];
     _dragOffset = 0;
     _startMotion(current, _calculateTarget(), curve: settleCurve);
     return nextIndex;
   }
+
+  double _fanDragStep() => CardLayoutCalculator.dragStep(
+    mode: _mode,
+    cardSize: _cardSize,
+    revealScale: _revealScale,
+  );
 
   void cancelDrag() {
     if (_dragOffset == 0) return;
@@ -318,19 +380,18 @@ class CardStackController extends ChangeNotifier {
         _from[id] ??
         end.copyWith(top: end.top + 24, scale: end.scale * .96, opacity: 0);
     if (_motion.value >= 1) return end;
-    return CardTransformState.lerp(
-      begin,
-      end,
-      _curve.transform(_motion.value).clamp(0.0, 1.0),
-    );
+    final progress = _curve.transform(_motion.value).clamp(0.0, 1.0);
+    final lerped = CardTransformState.lerp(begin, end, progress);
+    // 层级在动画一开始就切到目标值，避免绘制顺序在过渡中反复重排造成抖动。
+    return lerped.copyWith(zIndex: end.zIndex);
   }
 
   List<String> get paintOrder {
     final indexed = _cardIds.indexed.toList();
     indexed.sort((left, right) {
-      final depth = transformFor(
-        left.$2,
-      ).zIndex.compareTo(transformFor(right.$2).zIndex);
+      final leftZ = _target[left.$2]?.zIndex ?? transformFor(left.$2).zIndex;
+      final rightZ = _target[right.$2]?.zIndex ?? transformFor(right.$2).zIndex;
+      final depth = leftZ.compareTo(rightZ);
       return depth == 0 ? left.$1.compareTo(right.$1) : depth;
     });
     return indexed.map((entry) => entry.$2).toList(growable: false);

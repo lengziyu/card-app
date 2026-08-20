@@ -14,13 +14,13 @@ abstract final class AppColors {
   static bool get isDark => _dark;
 
   static Color get ink =>
-      _dark ? const Color(0xFF070B19) : const Color(0xFFF8FBFF);
+      _dark ? const Color(0xFF0D1325) : const Color(0xFFF8FBFF);
   static Color get canvas =>
       _dark ? const Color(0xFF111522) : const Color(0xFFF4F7FF);
   static Color get surface =>
-      _dark ? const Color(0xFF232737) : const Color(0xFFFFFFFF);
+      _dark ? const Color(0xFF30384C) : const Color(0xFFFFFFFF);
   static Color get surfaceRaised =>
-      _dark ? const Color(0xFF262A3A) : const Color(0xFFF9FAFF);
+      _dark ? const Color(0xFF384156) : const Color(0xFFF9FAFF);
   static Color get line =>
       _dark ? const Color(0x14FFFFFF) : const Color(0x8AFFFFFF);
   static Color get text =>
@@ -35,10 +35,10 @@ abstract final class AppColors {
   static Color get pink => const Color(0xFFFF8EDB);
 
   static Color get glass => _dark
-      ? const Color.fromRGBO(35, 39, 55, 0.66)
+      ? const Color.fromRGBO(56, 65, 88, 0.58)
       : const Color.fromRGBO(255, 255, 255, 0.58);
   static Color get glassStrong => _dark
-      ? const Color.fromRGBO(38, 42, 58, 0.82)
+      ? const Color.fromRGBO(62, 71, 95, 0.70)
       : const Color.fromRGBO(255, 255, 255, 0.72);
   static Color get navIcon =>
       _dark ? const Color(0xFFADB4C8) : const Color(0xFF52617F);

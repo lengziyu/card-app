@@ -1,12 +1,14 @@
 import 'dart:math' as math;
 
-import 'package:card_app/core/motion/app_haptics.dart';
-import 'package:card_app/core/motion/motion_tokens.dart';
-import 'package:card_app/core/motion/motion_widgets.dart';
-import 'package:card_app/core/theme/app_colors.dart';
-import 'package:card_app/features/auth/domain/auth_user.dart';
-import 'package:card_app/features/pro/widgets/pro_crown_badge.dart';
-import 'package:card_app/core/localization/localized_text.dart';
+import 'package:cardfi/core/localization/app_localizations.dart';
+import 'package:cardfi/core/motion/app_haptics.dart';
+import 'package:cardfi/core/motion/motion_tokens.dart';
+import 'package:cardfi/core/motion/motion_widgets.dart';
+import 'package:cardfi/core/theme/app_colors.dart';
+import 'package:cardfi/features/auth/domain/auth_user.dart';
+import 'package:cardfi/features/pro/widgets/pro_crown_badge.dart';
+import 'package:cardfi/core/localization/localized_text.dart';
+import 'package:flutter/material.dart' as material;
 import 'package:flutter/material.dart' hide Text;
 
 enum ProfileSection {
@@ -16,13 +18,20 @@ enum ProfileSection {
   history('浏览记录', Icons.history_rounded),
   settings('设置', Icons.settings_outlined),
   language('显示语言', Icons.language_rounded),
+  usageGuide('使用说明', Icons.menu_book_outlined),
   help('帮助中心', Icons.help_outline_rounded),
   about('关于我们', Icons.info_outline_rounded),
+  privacy('隐私政策', Icons.privacy_tip_outlined),
+  terms('用户协议', Icons.gavel_outlined),
+  accountDeletion('账号删除说明', Icons.no_accounts_outlined),
+  support('联系支持', Icons.support_agent_outlined),
   version('版本管理', Icons.system_update_alt_rounded),
   recommend('推荐卡片', Icons.credit_card_outlined),
   notifications('消息与反馈', Icons.notifications_none_rounded),
   reminders('提醒配置', Icons.notifications_active_outlined),
-  feedback('反馈', Icons.feedback_outlined);
+  feedback('反馈', Icons.feedback_outlined),
+  referral('邀请好友', Icons.card_giftcard_outlined),
+  motionLab('动效调试', Icons.auto_awesome_motion_rounded);
 
   const ProfileSection(this.title, this.icon);
 
@@ -40,6 +49,7 @@ class ProfilePage extends StatelessWidget {
     this.authUser,
     this.cardCount = 0,
     this.favoriteCount = 0,
+    this.referralEnabled = false,
     super.key,
   });
 
@@ -51,15 +61,21 @@ class ProfilePage extends StatelessWidget {
   final AuthUser? authUser;
   final int cardCount;
   final int favoriteCount;
+  final bool referralEnabled;
 
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.paddingOf(context).bottom;
+    // Preview entitlement is useful for exercising Pro flows, but a guest
+    // must never be presented as a paid member. Membership visuals require a
+    // verified account, just like the entitlement itself.
+    final hasProMembership = isPro && authUser?.emailVerified == true;
     void openSection(ProfileSection section) {
       const accountSections = {
         ProfileSection.favorites,
         ProfileSection.history,
         ProfileSection.notifications,
+        ProfileSection.referral,
       };
       if (accountSections.contains(section) &&
           authUser?.emailVerified != true) {
@@ -81,6 +97,7 @@ class ProfilePage extends StatelessWidget {
                 isDarkMode: isDarkMode,
                 onToggleTheme: onToggleTheme,
                 authUser: authUser,
+                isPro: hasProMembership,
               ),
               const SizedBox(height: 18),
               _MembershipCard(
@@ -88,17 +105,20 @@ class ProfilePage extends StatelessWidget {
                 onTap: authUser?.emailVerified == true ? null : onLogin,
                 cardCount: cardCount,
                 favoriteCount: favoriteCount,
+                isPro: hasProMembership,
               ),
               const SizedBox(height: 14),
               _MenuGroup(
-                sections: const [
+                sections: [
                   ProfileSection.pro,
                   ProfileSection.favorites,
                   ProfileSection.history,
-                  ProfileSection.notifications,
+                  if (authUser?.emailVerified == true)
+                    ProfileSection.notifications,
+                  if (referralEnabled) ProfileSection.referral,
                 ],
                 onOpenSection: openSection,
-                proActive: isPro,
+                proActive: hasProMembership,
               ),
               const SizedBox(height: 12),
               _MenuGroup(
@@ -121,11 +141,13 @@ class _ProfileTopbar extends StatelessWidget {
     required this.isDarkMode,
     required this.onToggleTheme,
     required this.authUser,
+    required this.isPro,
   });
 
   final bool isDarkMode;
   final VoidCallback onToggleTheme;
   final AuthUser? authUser;
+  final bool isPro;
 
   @override
   Widget build(BuildContext context) {
@@ -138,30 +160,44 @@ class _ProfileTopbar extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 3),
             child: Row(
               children: [
-                _ProfileAvatar(initial: authUser?.initial ?? 'B'),
+                _ProfileAvatar(
+                  initial: authUser?.initial ?? 'B',
+                  avatarUrl: authUser?.avatarUrl,
+                  isPro: isPro,
+                ),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        authUser?.profileName ?? '未登录用户',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: AppColors.text,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: -0.7,
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: material.Text(
+                              authUser?.profileName ?? '未登录用户',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: isPro
+                                    ? (dark
+                                          ? const Color(0xFFFFD580)
+                                          : const Color(0xFFB66A0C))
+                                    : AppColors.text,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: -0.7,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 6),
-                      Text(
+                      material.Text(
                         authUser == null
-                            ? '当前未登录 · 登录后同步卡片与收藏'
+                            ? context.tr('当前未登录 · 登录后同步卡片与收藏')
                             : authUser!.emailVerified
-                            ? '${authUser!.handle} · 可管理卡片与收藏'
-                            : '${authUser!.handle} · 邮箱待验证',
+                            ? '${authUser!.handle} · ${context.tr('可管理卡片与收藏')}'
+                            : '${authUser!.handle} · ${context.tr('邮箱待验证')}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -211,9 +247,15 @@ class _ProfileTopbar extends StatelessWidget {
 }
 
 class _ProfileAvatar extends StatelessWidget {
-  const _ProfileAvatar({required this.initial});
+  const _ProfileAvatar({
+    required this.initial,
+    required this.isPro,
+    this.avatarUrl,
+  });
 
   final String initial;
+  final bool isPro;
+  final String? avatarUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -229,12 +271,20 @@ class _ProfileAvatar extends StatelessWidget {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: dark
+            colors: isPro
+                ? (dark
+                      ? const [Color(0xFF76501D), Color(0xFF302437)]
+                      : const [Color(0xFFFFE9AC), Color(0xFFF7C967)])
+                : dark
                 ? const [Color(0xFF454B61), Color(0xFF252A40)]
                 : const [Color(0xF7FFFFFF), Color(0xEBF5FAFF)],
           ),
           border: Border.all(
-            color: dark ? const Color(0x885B637B) : const Color(0xE6FFFFFF),
+            color: isPro
+                ? const Color(0xFFF4A51C).withValues(alpha: dark ? .72 : .88)
+                : dark
+                ? const Color(0x885B637B)
+                : const Color(0xE6FFFFFF),
           ),
           boxShadow: [
             BoxShadow(
@@ -246,18 +296,85 @@ class _ProfileAvatar extends StatelessWidget {
             ),
           ],
         ),
-        child: Text(
-          initial,
-          style: TextStyle(
-            color: dark ? const Color(0xFFF2F5FF) : const Color(0xFF10131B),
-            fontSize: 20,
-            fontWeight: FontWeight.w900,
-            letterSpacing: -.4,
-          ),
+        child: Stack(
+          clipBehavior: Clip.none,
+          fit: StackFit.expand,
+          alignment: Alignment.center,
+          children: [
+            _AvatarInitial(initial: initial, isPro: isPro, dark: dark),
+            if (avatarUrl?.isNotEmpty == true)
+              ClipOval(
+                child: Image.network(
+                  avatarUrl!,
+                  key: ValueKey('profile-avatar-image-$avatarUrl'),
+                  fit: BoxFit.cover,
+                  gaplessPlayback: true,
+                  filterQuality: FilterQuality.medium,
+                  errorBuilder: (_, _, _) => const SizedBox.expand(),
+                ),
+              ),
+            if (isPro)
+              Positioned(
+                top: -10,
+                right: -6,
+                child: Transform.rotate(
+                  angle: .18,
+                  child: Container(
+                    width: 25,
+                    height: 23,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: dark ? const Color(0xFF211B35) : Colors.white,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: const Color(0xFFF4A51C).withValues(alpha: .74),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFF4A51C).withValues(alpha: .34),
+                          blurRadius: 9,
+                        ),
+                      ],
+                    ),
+                    child: const ProCrownBadge(),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
   }
+}
+
+class _AvatarInitial extends StatelessWidget {
+  const _AvatarInitial({
+    required this.initial,
+    required this.isPro,
+    required this.dark,
+  });
+
+  final String initial;
+  final bool isPro;
+  final bool dark;
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: material.Text(
+      initial,
+      textAlign: TextAlign.center,
+      style: TextStyle(
+        color: isPro
+            ? const Color(0xFF39240D)
+            : dark
+            ? const Color(0xFFF2F5FF)
+            : const Color(0xFF10131B),
+        fontSize: 20,
+        fontWeight: FontWeight.w900,
+        letterSpacing: -.4,
+      ),
+    ),
+  );
 }
 
 class _MembershipCard extends StatefulWidget {
@@ -266,12 +383,14 @@ class _MembershipCard extends StatefulWidget {
     required this.onTap,
     required this.cardCount,
     required this.favoriteCount,
+    required this.isPro,
   });
 
   final AuthUser? authUser;
   final VoidCallback? onTap;
   final int cardCount;
   final int favoriteCount;
+  final bool isPro;
 
   @override
   State<_MembershipCard> createState() => _MembershipCardState();
@@ -352,7 +471,19 @@ class _MembershipCardState extends State<_MembershipCard>
                       gradient: LinearGradient(
                         begin: Alignment(-1, -.8 + wave * .08),
                         end: Alignment(1, .8 - wave * .07),
-                        colors: dark
+                        colors: widget.isPro
+                            ? (dark
+                                  ? const [
+                                      Color(0xFF5A3B17),
+                                      Color(0xFF30243B),
+                                      Color(0xFF201F37),
+                                    ]
+                                  : const [
+                                      Color(0xFFFFF1C9),
+                                      Color(0xFFF9E3AF),
+                                      Color(0xFFF3E8FF),
+                                    ])
+                            : dark
                             ? [
                                 Color.lerp(
                                   const Color(0xFF303B55),
@@ -375,7 +506,11 @@ class _MembershipCardState extends State<_MembershipCard>
                       ),
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(
-                        color: dark
+                        color: widget.isPro
+                            ? const Color(
+                                0xFFF4A51C,
+                              ).withValues(alpha: dark ? .58 : .72)
+                            : dark
                             ? const Color(0xFF3A4567)
                             : const Color.fromRGBO(255, 255, 255, .86),
                       ),
@@ -392,6 +527,14 @@ class _MembershipCardState extends State<_MembershipCard>
                           blurRadius: 34 - press * 9,
                           offset: Offset(0, 18 - press * 7),
                         ),
+                        if (widget.isPro)
+                          BoxShadow(
+                            color: const Color(
+                              0xFFF4A51C,
+                            ).withValues(alpha: dark ? .30 - press * .10 : .22),
+                            blurRadius: 24 - press * 7,
+                            spreadRadius: .5,
+                          ),
                         if (!dark)
                           const BoxShadow(
                             color: Color(0x70FFFFFF),
@@ -426,6 +569,7 @@ class _MembershipCardState extends State<_MembershipCard>
                               authUser: widget.authUser,
                               cardCount: widget.cardCount,
                               favoriteCount: widget.favoriteCount,
+                              isPro: widget.isPro,
                             ),
                           ),
                         ],
@@ -448,12 +592,14 @@ class _MembershipContent extends StatelessWidget {
     required this.authUser,
     required this.cardCount,
     required this.favoriteCount,
+    required this.isPro,
   });
 
   final bool dark;
   final AuthUser? authUser;
   final int cardCount;
   final int favoriteCount;
+  final bool isPro;
 
   @override
   Widget build(BuildContext context) {
@@ -472,7 +618,7 @@ class _MembershipContent extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '卡片等级',
+                    isPro ? 'Pro 卡片等级' : '卡片等级',
                     style: TextStyle(
                       color: muted,
                       fontSize: 11,
@@ -488,7 +634,7 @@ class _MembershipContent extends StatelessWidget {
                         : '待验证',
                     key: const Key('profile-membership-status'),
                     style: TextStyle(
-                      color: primary,
+                      color: isPro ? const Color(0xFFF4A51C) : primary,
                       fontSize: 18,
                       fontWeight: FontWeight.w900,
                       letterSpacing: -.5,
@@ -500,19 +646,32 @@ class _MembershipContent extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(
-                  '质量分',
-                  style: TextStyle(
-                    color: muted,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '质量分',
+                      style: TextStyle(
+                        color: muted,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    if (isPro) ...[
+                      const SizedBox(width: 4),
+                      const ProCrownBadge(),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 4),
                 Text(
                   hasVerifiedAccount ? '${summary.score}' : '0',
                   style: TextStyle(
-                    color: dark ? Colors.white : const Color(0xFF101726),
+                    color: isPro
+                        ? const Color(0xFFF4A51C)
+                        : dark
+                        ? Colors.white
+                        : const Color(0xFF101726),
                     fontSize: 34,
                     height: 1,
                     fontWeight: FontWeight.w900,

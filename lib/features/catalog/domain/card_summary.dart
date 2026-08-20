@@ -43,8 +43,15 @@ class CardSummary {
     this.logoImageUrl,
     this.sourceUrl,
     this.kycDocuments = const <KycDocument>{},
+    this.transferCurrencies = const <String>[],
+    this.receivingMethods = const <String>[],
+    this.chinaKycStatus = 'unknown',
+    this.kycSummary = '',
+    this.cashbackRate = '',
+    this.updatedAt,
     this.isNew = false,
     this.kind = CatalogItemKind.card,
+    this.accountType = '',
   });
 
   final String id;
@@ -59,10 +66,34 @@ class CardSummary {
   final String? logoImageUrl;
   final String? sourceUrl;
   final Set<KycDocument> kycDocuments;
+
+  /// Currencies advertised for transfers in the global-account directory.
+  /// This is intentionally summary data: full availability remains in detail.
+  final List<String> transferCurrencies;
+
+  /// Provider-advertised ways to fund or receive into a global account.
+  /// Values are normalized API identifiers such as `ach`, `wire`, or `crypto`.
+  final List<String> receivingMethods;
+
+  /// Mainland-China onboarding status curated by the provider record.
+  /// `unknown` means the public sources do not confirm eligibility.
+  final String chinaKycStatus;
+  final String kycSummary;
+  final String cashbackRate;
+  final DateTime? updatedAt;
   final bool isNew;
   final CatalogItemKind kind;
 
+  /// Provider-curated account classification from the global-account API.
+  ///
+  /// This remains a string because providers introduce new account types. The
+  /// client only uses the crypto prefix for a clear, conservative disclosure.
+  final String accountType;
+
   bool get isGlobalAccount => kind == CatalogItemKind.globalAccount;
+
+  bool get isCryptoRelated =>
+      isGlobalAccount && accountType.trim().toLowerCase().startsWith('crypto');
 
   bool get isAddableToCardWallet => kind == CatalogItemKind.card;
 

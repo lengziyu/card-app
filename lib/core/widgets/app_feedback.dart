@@ -2,11 +2,11 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui';
 
-import 'package:card_app/core/motion/motion_tokens.dart';
-import 'package:card_app/core/motion/app_haptics.dart';
-import 'package:card_app/core/theme/app_colors.dart';
-import 'package:card_app/core/localization/app_localizations.dart';
-import 'package:card_app/core/localization/localized_text.dart';
+import 'package:cardfi/core/motion/motion_tokens.dart';
+import 'package:cardfi/core/motion/app_haptics.dart';
+import 'package:cardfi/core/theme/app_colors.dart';
+import 'package:cardfi/core/localization/app_localizations.dart';
+import 'package:cardfi/core/localization/localized_text.dart';
 import 'package:flutter/material.dart' hide Text;
 
 enum AppNoticeTone { info, success, warning, error }

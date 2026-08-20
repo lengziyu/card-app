@@ -1,4 +1,4 @@
-import 'package:card_app/features/ranking/domain/local_article.dart';
+import 'package:cardfi/features/ranking/domain/local_article.dart';
 
 class RankingGroup {
   const RankingGroup({
@@ -207,4 +207,10 @@ class ArticleFeedItem {
   final ArticleFeedCategory category;
 }
 
-enum ArticleFeedCategory { news, benefit, openCard }
+enum ArticleFeedCategory {
+  news,
+  globalAccount,
+  benefit,
+  openCard,
+  communityTip,
+}

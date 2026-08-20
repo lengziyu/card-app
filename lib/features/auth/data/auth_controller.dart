@@ -1,17 +1,25 @@
-import 'package:card_app/features/auth/data/auth_repository.dart';
-import 'package:card_app/core/network/api_exception.dart';
-import 'package:card_app/features/auth/domain/auth_user.dart';
+import 'dart:async';
+
+import 'package:cardfi/features/auth/data/auth_repository.dart';
+import 'package:cardfi/core/network/api_exception.dart';
+import 'package:cardfi/features/auth/domain/auth_user.dart';
+import 'package:cardfi/features/profile/data/avatar_repository.dart';
 import 'package:flutter/foundation.dart';
+import 'package:image_picker/image_picker.dart';
 
 class AuthController extends ChangeNotifier {
-  AuthController(this._repository);
+  AuthController(this._repository, {this.avatarRepository});
 
   final AuthRepository _repository;
+  final AvatarRepository? avatarRepository;
 
   AuthUser? user;
   bool loading = true;
   String? message;
+  int registrationCelebrationVersion = 0;
   bool _disposed = false;
+  StreamSubscription<AuthUser?>? _authStateSubscription;
+  int _authStateVersion = 0;
 
   bool get configured => _repository.configured;
   bool get isVerified => user?.emailVerified == true;
@@ -20,20 +28,48 @@ class AuthController extends ChangeNotifier {
     loading = true;
     _notify();
     try {
-      user = await _repository.initialize();
+      user = await _attachAvatar(await _repository.initialize());
       message = user != null && !isVerified ? '请先完成邮箱验证。' : null;
     } on AuthFailure catch (error) {
       message = error.message;
     } finally {
+      _listenToRepositoryState();
       loading = false;
       _notify();
     }
   }
 
+  void _listenToRepositoryState() {
+    if (_authStateSubscription != null || _repository is! AuthStateRepository) {
+      return;
+    }
+    final stateRepository = _repository as AuthStateRepository;
+    _authStateSubscription = stateRepository.authStateChanges.listen(
+      (nextUser) {
+        final version = ++_authStateVersion;
+        unawaited(_applyRepositoryUser(nextUser, version));
+      },
+      onError: (Object _) {
+        // A transient background refresh error must not interrupt the current
+        // screen. Token consumers retry when the app resumes or Pro is opened.
+      },
+    );
+  }
+
+  Future<void> _applyRepositoryUser(AuthUser? nextUser, int version) async {
+    final next = await _attachAvatar(nextUser);
+    if (_disposed || version != _authStateVersion) return;
+    user = next;
+    if (next == null) message = null;
+    _notify();
+  }
+
   Future<bool> signIn({required String email, required String password}) async {
     return _run(() async {
       try {
-        user = await _repository.signIn(email: email, password: password);
+        user = await _attachAvatar(
+          await _repository.signIn(email: email, password: password),
+        );
       } on AuthFailure catch (error) {
         if (error.code == 'EMAIL_NOT_VERIFIED') {
           // Supabase intentionally does not expose a session for an
@@ -63,7 +99,10 @@ class AuthController extends ChangeNotifier {
     required String password,
   }) async {
     return _run(() async {
-      user = await _repository.register(email: email, password: password);
+      user = await _attachAvatar(
+        await _repository.register(email: email, password: password),
+      );
+      registrationCelebrationVersion++;
       message = '账号已创建，验证邮件已发送。完成验证后才能同步数据。';
       return false;
     });
@@ -72,7 +111,7 @@ class AuthController extends ChangeNotifier {
   Future<bool> refreshVerification({bool silently = false}) async {
     if (silently) return _refreshVerificationSilently();
     return _run(() async {
-      user = await _repository.reloadUser();
+      user = await _attachAvatar(await _repository.reloadUser());
       if (!isVerified) {
         message = '邮箱尚未验证，请打开邮件中的验证链接。';
         return false;
@@ -86,7 +125,7 @@ class AuthController extends ChangeNotifier {
     if (user == null || isVerified) return isVerified;
     final wasVerified = isVerified;
     try {
-      user = await _repository.reloadUser();
+      user = await _attachAvatar(await _repository.reloadUser());
       if (!wasVerified && isVerified) {
         message = '邮箱验证成功。';
       }
@@ -123,17 +162,14 @@ class AuthController extends ChangeNotifier {
 
   /// Leaving the registration flow must not leave stale verification prompts
   /// or a pending email address in memory for the next login attempt.
-  Future<void> resetAuthenticationFlow() async {
-    try {
-      await _repository.signOut();
-    } on AuthFailure {
-      // A local reset should still succeed if an old session has expired.
-    } finally {
-      user = null;
-      message = null;
-      loading = false;
-      _notify();
-    }
+  void resetAuthenticationFlow() {
+    // Reset the visible state immediately. A slow or unavailable Auth service
+    // must never prevent a user from going back to the normal login form.
+    unawaited(_repository.signOut().catchError((Object _) {}));
+    user = null;
+    message = null;
+    loading = false;
+    _notify();
   }
 
   Future<bool> updateDisplayName(String displayName) {
@@ -142,8 +178,27 @@ class AuthController extends ChangeNotifier {
       if (value.isEmpty || value.length > 32) {
         throw const AuthFailure('INVALID_DISPLAY_NAME', '用户名需为 1–32 个字符');
       }
-      user = await _repository.updateDisplayName(value);
+      user = await _attachAvatar(await _repository.updateDisplayName(value));
       message = '用户名已更新。';
+      return true;
+    });
+  }
+
+  Future<bool> updateAvatar(XFile image) {
+    final current = user;
+    if (current == null) {
+      message = '请先登录后再修改头像。';
+      _notify();
+      return Future.value(false);
+    }
+    return _run(() async {
+      final repository = avatarRepository;
+      if (repository == null) {
+        throw const AuthFailure('AVATAR_SERVICE_UNAVAILABLE', '头像服务暂时不可用');
+      }
+      final avatarUrl = await repository.upload(image);
+      user = current.copyWith(avatarUrl: avatarUrl);
+      message = '头像已更新。';
       return true;
     });
   }
@@ -190,6 +245,19 @@ class AuthController extends ChangeNotifier {
     }
   }
 
+  Future<AuthUser?> _attachAvatar(AuthUser? nextUser) async {
+    if (nextUser == null) return null;
+    final repository = avatarRepository;
+    if (repository == null) return nextUser;
+    try {
+      final avatarUrl = await repository.loadAvatarUrl();
+      return nextUser.copyWith(avatarUrl: avatarUrl);
+    } on ApiException {
+      // An unavailable optional avatar endpoint must not block authentication.
+      return nextUser;
+    }
+  }
+
   Future<bool> _run(Future<bool> Function() operation) async {
     loading = true;
     message = null;
@@ -215,6 +283,7 @@ class AuthController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    unawaited(_authStateSubscription?.cancel());
     super.dispose();
   }
 }

@@ -1,9 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
     <application
         android:allowBackup="false"
-        android:label="集卡"
+        android:label="CardFi"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

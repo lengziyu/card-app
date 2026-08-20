@@ -1,5 +1,5 @@
-import 'package:card_app/core/network/api_client.dart';
-import 'package:card_app/core/network/api_exception.dart';
+import 'package:cardfi/core/network/api_client.dart';
+import 'package:cardfi/core/network/api_exception.dart';
 
 class AuthAccountRepository {
   factory AuthAccountRepository(

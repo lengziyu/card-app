@@ -1,12 +1,13 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
-import 'package:card_app/core/motion/app_haptics.dart';
-import 'package:card_app/core/motion/app_bottom_sheet.dart';
-import 'package:card_app/features/catalog/domain/card_summary.dart';
-import 'package:card_app/features/catalog/widgets/card_artwork.dart';
+import 'package:cardfi/core/icons/app_icons.dart';
+import 'package:cardfi/core/motion/app_haptics.dart';
+import 'package:cardfi/core/motion/app_bottom_sheet.dart';
+import 'package:cardfi/features/catalog/domain/card_summary.dart';
+import 'package:cardfi/features/catalog/widgets/card_artwork.dart';
 import 'package:flutter/gestures.dart';
-import 'package:card_app/core/localization/localized_text.dart';
+import 'package:cardfi/core/localization/localized_text.dart';
 import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -30,7 +31,7 @@ class CardCanvasPage extends StatefulWidget {
 }
 
 class _CardCanvasPageState extends State<CardCanvasPage>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   static const _green = Color(0xFF169C65);
   static const _backgroundColors = <Color>[
     Color(0xFF050505),
@@ -74,11 +75,19 @@ class _CardCanvasPageState extends State<CardCanvasPage>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _autoPlayTicker = createTicker(_onAutoPlayTick);
     _transformAnimation = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 240),
     )..addListener(_onTransformAnimationTick);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) return;
+    _stopAutoPlay();
+    _transformAnimation.stop();
   }
 
   @override
@@ -99,6 +108,7 @@ class _CardCanvasPageState extends State<CardCanvasPage>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _autoPlayTicker.dispose();
     _transformAnimation.dispose();
     _transformationController.dispose();
@@ -532,7 +542,7 @@ class _CardCanvasPageState extends State<CardCanvasPage>
                   right: 16,
                   child: _RoundControlButton(
                     key: const Key('card-canvas-immersive-button'),
-                    icon: Icons.fullscreen_exit_rounded,
+                    icon: AppIcons.canvasExitImmersive,
                     label: '退出全屏',
                     selected: true,
                     onTap: _toggleImmersive,
@@ -544,7 +554,7 @@ class _CardCanvasPageState extends State<CardCanvasPage>
                   right: 16,
                   child: _RoundControlButton(
                     key: const Key('card-canvas-close'),
-                    icon: Icons.close_rounded,
+                    icon: AppIcons.close,
                     label: '关闭卡片画布',
                     size: 48,
                     onTap: _exitCanvas,
@@ -578,21 +588,21 @@ class _CardCanvasPageState extends State<CardCanvasPage>
                     children: [
                       _RoundControlButton(
                         key: const Key('card-canvas-zoom-in'),
-                        icon: Icons.add_rounded,
+                        icon: AppIcons.canvasZoomIn,
                         label: '放大画布',
                         onTap: () => _zoomBy(1.18),
                       ),
                       const SizedBox(height: 8),
                       _RoundControlButton(
                         key: const Key('card-canvas-zoom-out'),
-                        icon: Icons.remove_rounded,
+                        icon: AppIcons.canvasZoomOut,
                         label: '缩小画布',
                         onTap: () => _zoomBy(1 / 1.18),
                       ),
                       const SizedBox(height: 8),
                       _RoundControlButton(
                         key: const Key('card-canvas-reset'),
-                        icon: Icons.restart_alt_rounded,
+                        icon: AppIcons.canvasReset,
                         label: '复位画布',
                         onTap: _resetView,
                       ),
@@ -683,7 +693,7 @@ class _CardCanvasPageState extends State<CardCanvasPage>
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.collections_outlined, color: _green),
+                    Icon(AppIcons.canvasImages, color: _green),
                     SizedBox(width: 10),
                     Text(
                       '上传背景图',
@@ -722,7 +732,7 @@ class _CardCanvasPageState extends State<CardCanvasPage>
                   Expanded(
                     child: _LayoutChoice(
                       key: const Key('card-canvas-layout-compact'),
-                      icon: Icons.grid_view_rounded,
+                      icon: AppIcons.canvasGrid,
                       title: '紧密网格',
                       description: '一次看到更多卡片',
                       selected: _layout == _CanvasLayout.compact,
@@ -739,7 +749,7 @@ class _CardCanvasPageState extends State<CardCanvasPage>
                   Expanded(
                     child: _LayoutChoice(
                       key: const Key('card-canvas-layout-gallery'),
-                      icon: Icons.space_dashboard_outlined,
+                      icon: AppIcons.canvasGallery,
                       title: '松散画廊',
                       description: '留白更宽，更有层次',
                       selected: _layout == _CanvasLayout.gallery,
@@ -935,7 +945,7 @@ class _CardCanvasPageState extends State<CardCanvasPage>
               const _SheetLabel('速度'),
               Row(
                 children: [
-                  const Icon(Icons.directions_walk_rounded, size: 20),
+                  const Icon(AppIcons.canvasWalk, size: 20),
                   Expanded(
                     child: Slider(
                       key: const Key('card-canvas-speed-slider'),
@@ -949,7 +959,7 @@ class _CardCanvasPageState extends State<CardCanvasPage>
                       },
                     ),
                   ),
-                  const Icon(Icons.directions_run_rounded, size: 22),
+                  const Icon(AppIcons.canvasRun, size: 22),
                 ],
               ),
               const SizedBox(height: 12),
@@ -968,9 +978,7 @@ class _CardCanvasPageState extends State<CardCanvasPage>
                     Navigator.pop(sheetContext);
                   },
                   icon: Icon(
-                    _autoPlaying
-                        ? Icons.pause_rounded
-                        : Icons.play_arrow_rounded,
+                    _autoPlaying ? AppIcons.canvasPause : AppIcons.canvasPlay,
                   ),
                   label: Text(_autoPlaying ? '停止播放' : '开始播放'),
                 ),
@@ -1208,7 +1216,7 @@ class _CanvasToolbar extends StatelessWidget {
       children: [
         _RoundControlButton(
           key: const Key('card-canvas-background-button'),
-          icon: Icons.contrast_rounded,
+          icon: AppIcons.canvasBackground,
           label: '设置画布背景',
           onTap: onBackground,
         ),
@@ -1216,8 +1224,8 @@ class _CanvasToolbar extends StatelessWidget {
         _RoundControlButton(
           key: const Key('card-canvas-layout-button'),
           icon: layout == _CanvasLayout.compact
-              ? Icons.grid_view_rounded
-              : Icons.space_dashboard_outlined,
+              ? AppIcons.canvasGrid
+              : AppIcons.canvasGallery,
           label: '设置卡片排列',
           selected: layout == _CanvasLayout.gallery,
           onTap: onLayout,
@@ -1225,7 +1233,7 @@ class _CanvasToolbar extends StatelessWidget {
         const SizedBox(height: 7),
         _RoundControlButton(
           key: const Key('card-canvas-angle-button'),
-          icon: Icons.credit_card_rounded,
+          icon: AppIcons.canvasCards,
           label: '设置卡片错位角度',
           selected: staggered,
           onTap: onAngle,
@@ -1233,14 +1241,14 @@ class _CanvasToolbar extends StatelessWidget {
         const SizedBox(height: 7),
         _RoundControlButton(
           key: const Key('card-canvas-shuffle-button'),
-          icon: Icons.layers_outlined,
+          icon: AppIcons.canvasShuffle,
           label: '重新错位排列',
           onTap: onShuffle,
         ),
         const SizedBox(height: 7),
         _RoundControlButton(
           key: const Key('card-canvas-autoplay-button'),
-          icon: autoPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+          icon: autoPlaying ? AppIcons.canvasPause : AppIcons.canvasPlay,
           label: autoPlaying ? '设置或停止自动播放' : '设置自动播放',
           selected: autoPlaying,
           onTap: onAutoPlay,
@@ -1249,8 +1257,8 @@ class _CanvasToolbar extends StatelessWidget {
         _RoundControlButton(
           key: const Key('card-canvas-immersive-button'),
           icon: immersive
-              ? Icons.fullscreen_exit_rounded
-              : Icons.fullscreen_rounded,
+              ? AppIcons.canvasExitImmersive
+              : AppIcons.canvasEnterImmersive,
           label: immersive ? '退出沉浸模式' : '进入沉浸模式',
           selected: immersive,
           onTap: onImmersive,
@@ -1478,7 +1486,7 @@ class _ColorChoice extends StatelessWidget {
           ),
           child: selected
               ? Icon(
-                  Icons.check_rounded,
+                  AppIcons.check,
                   color: dark ? Colors.white : Colors.black87,
                   size: 25,
                 )
@@ -1597,7 +1605,7 @@ class _CustomColorChoice extends StatelessWidget {
               width: 1.5,
             ),
           ),
-          child: const Icon(Icons.add_rounded, color: Colors.black54),
+          child: const Icon(AppIcons.add, color: Colors.black54),
         ),
       ),
     );
@@ -1667,15 +1675,15 @@ class _LayoutChoice extends StatelessWidget {
 }
 
 enum _DirectionOption {
-  northWest(Offset(-1, -1), Icons.north_west_rounded),
-  north(Offset(0, -1), Icons.north_rounded),
-  northEast(Offset(1, -1), Icons.north_east_rounded),
-  west(Offset(-1, 0), Icons.west_rounded),
-  center(Offset.zero, Icons.circle_outlined),
-  east(Offset(1, 0), Icons.east_rounded),
-  southWest(Offset(-1, 1), Icons.south_west_rounded),
-  south(Offset(0, 1), Icons.south_rounded),
-  southEast(Offset(1, 1), Icons.south_east_rounded);
+  northWest(Offset(-1, -1), AppIcons.directionNorthWest),
+  north(Offset(0, -1), AppIcons.directionNorth),
+  northEast(Offset(1, -1), AppIcons.directionNorthEast),
+  west(Offset(-1, 0), AppIcons.directionWest),
+  center(Offset.zero, AppIcons.directionCenter),
+  east(Offset(1, 0), AppIcons.directionEast),
+  southWest(Offset(-1, 1), AppIcons.directionSouthWest),
+  south(Offset(0, 1), AppIcons.directionSouth),
+  southEast(Offset(1, 1), AppIcons.directionSouthEast);
 
   const _DirectionOption(this.offset, this.icon);
 

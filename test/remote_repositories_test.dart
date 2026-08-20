@@ -1,14 +1,14 @@
 import 'dart:convert';
 
-import 'package:card_app/core/network/api_client.dart';
-import 'package:card_app/features/catalog/data/remote_card_catalog.dart';
-import 'package:card_app/features/catalog/data/remote_card_details.dart';
-import 'package:card_app/features/catalog/data/remote_global_account_catalog.dart';
-import 'package:card_app/features/catalog/data/remote_catalog_settings.dart';
-import 'package:card_app/features/catalog/domain/card_detail.dart';
-import 'package:card_app/features/catalog/domain/card_summary.dart';
-import 'package:card_app/features/ranking/data/remote_ranking_repository.dart';
-import 'package:card_app/features/ranking/domain/ranking_data.dart';
+import 'package:cardfi/core/network/api_client.dart';
+import 'package:cardfi/features/catalog/data/remote_card_catalog.dart';
+import 'package:cardfi/features/catalog/data/remote_card_details.dart';
+import 'package:cardfi/features/catalog/data/remote_global_account_catalog.dart';
+import 'package:cardfi/features/catalog/data/remote_catalog_settings.dart';
+import 'package:cardfi/features/catalog/domain/card_detail.dart';
+import 'package:cardfi/features/catalog/domain/card_summary.dart';
+import 'package:cardfi/features/ranking/data/remote_ranking_repository.dart';
+import 'package:cardfi/features/ranking/domain/ranking_data.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -32,6 +32,9 @@ void main() {
                 'cardImageSrc': '/cards/one.webp',
                 'coverImageSrc': '/covers/one.webp',
                 'kycDocuments': ['passport'],
+                'kycSummary': '护照',
+                'cashbackRate': '2%',
+                'updatedAt': '2026-07-21T12:24:41.776Z',
               },
             ],
           },
@@ -41,9 +44,12 @@ void main() {
                 'id': 'wise-account',
                 'name': 'Wise Account',
                 'provider': 'Wise',
+                'accountType': 'multiCurrency',
                 'taglineZh': '多币种持有 · 收款 · 换汇',
                 'coverImageSrc': '/accounts/wise.webp',
+                'logoImageSrc': '/accounts/wise-logo.webp',
                 'coverColors': ['#9FE870', '#163300'],
+                'supportedCurrencies': ['GBP', 'EUR', 'USD'],
                 'chinaKycStatus': 'available',
               },
             ],
@@ -71,6 +77,9 @@ void main() {
     expect(card.imageUrl, 'https://example.test/cards/one.webp');
     expect(card.coverImageUrl, 'https://example.test/covers/one.webp');
     expect(card.kycDocuments, contains(KycDocument.passport));
+    expect(card.kycSummary, '护照');
+    expect(card.cashbackRate, '2%');
+    expect(card.updatedAt, DateTime.utc(2026, 7, 21, 12, 24, 41, 776));
     expect(
       cards.singleWhere((card) => card.id == 'wise-account').isGlobalAccount,
       isTrue,
@@ -79,8 +88,58 @@ void main() {
       cards.singleWhere((card) => card.id == 'wise-account').coverImageUrl,
       'https://example.test/accounts/wise.webp',
     );
+    expect(
+      cards.singleWhere((card) => card.id == 'wise-account').chinaKycStatus,
+      'available',
+    );
+    expect(
+      cards.singleWhere((card) => card.id == 'wise-account').logoImageUrl,
+      'https://example.test/accounts/wise-logo.webp',
+    );
+    expect(
+      cards.singleWhere((card) => card.id == 'wise-account').transferCurrencies,
+      ['EUR', 'GBP', 'USD'],
+    );
+    expect(
+      cards.singleWhere((card) => card.id == 'wise-account').isCryptoRelated,
+      isFalse,
+    );
+    expect(cards.where((card) => card.isGlobalAccount).map((card) => card.id), [
+      'wise-account',
+    ]);
+    expect(cards.where((card) => card.id == 'wise-account'), hasLength(1));
     expect(await settings.loadHomeDefaultCardIds(), ['card-1']);
     expect(await settings.loadListCardOrder(), ['card-2', 'card-1']);
+    client.close();
+  });
+
+  test('maps a crypto platform as a crypto-related global account', () async {
+    final client = ApiClient(
+      baseUrl: 'https://example.test',
+      client: MockClient((request) async {
+        if (request.url.path != '/api/global-accounts') {
+          throw StateError('Unexpected request: ${request.url}');
+        }
+        return _jsonResponse({
+          'items': [
+            {
+              'id': 'kraken',
+              'name': 'Kraken',
+              'provider': 'Kraken',
+              'accountType': 'cryptoPlatform',
+              'taglineZh': '加密资产平台',
+              'coverColors': ['#5741D9'],
+            },
+          ],
+        });
+      }),
+    );
+
+    final account = (await RemoteGlobalAccountCatalogRepository(
+      client,
+    ).loadCards()).single;
+    expect(account.isCryptoRelated, isTrue);
+    expect(account.accountType, 'cryptoPlatform');
     client.close();
   });
 
@@ -117,11 +176,62 @@ void main() {
 
       expect(
         items.map((item) => item.id),
-        containsAll(['card-1', 'wise-account']),
+        containsAll([
+          'card-1',
+          'wise-account',
+          'revolut-personal-account',
+          'payoneer-account',
+          'airwallex-global-account',
+          'worldfirst-world-account',
+        ]),
       );
       client.close();
     },
   );
+
+  test('keeps a card and global account that share an ID', () async {
+    final client = ApiClient(
+      baseUrl: 'https://example.test',
+      client: MockClient((request) async {
+        final body = switch (request.url.path) {
+          '/api/cards' => {
+            'items': [
+              {
+                'id': 'wirex',
+                'name': 'Wirex Card',
+                'issuer': 'Wirex',
+                'category': 'U卡',
+              },
+            ],
+          },
+          '/api/global-accounts' => {
+            'items': [
+              {
+                'id': 'wirex',
+                'name': 'Wirex Account',
+                'provider': 'Wirex',
+                'accountType': 'cryptoIntegratedAccount',
+              },
+            ],
+          },
+          _ => throw StateError('Unexpected request: ${request.url}'),
+        };
+        return _jsonResponse(body);
+      }),
+    );
+
+    final items = await RemoteMarketCatalogRepository(
+      cards: RemoteCardCatalogRepository(client),
+      globalAccounts: RemoteGlobalAccountCatalogRepository(client),
+    ).loadCards();
+
+    expect(items.where((item) => item.id == 'wirex'), hasLength(2));
+    expect(
+      items.where((item) => item.id == 'wirex').map((item) => item.kind),
+      containsAll([CatalogItemKind.card, CatalogItemKind.globalAccount]),
+    );
+    client.close();
+  });
 
   test('still reports a load error when both market endpoints fail', () async {
     final client = ApiClient(
@@ -204,6 +314,7 @@ void main() {
     expect(detail.features.single.icon, DetailFeatureIcon.globe);
     expect(detail.chinaKyc?.status, ChinaKycStatus.available);
     expect(detail.tags, contains('GBP'));
+    expect(detail.supportedCurrencies, ['EUR', 'GBP', 'USD']);
     final english = await RemoteCardDetailRepository(
       client,
     ).detailFor(account, locale: const Locale('en'));
@@ -212,54 +323,83 @@ void main() {
     client.close();
   });
 
-  test('uses the bundled Wise detail while its endpoint is absent', () async {
-    final client = ApiClient(
-      baseUrl: 'https://example.test',
-      client: MockClient(
-        (_) async => http.Response(
-          jsonEncode({'message': 'Not found'}),
-          404,
-          headers: {'content-type': 'application/json'},
+  test(
+    'uses bundled global-account detail while its endpoint is absent',
+    () async {
+      final client = ApiClient(
+        baseUrl: 'https://example.test',
+        client: MockClient(
+          (_) async => http.Response(
+            jsonEncode({'message': 'Not found'}),
+            404,
+            headers: {'content-type': 'application/json'},
+          ),
         ),
-      ),
-    );
-    const account = CardSummary(
-      id: 'wise-account',
-      name: 'Wise Account',
-      issuer: 'Wise',
-      category: CardCategory.bankAccount,
-      label: '多币种账户',
-      tint: 0xFF9FE870,
-      kind: CatalogItemKind.globalAccount,
-    );
+      );
+      const account = CardSummary(
+        id: 'airwallex-global-account',
+        name: 'Airwallex Global Account',
+        issuer: 'Airwallex',
+        category: CardCategory.bankAccount,
+        label: '企业账户 · 全球收款',
+        tint: 0xFF4B3DAA,
+        kind: CatalogItemKind.globalAccount,
+      );
 
-    final detail = await RemoteCardDetailRepository(client).detailFor(account);
+      final detail = await RemoteCardDetailRepository(
+        client,
+      ).detailFor(account);
 
-    expect(detail.cardId, 'wise-account');
-    expect(detail.chinaKyc?.status, ChinaKycStatus.available);
-    expect(detail.sourceLabel, contains('Wise 官方帮助中心'));
-    client.close();
-  });
+      expect(detail.cardId, 'airwallex-global-account');
+      expect(detail.chinaKyc?.status, ChinaKycStatus.restricted);
+      expect(detail.sourceLabel, contains('Airwallex 官方产品页'));
+      client.close();
+    },
+  );
 
   test('maps a remote card detail', () async {
+    Uri? requestedUri;
     final client = ApiClient(
       baseUrl: 'https://example.test',
-      client: MockClient(
-        (_) async => _jsonResponse({
+      client: MockClient((request) async {
+        requestedUri = request.url;
+        return _jsonResponse({
           'item': {'id': 'card-1'},
           'detail': {
-            'tags': ['返现'],
+            'rating': 4.3,
+            'reviews': 420,
+            'tags': ['返现', 'Ranked+ D级'],
             'region': '全球',
             'funding': 'USDC',
             'speed': '开放申请',
             'benefits': [
               {'icon': 'shield', 'text': '安全权益'},
+              {'icon': 'wallet', 'text': '入金方式：Crypto、Bank transfer'},
+              {
+                'icon': 'market',
+                'text': r'返现限制：• Lite: 2% cashback (max $250 per month)',
+              },
             ],
             'fees': [
-              {'label': '年费', 'value': '0'},
+              {'label': '年费', 'value': '按官网'},
+              {
+                'label': 'Ranked+ 月费起',
+                'value':
+                    r'$0.00；One time $10 activation fee for virtual card, and $100 for physical card.',
+              },
             ],
             'kycFact': {'detailZh': '需要护照'},
-            'paymentSupport': {'applePay': true},
+            'paymentSupport': {
+              'applePay': {'status': 'supported'},
+              'googlePay': {'status': 'conditional'},
+            },
+            'todeyFacts': {
+              'registerFee': 'FREE',
+              'annualFee': 'NO ANNUAL FEE',
+              'fxFee': '0%',
+              'description': 'A sourced card overview.',
+              'fetchedAt': '2026-07-25T00:00:00.000Z',
+            },
             'chinaKyc': {
               'status': 'restricted',
               'documentSummary': '护照与地址证明以流程为准',
@@ -268,8 +408,8 @@ void main() {
               'checkedAt': '2026-07-22T00:00:00.000Z',
             },
           },
-        }),
-      ),
+        });
+      }),
     );
     const card = CardSummary(
       id: 'card-1',
@@ -280,13 +420,34 @@ void main() {
       tint: 0xFF112233,
     );
 
-    final detail = await RemoteCardDetailRepository(client).detailFor(card);
+    final detail = await RemoteCardDetailRepository(
+      client,
+      contentPlatform: PublicContentPlatform.android,
+    ).detailFor(card);
 
+    expect(detail.rating, 4.3);
+    expect(detail.reviewCount, 420);
     expect(detail.region, '全球');
     expect(detail.features.single.text, '安全权益');
-    expect(detail.fees.single.value, '0');
+    expect(detail.tags, contains('评级：D'));
+    expect(detail.tags.join(), isNot(contains('Ranked+')));
+    expect(detail.rules, hasLength(2));
+    expect(detail.rules.first.value, '加密资产、银行转账');
+    expect(detail.rules.last.value, r'• Lite：2% 返现（每月最高 $250）');
+    expect(detail.fees.singleWhere((fee) => fee.label == '年费').value, '免年费');
+    expect(detail.fees.singleWhere((fee) => fee.label == '开卡费').value, '免费');
+    expect(detail.fees.singleWhere((fee) => fee.label == '月费').value, r'$0.00');
+    expect(
+      detail.fees.singleWhere((fee) => fee.label == '月费').note,
+      r'虚拟卡一次性激活费 $10；实体卡一次性激活费 $100。',
+    );
+    expect(detail.note, isNot(contains('A sourced card overview.')));
+    expect(detail.sourceLabel, isNot(contains('TODEY')));
+    expect(detail.paymentChannels, contains(PaymentChannel.applePay));
+    expect(detail.paymentChannels, isNot(contains(PaymentChannel.googlePay)));
     expect(detail.chinaKyc?.status, ChinaKycStatus.restricted);
     expect(detail.chinaKyc?.checkedAt, DateTime.utc(2026, 7, 22));
+    expect(requestedUri?.queryParameters['platform'], 'android');
     client.close();
   });
 
@@ -329,6 +490,182 @@ void main() {
     expect(requestCount, 2);
     client.close();
   });
+
+  test('requests and consumes English card and article content', () async {
+    final requestedLocales = <String?>[];
+    final client = ApiClient(
+      baseUrl: 'https://example.test',
+      client: MockClient((request) async {
+        requestedLocales.add(request.url.queryParameters['locale']);
+        expect(request.headers['accept-language'], 'en-US');
+        return switch (request.url.path) {
+          '/api/cards/card-en' => _jsonResponse({
+            'detail': {
+              'tags': ['返现'],
+              'tagsEn': ['Cashback'],
+              'region': '全球',
+              'regionEn': 'Worldwide',
+              'funding': '加密资产',
+              'fundingEn': 'Crypto assets',
+              'speed': '开放申请',
+              'speedEn': 'Applications open',
+              'benefits': [
+                {
+                  'icon': 'market',
+                  'text': '返现规则：按等级',
+                  'textEn': 'Cashback rules: By tier',
+                },
+              ],
+              'fees': [
+                {
+                  'label': '年费',
+                  'labelEn': 'Annual fee',
+                  'value': '免费',
+                  'valueEn': 'Free',
+                },
+              ],
+              'kycFact': {
+                'detailZh': '以流程为准',
+                'detailEn': 'Check the application flow.',
+              },
+              'note': '以官网为准',
+              'noteEn': 'Check the official website.',
+            },
+          }),
+          '/api/articles' => _jsonResponse({
+            'items': [
+              {
+                'slug': 'english-article',
+                'category': 'news',
+                'title': '中文标题',
+                'titleEn': 'English title',
+                'summary': '中文摘要',
+                'summaryEn': 'English summary',
+                'rawContent': '中文正文',
+                'rawContentEn': 'English body',
+                'tags': ['资讯'],
+                'tagsEn': ['News'],
+              },
+            ],
+          }),
+          _ => throw StateError('Unexpected request: ${request.url}'),
+        };
+      }),
+    );
+    addTearDown(client.close);
+    const locale = Locale('en', 'US');
+    const card = CardSummary(
+      id: 'card-en',
+      name: 'Card',
+      issuer: 'Issuer',
+      category: CardCategory.uCard,
+      label: '',
+      tint: 0xFF112233,
+    );
+
+    final detail = await RemoteCardDetailRepository(
+      client,
+    ).detailFor(card, locale: locale);
+    final article = (await RemoteRankingRepository(
+      client,
+    ).loadArticles(locale: locale)).single.article;
+
+    expect(detail.region, 'Worldwide');
+    expect(detail.funding, 'Crypto assets');
+    expect(detail.availability, 'Applications open');
+    expect(detail.tags, ['Cashback']);
+    expect(detail.rules.single.value, 'By tier');
+    expect(detail.fees.single.label, 'Annual fee');
+    expect(detail.fees.single.value, 'Free');
+    expect(article.title, 'English title');
+    expect(article.summary, 'English summary');
+    expect(article.markdown, 'English body');
+    expect(article.tags, ['News']);
+    expect(requestedLocales, everyElement('en-US'));
+  });
+
+  test(
+    'consumes a non-English translations map without English fallback',
+    () async {
+      final client = ApiClient(
+        baseUrl: 'https://example.test',
+        client: MockClient((request) async {
+          expect(request.url.queryParameters['locale'], 'ja');
+          expect(request.headers['accept-language'], 'ja');
+          return switch (request.url.path) {
+            '/api/cards/card-ja' => _jsonResponse({
+              'detail': {
+                'region': '全球',
+                'benefits': [
+                  {
+                    'icon': 'shield',
+                    'text': '中文权益',
+                    'translations': {
+                      'ja': {'text': '日本語の特典'},
+                    },
+                  },
+                ],
+                'fees': const [],
+                'translations': {
+                  'ja': {
+                    'tags': ['キャッシュバック'],
+                    'region': '世界中で利用可能',
+                    'funding': '暗号資産',
+                    'speed': '申請受付中',
+                    'note': '公式サイトをご確認ください。',
+                  },
+                },
+              },
+            }),
+            '/api/articles' => _jsonResponse({
+              'items': [
+                {
+                  'slug': 'ja-article',
+                  'category': 'news',
+                  'title': '中文标题',
+                  'summary': '中文摘要',
+                  'rawContent': '中文正文',
+                  'tags': ['资讯'],
+                  'translations': {
+                    'ja': {
+                      'title': '日本語のタイトル',
+                      'summary': '日本語の概要',
+                      'rawContent': '日本語の本文',
+                      'tags': ['ニュース'],
+                    },
+                  },
+                },
+              ],
+            }),
+            _ => throw StateError('Unexpected request: ${request.url}'),
+          };
+        }),
+      );
+      addTearDown(client.close);
+      const card = CardSummary(
+        id: 'card-ja',
+        name: 'Card',
+        issuer: 'Issuer',
+        category: CardCategory.uCard,
+        label: '',
+        tint: 0xFF112233,
+      );
+
+      final detail = await RemoteCardDetailRepository(
+        client,
+      ).detailFor(card, locale: const Locale('ja'));
+      final article = (await RemoteRankingRepository(
+        client,
+      ).loadArticles(locale: const Locale('ja'))).single.article;
+
+      expect(detail.region, '世界中で利用可能');
+      expect(detail.tags, ['キャッシュバック']);
+      expect(detail.features.single.text, '日本語の特典');
+      expect(article.title, '日本語のタイトル');
+      expect(article.markdown, '日本語の本文');
+      expect(article.tags, ['ニュース']);
+    },
+  );
 
   test(
     'maps rankings, dashboards, articles and public article writes',
@@ -410,19 +747,20 @@ void main() {
               'periodLabel': '本月',
               'methodology': '贡献活跃度；会员不加分',
               'updatedAt': '2026-07-22T00:00:00.000Z',
-              'items': [
-                {
-                  'id': 'user-1',
-                  'displayName': '卡友一号',
-                  'avatarUrl': '/avatars/user-1.png',
-                  'monthlyActivityScore': 92,
-                  'totalContributionScore': 1330,
+              'items': List.generate(
+                21,
+                (index) => {
+                  'id': 'user-${index + 1}',
+                  'displayName': '卡友${index + 1}号',
+                  'avatarUrl': '/avatars/user-${index + 1}.png',
+                  'monthlyActivityScore': 92 - index,
+                  'totalContributionScore': 1330 - index,
                   'acceptedContributions': 18,
                   'activeDays': 23,
-                  'membershipTier': 'pro',
-                  'isCurrentUser': true,
+                  'membershipTier': index == 0 ? 'pro' : 'free',
+                  'isCurrentUser': index == 0,
                 },
-              ],
+              ),
             },
             '/api/articles' || '/api/articles/news-one' => {
               'items': request.url.path == '/api/articles'
@@ -463,8 +801,10 @@ void main() {
       final metric = (await repository.loadMetrics()).items.single;
       expect(metric.total, 100);
       expect(metric.logo, 'logo-etherfi');
-      final rankedUser = (await repository.loadUserRankings()).items.single;
-      expect(rankedUser.displayName, '卡友一号');
+      final rankedUsers = (await repository.loadUserRankings()).items;
+      expect(rankedUsers, hasLength(20));
+      final rankedUser = rankedUsers.singleWhere((item) => item.id == 'user-1');
+      expect(rankedUser.displayName, '卡友1号');
       expect(rankedUser.avatarUrl, 'https://example.test/avatars/user-1.png');
       expect(rankedUser.isPro, isTrue);
       expect(rankedUser.isCurrentUser, isTrue);
@@ -489,6 +829,36 @@ void main() {
       client.close();
     },
   );
+
+  test('maps reviewed community tips from the public article feed', () async {
+    final client = ApiClient(
+      baseUrl: 'https://example.test',
+      client: MockClient(
+        (_) async => _jsonResponse({
+          'items': [
+            {
+              'slug': 'tip-one',
+              'category': 'community-tip',
+              'title': '支付技巧',
+              'summary': '经过审核的用户经验。',
+              'rawContent': '## 操作步骤',
+              'author': '匿名卡友',
+              'verifiedLabel': '2026-07-26 基础核验',
+              'publishedAt': '2026-07-26T00:00:00.000Z',
+            },
+          ],
+        }),
+      ),
+    );
+    addTearDown(client.close);
+
+    final item = (await RemoteRankingRepository(client).loadArticles()).single;
+
+    expect(item.category, ArticleFeedCategory.communityTip);
+    expect(item.article.isCommunityTip, isTrue);
+    expect(item.article.author, '匿名卡友');
+    expect(item.article.verifiedLabel, '2026-07-26 基础核验');
+  });
 }
 
 const _articleJson = <String, Object?>{

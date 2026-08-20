@@ -1,10 +1,10 @@
 import 'dart:convert';
 
-import 'package:card_app/core/network/api_client.dart';
-import 'package:card_app/features/catalog/domain/card_detail.dart';
-import 'package:card_app/features/catalog/domain/card_summary.dart';
-import 'package:card_app/features/pro/data/pro_config.dart';
-import 'package:card_app/features/pro/data/pro_controller.dart';
+import 'package:cardfi/core/network/api_client.dart';
+import 'package:cardfi/features/catalog/domain/card_detail.dart';
+import 'package:cardfi/features/catalog/domain/card_summary.dart';
+import 'package:cardfi/features/pro/data/pro_config.dart';
+import 'package:cardfi/features/pro/data/pro_controller.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

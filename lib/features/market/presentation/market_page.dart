@@ -1,18 +1,32 @@
-import 'package:card_app/core/motion/motion_tokens.dart';
-import 'package:card_app/core/localization/app_localizations.dart';
-import 'package:card_app/core/theme/app_colors.dart';
-import 'package:card_app/core/widgets/app_feedback.dart';
-import 'package:card_app/features/catalog/domain/card_summary.dart';
-import 'package:card_app/features/catalog/widgets/catalog_card_row.dart';
-import 'package:card_app/features/catalog/widgets/global_account_catalog_card.dart';
-import 'package:card_app/features/pro/widgets/pro_crown_badge.dart';
-import 'package:card_app/features/shell/widgets/animated_glass_segment.dart';
-import 'package:card_app/core/localization/localized_text.dart';
+import 'package:cardfi/core/icons/app_icons.dart';
+import 'package:cardfi/core/motion/motion_tokens.dart';
+import 'package:cardfi/core/localization/app_localizations.dart';
+import 'package:cardfi/core/theme/app_colors.dart';
+import 'package:cardfi/core/widgets/app_feedback.dart';
+import 'package:cardfi/core/widgets/scroll_to_top_button.dart';
+import 'package:cardfi/features/catalog/domain/card_summary.dart';
+import 'package:cardfi/features/catalog/widgets/catalog_card_row.dart';
+import 'package:cardfi/features/catalog/widgets/global_account_catalog_card.dart';
+import 'package:cardfi/features/pro/widgets/pro_crown_badge.dart';
+import 'package:cardfi/features/shell/widgets/animated_glass_segment.dart';
+import 'package:cardfi/core/localization/localized_text.dart';
 import 'package:flutter/material.dart' hide Text;
 
 enum _MarketGroup { uCard, globalAccount, other }
 
 enum _UCardFilter { all, newest, idCard, passport }
+
+enum _GlobalAccountTypeFilter { all, traditional, cryptoRelated }
+
+enum _GlobalAccountKycFilter {
+  all,
+  available,
+  conditional,
+  unavailable,
+  unknown,
+}
+
+enum _GlobalAccountCapabilityFilter { all, usd, cryptoDeposit, bankTransfer }
 
 typedef MarketCardOpenTransition =
     void Function(CardSummary card, CatalogCardSourceGeometry geometry);
@@ -44,17 +58,50 @@ class MarketPage extends StatefulWidget {
 }
 
 class _MarketPageState extends State<MarketPage> {
+  late final ScrollController _scrollController;
   _MarketGroup _group = _MarketGroup.uCard;
   _UCardFilter _filter = _UCardFilter.all;
+  _GlobalAccountTypeFilter _globalAccountTypeFilter =
+      _GlobalAccountTypeFilter.all;
+  _GlobalAccountKycFilter _globalAccountKycFilter = _GlobalAccountKycFilter.all;
+  _GlobalAccountCapabilityFilter _globalAccountCapabilityFilter =
+      _GlobalAccountCapabilityFilter.all;
   List<CardSummary>? _cards;
   Object? _error;
   int _contentDirection = 1;
+  bool _showScrollTop = false;
 
   @override
   void initState() {
     super.initState();
+    _scrollController = ScrollController()
+      ..addListener(_updateScrollTopVisibility);
     _loadCards();
   }
+
+  @override
+  void dispose() {
+    _scrollController
+      ..removeListener(_updateScrollTopVisibility)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _updateScrollTopVisibility() {
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    final next = position.pixels > position.viewportDimension;
+    if (next == _showScrollTop || !mounted) return;
+    setState(() => _showScrollTop = next);
+  }
+
+  Future<void> _scrollToTop() => _scrollController.animateTo(
+    0,
+    duration: MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : MotionTokens.page,
+    curve: MotionTokens.standardEnter,
+  );
 
   Future<void> _loadCards({
     bool force = false,
@@ -75,7 +122,14 @@ class _MarketPageState extends State<MarketPage> {
   List<CardSummary> get _filteredCards {
     final cards = _cards ?? const <CardSummary>[];
     if (_group == _MarketGroup.globalAccount) {
-      return cards.where((card) => card.isGlobalAccount).toList();
+      // Keep the provider-curated order. Crypto-related services receive a
+      // disclosure on their cards, but must not be silently pushed below the
+      // first screen of the directory.
+      return cards
+          .where(
+            (card) => card.isGlobalAccount && _matchesGlobalAccountFilter(card),
+          )
+          .toList();
     }
     if (_group == _MarketGroup.other) {
       return cards
@@ -95,93 +149,169 @@ class _MarketPageState extends State<MarketPage> {
     }).toList();
   }
 
+  bool _matchesGlobalAccountFilter(CardSummary card) =>
+      _matchesTypeFilter(card) &&
+      _matchesKycFilter(card) &&
+      _matchesCapabilityFilter(card);
+
+  bool _matchesTypeFilter(CardSummary card) =>
+      switch (_globalAccountTypeFilter) {
+        _GlobalAccountTypeFilter.all => true,
+        _GlobalAccountTypeFilter.traditional => !card.isCryptoRelated,
+        _GlobalAccountTypeFilter.cryptoRelated => card.isCryptoRelated,
+      };
+
+  bool _matchesKycFilter(CardSummary card) => switch (_globalAccountKycFilter) {
+    _GlobalAccountKycFilter.all => true,
+    _GlobalAccountKycFilter.available => card.chinaKycStatus == 'available',
+    _GlobalAccountKycFilter.conditional => card.chinaKycStatus == 'conditional',
+    _GlobalAccountKycFilter.unavailable => card.chinaKycStatus == 'unavailable',
+    _GlobalAccountKycFilter.unknown => card.chinaKycStatus == 'unknown',
+  };
+
+  bool _matchesCapabilityFilter(CardSummary card) =>
+      switch (_globalAccountCapabilityFilter) {
+        _GlobalAccountCapabilityFilter.all => true,
+        _GlobalAccountCapabilityFilter.usd => card.transferCurrencies.contains(
+          'USD',
+        ),
+        _GlobalAccountCapabilityFilter.cryptoDeposit =>
+          card.receivingMethods.contains('crypto'),
+        _GlobalAccountCapabilityFilter.bankTransfer =>
+          card.receivingMethods.any(
+            const {'ach', 'local', 'sepa', 'swift', 'wire'}.contains,
+          ),
+      };
+
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final mainSegment = _MainSegment(
+      selected: _group,
+      // H5 在目录接口不可用时不显示 0，避免把“未知”误报成空统计。
+      uCardCount: _cards?.where((card) => card.category.isUCard).length,
+      globalAccountCount: _cards?.where((card) => card.isGlobalAccount).length,
+      otherCount: _cards
+          ?.where((card) => !card.category.isUCard && !card.isGlobalAccount)
+          .length,
+      onSelected: _selectGroup,
+    );
     return Material(
       color: Colors.transparent,
       child: AppPullToRefresh(
         onRefresh: () => _loadCards(force: true, rethrowOnError: true),
-        child: CustomScrollView(
-          key: const Key('market-page'),
-          physics: AlwaysScrollableScrollPhysics(
-            parent: BouncingScrollPhysics(),
-          ),
-          slivers: [
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(24, 6, 24, 5),
-              sliver: SliverToBoxAdapter(
-                child: _MarketHeader(
-                  onSearch: widget.onSearch,
-                  onCompare: widget.onCompare,
-                  onOpenCanvas: widget.onOpenCanvas,
-                  onOpenAiAdvisor: widget.onOpenAiAdvisor,
-                ),
+        child: Stack(
+          children: [
+            CustomScrollView(
+              key: const Key('market-page'),
+              controller: _scrollController,
+              physics: AlwaysScrollableScrollPhysics(
+                parent: BouncingScrollPhysics(),
               ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(24, 0, 24, 1),
-              sliver: SliverToBoxAdapter(
-                child: _MainSegment(
-                  selected: _group,
-                  // H5 在目录接口不可用时不显示 0，避免把“未知”误报成空统计。
-                  uCardCount: _cards
-                      ?.where((card) => card.category.isUCard)
-                      .length,
-                  globalAccountCount: _cards
-                      ?.where((card) => card.isGlobalAccount)
-                      .length,
-                  otherCount: _cards
-                      ?.where(
-                        (card) =>
-                            !card.category.isUCard && !card.isGlobalAccount,
-                      )
-                      .length,
-                  onSelected: _selectGroup,
-                ),
-              ),
-            ),
-            if (_group == _MarketGroup.uCard)
-              SliverPersistentHeader(
-                pinned: true,
-                delegate: PinnedGlassHeaderDelegate(
-                  height: 46,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: _SubSegment(
-                      selected: _filter,
-                      onSelected: _selectFilter,
+              slivers: [
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(24, 6, 24, 5),
+                  sliver: SliverToBoxAdapter(
+                    child: _MarketHeader(
+                      onSearch: widget.onSearch,
+                      onCompare: widget.onCompare,
+                      onOpenCanvas: widget.onOpenCanvas,
+                      onOpenAiAdvisor: widget.onOpenAiAdvisor,
                     ),
                   ),
                 ),
-              ),
-            SliverPadding(
-              padding: EdgeInsets.fromLTRB(
-                24,
-                _group == _MarketGroup.uCard ? 1 : 12,
-                24,
-                132 + bottomInset,
-              ),
-              sliver: SliverToBoxAdapter(
-                child: AnimatedSwitcher(
-                  duration: reduceMotion
-                      ? Duration.zero
-                      : MotionTokens.contentSwitch,
-                  switchInCurve: MotionTokens.standardEnter,
-                  switchOutCurve: MotionTokens.standardExit,
-                  transitionBuilder: (child, animation) => FadeTransition(
-                    opacity: animation,
-                    child: SlideTransition(
-                      position: Tween<Offset>(
-                        begin: Offset(0.035 * _contentDirection, 0),
-                        end: Offset.zero,
-                      ).animate(animation),
-                      child: child,
+                // U 卡进入列表后只保留其二级筛选固定；主分类随内容自然
+                // 离开。全球账户和其他则继续固定主分类，方便跨列表切换。
+                if (_group == _MarketGroup.uCard)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 5, 24, 5),
+                      child: mainSegment,
+                    ),
+                  )
+                else
+                  SliverPersistentHeader(
+                    pinned: true,
+                    delegate: PinnedGlassHeaderDelegate(
+                      // 48px 主分类 + 7px 间距 + 38px 三个下拉框，配合上下
+                      // 5/7px 内边距正好占满 105px。此前沿用了带标题筛选面板的
+                      // 170px 高度，移除标题后便留下了大块空白。
+                      height: _group == _MarketGroup.globalAccount ? 105 : 58,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 5, 24, 7),
+                        child: _group == _MarketGroup.globalAccount
+                            ? Column(
+                                children: [
+                                  mainSegment,
+                                  const SizedBox(height: 7),
+                                  _GlobalAccountFilterPanel(
+                                    accounts: (_cards ?? const <CardSummary>[])
+                                        .where((card) => card.isGlobalAccount)
+                                        .toList(growable: false),
+                                    selectedType: _globalAccountTypeFilter,
+                                    selectedKyc: _globalAccountKycFilter,
+                                    selectedCapability:
+                                        _globalAccountCapabilityFilter,
+                                    onTypeSelected:
+                                        _selectGlobalAccountTypeFilter,
+                                    onKycSelected:
+                                        _selectGlobalAccountKycFilter,
+                                    onCapabilitySelected:
+                                        _selectGlobalAccountCapabilityFilter,
+                                  ),
+                                ],
+                              )
+                            : mainSegment,
+                      ),
                     ),
                   ),
-                  child: _buildContent(),
+                if (_group == _MarketGroup.uCard)
+                  SliverPersistentHeader(
+                    pinned: true,
+                    delegate: PinnedGlassHeaderDelegate(
+                      height: 46,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: _SubSegment(
+                          selected: _filter,
+                          onSelected: _selectFilter,
+                        ),
+                      ),
+                    ),
+                  ),
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(24, 12, 24, 132 + bottomInset),
+                  sliver: SliverToBoxAdapter(
+                    child: AnimatedSwitcher(
+                      duration: reduceMotion
+                          ? Duration.zero
+                          : MotionTokens.contentSwitch,
+                      switchInCurve: MotionTokens.standardEnter,
+                      switchOutCurve: MotionTokens.standardExit,
+                      transitionBuilder: (child, animation) => FadeTransition(
+                        opacity: animation,
+                        child: SlideTransition(
+                          position: Tween<Offset>(
+                            begin: Offset(0.035 * _contentDirection, 0),
+                            end: Offset.zero,
+                          ).animate(animation),
+                          child: child,
+                        ),
+                      ),
+                      child: _buildContent(),
+                    ),
+                  ),
                 ),
+              ],
+            ),
+            Positioned(
+              key: const Key('market-scroll-to-top'),
+              right: 20,
+              bottom: bottomInset + 88,
+              child: ScrollToTopButton(
+                visible: _showScrollTop,
+                onTap: _scrollToTop,
               ),
             ),
           ],
@@ -209,6 +339,36 @@ class _MarketPageState extends State<MarketPage> {
     });
   }
 
+  void _selectGlobalAccountTypeFilter(_GlobalAccountTypeFilter filter) {
+    if (filter == _globalAccountTypeFilter) return;
+    setState(() {
+      _contentDirection = filter.index > _globalAccountTypeFilter.index
+          ? 1
+          : -1;
+      _globalAccountTypeFilter = filter;
+    });
+  }
+
+  void _selectGlobalAccountKycFilter(_GlobalAccountKycFilter filter) {
+    if (filter == _globalAccountKycFilter) return;
+    setState(() {
+      _contentDirection = filter.index > _globalAccountKycFilter.index ? 1 : -1;
+      _globalAccountKycFilter = filter;
+    });
+  }
+
+  void _selectGlobalAccountCapabilityFilter(
+    _GlobalAccountCapabilityFilter filter,
+  ) {
+    if (filter == _globalAccountCapabilityFilter) return;
+    setState(() {
+      _contentDirection = filter.index > _globalAccountCapabilityFilter.index
+          ? 1
+          : -1;
+      _globalAccountCapabilityFilter = filter;
+    });
+  }
+
   Widget _buildContent() {
     if (_error != null) {
       return _MarketMessage(
@@ -232,7 +392,9 @@ class _MarketPageState extends State<MarketPage> {
       );
     }
     return Column(
-      key: ValueKey('${_group.name}-${_filter.name}'),
+      key: ValueKey(
+        '${_group.name}-${_filter.name}-${_globalAccountTypeFilter.name}-${_globalAccountKycFilter.name}-${_globalAccountCapabilityFilter.name}',
+      ),
       children: [
         for (var index = 0; index < cards.length; index++) ...[
           if (cards[index].isGlobalAccount)
@@ -280,36 +442,72 @@ class _MarketHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final title = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '市场',
+          key: const Key('market-title'),
+          style: Theme.of(context).textTheme.headlineMedium,
+        ),
+        const SizedBox(height: 5),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            '探索热门的卡片',
+            softWrap: false,
+            maxLines: 1,
+            overflow: TextOverflow.visible,
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ),
+      ],
+    );
+    final actions = _MarketHeaderActions(
+      onSearch: onSearch,
+      onCompare: onCompare,
+      onOpenCanvas: onOpenCanvas,
+      onOpenAiAdvisor: onOpenAiAdvisor,
+    );
+
+    // 操作区始终固定在标题右侧。窄屏时由标题的 FittedBox 压缩副标题，
+    // 不能把整组入口落到下一行。
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '市场',
-                key: Key('market-title'),
-                style: Theme.of(context).textTheme.headlineMedium,
-              ),
-              SizedBox(height: 5),
-              Text(
-                '探索市面上热门的卡片',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-            ],
-          ),
-        ),
-        SizedBox(width: 12),
+        Expanded(child: title),
+        const SizedBox(width: 8),
+        actions,
+      ],
+    );
+  }
+}
+
+class _MarketHeaderActions extends StatelessWidget {
+  const _MarketHeaderActions({
+    required this.onSearch,
+    this.onOpenCanvas,
+    this.onCompare,
+    this.onOpenAiAdvisor,
+  });
+
+  final VoidCallback onSearch;
+  final VoidCallback? onCompare;
+  final VoidCallback? onOpenCanvas;
+  final VoidCallback? onOpenAiAdvisor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
         if (onCompare != null) ...[
           _MarketHeaderAction(
             key: const Key('market-compare-button'),
-            icon: Icons.compare_arrows_rounded,
-            semanticLabel: context.tr('卡片对比，Pro 会员功能'),
+            icon: AppIcons.compare,
+            semanticLabel: context.tr('卡片对比，普通版支持两张卡片'),
             onTap: onCompare!,
-            showProBadge: true,
           ),
           const SizedBox(width: 8),
         ],
@@ -317,15 +515,16 @@ class _MarketHeader extends StatelessWidget {
           _MarketHeaderAction(
             key: const Key('market-ai-advisor-button'),
             icon: Icons.auto_awesome_rounded,
-            semanticLabel: context.tr('AI 选卡'),
+            semanticLabel: context.tr('AI 助手，Pro 会员功能'),
             onTap: onOpenAiAdvisor!,
+            showProBadge: true,
           ),
           const SizedBox(width: 8),
         ],
         if (onOpenCanvas != null) ...[
           _MarketHeaderAction(
             key: const Key('market-canvas-button'),
-            icon: Icons.scatter_plot_rounded,
+            icon: AppIcons.canvas,
             semanticLabel: context.tr('打开卡片画布'),
             onTap: onOpenCanvas!,
           ),
@@ -361,28 +560,34 @@ class _MarketHeaderAction extends StatelessWidget {
     return Semantics(
       button: true,
       label: semanticLabel,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          customBorder: const CircleBorder(),
-          child: Ink(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: AppColors.glassStrong,
-              shape: BoxShape.circle,
-              border: Border.all(color: AppColors.line),
+      child: SizedBox(
+        width: 44,
+        height: 44,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Material(
+              color: Colors.transparent,
+              shape: const CircleBorder(),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: onTap,
+                customBorder: const CircleBorder(),
+                child: Ink(
+                  decoration: BoxDecoration(
+                    color: AppColors.glassStrong,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.line),
+                  ),
+                  child: Center(
+                    child: Icon(icon, color: AppColors.text, size: 22),
+                  ),
+                ),
+              ),
             ),
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Center(child: Icon(icon, color: AppColors.text, size: 22)),
-                if (showProBadge)
-                  const Positioned(right: -4, top: -4, child: ProCrownBadge()),
-              ],
-            ),
-          ),
+            if (showProBadge)
+              const Positioned(right: -4, top: -4, child: ProCrownBadge()),
+          ],
         ),
       ),
     );
@@ -463,6 +668,204 @@ class _SubSegment extends StatelessWidget {
       ],
       selected: selected,
       onChanged: onSelected,
+    );
+  }
+}
+
+class _GlobalAccountFilterPanel extends StatelessWidget {
+  const _GlobalAccountFilterPanel({
+    required this.accounts,
+    required this.selectedType,
+    required this.selectedKyc,
+    required this.selectedCapability,
+    required this.onTypeSelected,
+    required this.onKycSelected,
+    required this.onCapabilitySelected,
+  });
+
+  final List<CardSummary> accounts;
+  final _GlobalAccountTypeFilter selectedType;
+  final _GlobalAccountKycFilter selectedKyc;
+  final _GlobalAccountCapabilityFilter selectedCapability;
+  final ValueChanged<_GlobalAccountTypeFilter> onTypeSelected;
+  final ValueChanged<_GlobalAccountKycFilter> onKycSelected;
+  final ValueChanged<_GlobalAccountCapabilityFilter> onCapabilitySelected;
+
+  static const _typeLabels = <_GlobalAccountTypeFilter, String>{
+    _GlobalAccountTypeFilter.all: '全部类型',
+    _GlobalAccountTypeFilter.traditional: '传统账户',
+    _GlobalAccountTypeFilter.cryptoRelated: '加密相关',
+  };
+  static const _kycLabels = <_GlobalAccountKycFilter, String>{
+    _GlobalAccountKycFilter.all: '全部资格',
+    _GlobalAccountKycFilter.available: '已确认可申请',
+    _GlobalAccountKycFilter.conditional: '条件待确认',
+    _GlobalAccountKycFilter.unavailable: '大陆不可用',
+    _GlobalAccountKycFilter.unknown: '资格未确认',
+  };
+  static const _capabilityLabels = <_GlobalAccountCapabilityFilter, String>{
+    _GlobalAccountCapabilityFilter.all: '全部能力',
+    _GlobalAccountCapabilityFilter.usd: '支持 USD',
+    _GlobalAccountCapabilityFilter.cryptoDeposit: '支持链上转入',
+    _GlobalAccountCapabilityFilter.bankTransfer: '支持银行转入',
+  };
+
+  bool _matchesType(CardSummary card, _GlobalAccountTypeFilter filter) =>
+      switch (filter) {
+        _GlobalAccountTypeFilter.all => true,
+        _GlobalAccountTypeFilter.traditional => !card.isCryptoRelated,
+        _GlobalAccountTypeFilter.cryptoRelated => card.isCryptoRelated,
+      };
+
+  bool _matchesKyc(
+    CardSummary card,
+    _GlobalAccountKycFilter filter,
+  ) => switch (filter) {
+    _GlobalAccountKycFilter.all => true,
+    _GlobalAccountKycFilter.available => card.chinaKycStatus == 'available',
+    _GlobalAccountKycFilter.conditional => card.chinaKycStatus == 'conditional',
+    _GlobalAccountKycFilter.unavailable => card.chinaKycStatus == 'unavailable',
+    _GlobalAccountKycFilter.unknown => card.chinaKycStatus == 'unknown',
+  };
+
+  bool _matchesCapability(
+    CardSummary card,
+    _GlobalAccountCapabilityFilter filter,
+  ) => switch (filter) {
+    _GlobalAccountCapabilityFilter.all => true,
+    _GlobalAccountCapabilityFilter.usd => card.transferCurrencies.contains(
+      'USD',
+    ),
+    _GlobalAccountCapabilityFilter.cryptoDeposit =>
+      card.receivingMethods.contains('crypto'),
+    _GlobalAccountCapabilityFilter.bankTransfer => card.receivingMethods.any(
+      const {'ach', 'local', 'sepa', 'swift', 'wire'}.contains,
+    ),
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: context.tr('筛选全球账户'),
+      child: Row(
+        key: const Key('global-account-filter-panel'),
+        children: [
+          Expanded(
+            child: _CompactGlobalAccountDropdown<_GlobalAccountTypeFilter>(
+              key: const Key('global-account-type-filter'),
+              selected: selectedType,
+              values: _GlobalAccountTypeFilter.values,
+              labels: _typeLabels,
+              count: (filter) =>
+                  accounts.where((card) => _matchesType(card, filter)).length,
+              onChanged: onTypeSelected,
+            ),
+          ),
+          const SizedBox(width: 7),
+          Expanded(
+            child: _CompactGlobalAccountDropdown<_GlobalAccountKycFilter>(
+              key: const Key('global-account-kyc-filter'),
+              selected: selectedKyc,
+              values: _GlobalAccountKycFilter.values,
+              labels: _kycLabels,
+              count: (filter) =>
+                  accounts.where((card) => _matchesKyc(card, filter)).length,
+              onChanged: onKycSelected,
+            ),
+          ),
+          const SizedBox(width: 7),
+          Expanded(
+            child:
+                _CompactGlobalAccountDropdown<_GlobalAccountCapabilityFilter>(
+                  key: const Key('global-account-capability-filter'),
+                  selected: selectedCapability,
+                  values: _GlobalAccountCapabilityFilter.values,
+                  labels: _capabilityLabels,
+                  count: (filter) => accounts
+                      .where((card) => _matchesCapability(card, filter))
+                      .length,
+                  onChanged: onCapabilitySelected,
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CompactGlobalAccountDropdown<T> extends StatelessWidget {
+  const _CompactGlobalAccountDropdown({
+    required this.selected,
+    required this.values,
+    required this.labels,
+    required this.count,
+    required this.onChanged,
+    super.key,
+  });
+
+  final T selected;
+  final List<T> values;
+  final Map<T, String> labels;
+  final int Function(T value) count;
+  final ValueChanged<T> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 38,
+      padding: const EdgeInsets.only(left: 8, right: 4),
+      decoration: BoxDecoration(
+        color: AppColors.isDark
+            ? const Color(0x786A758F)
+            : const Color(0x99FFFFFF),
+        borderRadius: BorderRadius.circular(19),
+        border: Border.all(
+          color: AppColors.isDark
+              ? const Color(0x66E6EDFF)
+              : AppColors.line.withValues(alpha: .8),
+        ),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<T>(
+          value: selected,
+          isExpanded: true,
+          icon: Icon(
+            Icons.keyboard_arrow_down_rounded,
+            color: AppColors.textMuted,
+            size: 18,
+          ),
+          dropdownColor: AppColors.isDark
+              ? const Color(0xFF30384C)
+              : const Color(0xFFF9FBFF),
+          borderRadius: BorderRadius.circular(14),
+          style: TextStyle(
+            color: AppColors.text,
+            fontSize: 11,
+            fontWeight: FontWeight.w900,
+          ),
+          selectedItemBuilder: (context) => [
+            for (final value in values)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  labels[value]!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+          ],
+          onChanged: (value) {
+            if (value != null) onChanged(value);
+          },
+          items: [
+            for (final value in values)
+              DropdownMenuItem(
+                value: value,
+                child: Text('${labels[value]!} (${count(value)})'),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

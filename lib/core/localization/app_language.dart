@@ -111,14 +111,22 @@ enum AppLanguage {
     orElse: () => AppLanguage.system,
   );
 
-  /// Languages reviewed for the first public release. Other translations stay
-  /// in the source catalog for future work, but are deliberately not exposed
-  /// until a complete visual and copy review is finished.
+  /// Keep every language already shipped by the product visible in the
+  /// selector. `system` is an option rather than a concrete locale.
   static const releaseLanguages = <AppLanguage>[
     AppLanguage.system,
     AppLanguage.simplifiedChinese,
     AppLanguage.traditionalChinese,
     AppLanguage.english,
+    AppLanguage.japanese,
+    AppLanguage.korean,
+    AppLanguage.vietnamese,
+    AppLanguage.russian,
+    AppLanguage.spanish,
+    AppLanguage.french,
+    AppLanguage.german,
+    AppLanguage.portugueseBrazil,
+    AppLanguage.turkish,
   ];
 
   static Locale resolveDeviceLocale(Locale? deviceLocale) {
@@ -128,12 +136,32 @@ enum AppLanguage {
           ? const Locale('zh', 'HK')
           : const Locale('zh', 'CN');
     }
-    return const Locale('en', 'US');
+    return switch (deviceLocale?.languageCode) {
+      'ja' => const Locale('ja', 'JP'),
+      'ko' => const Locale('ko', 'KR'),
+      'vi' => const Locale('vi', 'VN'),
+      'ru' => const Locale('ru', 'RU'),
+      'es' => const Locale('es', 'ES'),
+      'fr' => const Locale('fr', 'FR'),
+      'de' => const Locale('de', 'DE'),
+      'pt' => const Locale('pt', 'BR'),
+      'tr' => const Locale('tr', 'TR'),
+      _ => const Locale('en', 'US'),
+    };
   }
 
   static const supportedLocales = <Locale>[
     Locale('zh', 'CN'),
     Locale('zh', 'HK'),
     Locale('en', 'US'),
+    Locale('ja', 'JP'),
+    Locale('ko', 'KR'),
+    Locale('vi', 'VN'),
+    Locale('ru', 'RU'),
+    Locale('es', 'ES'),
+    Locale('fr', 'FR'),
+    Locale('de', 'DE'),
+    Locale('pt', 'BR'),
+    Locale('tr', 'TR'),
   ];
 }

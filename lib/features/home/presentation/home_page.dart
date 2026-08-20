@@ -1,17 +1,18 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
-import 'package:card_app/core/motion/app_haptics.dart';
-import 'package:card_app/core/motion/motion_tokens.dart';
-import 'package:card_app/core/motion/motion_widgets.dart';
-import 'package:card_app/core/localization/app_localizations.dart';
-import 'package:card_app/core/theme/app_colors.dart';
-import 'package:card_app/features/catalog/domain/card_summary.dart';
-import 'package:card_app/features/home/controllers/card_stack_controller.dart';
-import 'package:card_app/features/home/domain/home_card_layout.dart';
-import 'package:card_app/features/home/widgets/card_stack_view.dart';
-import 'package:card_app/features/pro/widgets/pro_crown_badge.dart';
-import 'package:card_app/core/localization/localized_text.dart';
+import 'package:cardfi/core/icons/app_icons.dart';
+import 'package:cardfi/core/motion/app_haptics.dart';
+import 'package:cardfi/core/motion/motion_tokens.dart';
+import 'package:cardfi/core/motion/motion_widgets.dart';
+import 'package:cardfi/core/localization/app_localizations.dart';
+import 'package:cardfi/core/theme/app_colors.dart';
+import 'package:cardfi/features/catalog/domain/card_summary.dart';
+import 'package:cardfi/features/home/controllers/card_stack_controller.dart';
+import 'package:cardfi/features/home/domain/home_card_layout.dart';
+import 'package:cardfi/features/home/widgets/card_stack_view.dart';
+import 'package:cardfi/features/pro/widgets/pro_crown_badge.dart';
+import 'package:cardfi/core/localization/localized_text.dart';
 import 'package:flutter/material.dart' hide Text;
 
 class HomePage extends StatefulWidget {
@@ -53,6 +54,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage>
     with SingleTickerProviderStateMixin {
   late final CardStackController _cardController;
+  final ScrollController _cardScrollController = ScrollController();
   bool _modeMenuOpen = false;
 
   @override
@@ -72,6 +74,9 @@ class _HomePageState extends State<HomePage>
     _cardController.syncCards(
       widget.cards.map((card) => card.id).toList(growable: false),
     );
+    if (oldWidget.displayMode != widget.displayMode) {
+      _resetCardScenePosition();
+    }
     _cardController.setMode(widget.displayMode);
     if (oldWidget.cardHeightScale != widget.cardHeightScale) {
       _cardController.setRevealScale(
@@ -84,7 +89,21 @@ class _HomePageState extends State<HomePage>
   @override
   void dispose() {
     _cardController.dispose();
+    _cardScrollController.dispose();
     super.dispose();
+  }
+
+  /// Wallet mode can scroll while the fan modes can be panned with two
+  /// fingers. A display-mode change always starts a new scene, so neither
+  /// offset may leak into the next layout.
+  void _resetCardScenePosition() {
+    if (_cardScrollController.hasClients) {
+      _cardScrollController.jumpTo(0);
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_cardScrollController.hasClients) return;
+      if (_cardScrollController.offset != 0) _cardScrollController.jumpTo(0);
+    });
   }
 
   @override
@@ -92,60 +111,55 @@ class _HomePageState extends State<HomePage>
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     return LayoutBuilder(
       builder: (context, constraints) {
-        const headerExtent = 94.0;
-        // Every display mode remains inside the regular home surface. Keep a
-        // generous gap below the fixed header and always reserve the shell's
-        // bottom navigation area.
+        // All card scenes start below the fixed title and header actions.
         const cardSceneTop = 96.0;
         final navigationClearance = 96.0 + bottomInset;
         final availableHeight = math.max(
           280.0,
-          constraints.maxHeight - headerExtent - navigationClearance,
+          constraints.maxHeight - cardSceneTop - navigationClearance,
+        );
+        final cardScroll = CustomScrollView(
+          key: const Key('home-card-scroll-view'),
+          controller: _cardScrollController,
+          physics: _cardController.mode == CardStackMode.wallet
+              ? const BouncingScrollPhysics()
+              : const NeverScrollableScrollPhysics(),
+          slivers: [
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(
+                0,
+                cardSceneTop,
+                0,
+                navigationClearance,
+              ),
+              sliver: SliverToBoxAdapter(
+                child: widget.cards.isEmpty
+                    ? Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 18),
+                        child: _EmptyState(
+                          key: const ValueKey('empty-state'),
+                          onAddCard: widget.onAddCard,
+                        ),
+                      )
+                    : CardStackView(
+                        cards: widget.cards,
+                        displayMode: widget.displayMode,
+                        controller: _cardController,
+                        availableHeight: availableHeight,
+                        heightScale: widget.cardHeightScale,
+                        onHeightScaleChanged: widget.onCardHeightScaleChanged,
+                        onReorderCards: widget.onReorderCards,
+                        onOpenCard: widget.onOpenCard,
+                        onOpenCardTransition: widget.onOpenCardTransition,
+                        transitioningCardId: widget.transitioningCardId,
+                      ),
+              ),
+            ),
+          ],
         );
         return Stack(
           children: [
-            Positioned.fill(
-              child: CustomScrollView(
-                key: const Key('home-card-scroll-view'),
-                physics: _cardController.mode == CardStackMode.wallet
-                    ? const BouncingScrollPhysics()
-                    : const NeverScrollableScrollPhysics(),
-                slivers: [
-                  SliverPadding(
-                    padding: EdgeInsets.fromLTRB(
-                      0,
-                      cardSceneTop,
-                      0,
-                      navigationClearance,
-                    ),
-                    sliver: SliverToBoxAdapter(
-                      child: widget.cards.isEmpty
-                          ? Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 18,
-                              ),
-                              child: _EmptyState(
-                                key: const ValueKey('empty-state'),
-                                onAddCard: widget.onAddCard,
-                              ),
-                            )
-                          : CardStackView(
-                              cards: widget.cards,
-                              controller: _cardController,
-                              availableHeight: availableHeight,
-                              heightScale: widget.cardHeightScale,
-                              onHeightScaleChanged:
-                                  widget.onCardHeightScaleChanged,
-                              onReorderCards: widget.onReorderCards,
-                              onOpenCard: widget.onOpenCard,
-                              onOpenCardTransition: widget.onOpenCardTransition,
-                              transitioningCardId: widget.transitioningCardId,
-                            ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            Positioned.fill(child: cardScroll),
             Positioned(
               top: 16,
               left: 18,
@@ -260,7 +274,7 @@ class _HomeHeader extends StatelessWidget {
               tooltip: context.tr('添加卡片'),
               onTap: onAddCard,
               size: actionSize,
-              icon: const Icon(Icons.add_rounded),
+              icon: const Icon(AppIcons.add),
             ),
           ],
         );
@@ -270,9 +284,9 @@ class _HomeHeader extends StatelessWidget {
 }
 
 IconData _modeIcon(CardStackMode mode) => switch (mode) {
-  CardStackMode.stack => Icons.layers_outlined,
-  CardStackMode.focus => Icons.view_day_outlined,
-  CardStackMode.wallet => Icons.account_balance_wallet_outlined,
+  CardStackMode.stack => AppIcons.homeStack,
+  CardStackMode.focus => AppIcons.homeFocus,
+  CardStackMode.wallet => AppIcons.homeWallet,
 };
 
 class _HeaderAction extends StatefulWidget {
@@ -317,43 +331,56 @@ class _HeaderActionState extends State<_HeaderAction> {
             scale: _pressed ? MotionTokens.compactPressedScale : 1,
             duration: reduceMotion ? Duration.zero : MotionTokens.press,
             curve: MotionTokens.standardEnter,
-            child: ClipOval(
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                child: AnimatedContainer(
-                  duration: reduceMotion
-                      ? Duration.zero
-                      : MotionTokens.stateChange,
-                  width: widget.size,
-                  height: widget.size,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: widget.selected
-                        ? AppColors.selectedWash
-                        : AppColors.glassStrong.withValues(alpha: .86),
-                    border: Border.all(
-                      color: widget.selected
-                          ? AppColors.cyan.withValues(alpha: .34)
-                          : Colors.white.withValues(
-                              alpha: AppColors.isDark ? .14 : .72,
-                            ),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.isDark
-                            ? const Color(0x26091028)
-                            : const Color(0x1763729F),
-                        blurRadius: 20,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.isDark
+                        ? const Color(0x80000000)
+                        : const Color(0x4063729F),
+                    blurRadius: 24,
+                    spreadRadius: 1.5,
+                    offset: const Offset(0, 10),
                   ),
-                  child: IconTheme(
-                    data: IconThemeData(
-                      color: widget.selected ? Colors.white : AppColors.text,
-                      size: widget.size * .53,
+                  BoxShadow(
+                    color: widget.selected
+                        ? AppColors.cyan.withValues(alpha: .20)
+                        : Colors.transparent,
+                    blurRadius: 16,
+                    spreadRadius: 1,
+                  ),
+                ],
+              ),
+              child: ClipOval(
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                  child: AnimatedContainer(
+                    duration: reduceMotion
+                        ? Duration.zero
+                        : MotionTokens.stateChange,
+                    width: widget.size,
+                    height: widget.size,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: widget.selected
+                          ? AppColors.selectedWash
+                          : AppColors.glassStrong.withValues(alpha: .86),
+                      border: Border.all(
+                        color: widget.selected
+                            ? AppColors.cyan.withValues(alpha: .34)
+                            : Colors.white.withValues(
+                                alpha: AppColors.isDark ? .14 : .72,
+                              ),
+                      ),
                     ),
-                    child: Center(child: widget.icon),
+                    child: IconTheme(
+                      data: IconThemeData(
+                        color: widget.selected ? Colors.white : AppColors.text,
+                        size: widget.size * .53,
+                      ),
+                      child: Center(child: widget.icon),
+                    ),
                   ),
                 ),
               ),
@@ -598,7 +625,7 @@ class _EmptyState extends StatelessWidget {
           ),
           const SizedBox(height: 7),
           Text(
-            '从公开目录选择第一张卡片，数据仅保存在本机',
+            '从公开目录选择第一张卡片；登录后可同步到你的卡包',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: AppColors.textMuted,

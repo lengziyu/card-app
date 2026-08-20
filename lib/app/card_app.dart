@@ -1,10 +1,13 @@
-import 'package:card_app/core/localization/app_language.dart';
-import 'package:card_app/core/localization/app_localizations.dart';
-import 'package:card_app/core/theme/app_colors.dart';
-import 'package:card_app/core/theme/app_theme.dart';
-import 'package:card_app/features/auth/data/auth_repository.dart';
-import 'package:card_app/features/pro/data/pro_controller.dart';
-import 'package:card_app/features/shell/presentation/app_shell.dart';
+import 'package:cardfi/app/startup_splash.dart';
+import 'package:cardfi/core/localization/app_language.dart';
+import 'package:cardfi/core/localization/app_localizations.dart';
+import 'package:cardfi/core/localization/country_localizations_delegate.dart';
+import 'package:cardfi/core/motion/motion_tokens.dart';
+import 'package:cardfi/core/theme/app_colors.dart';
+import 'package:cardfi/core/theme/app_theme.dart';
+import 'package:cardfi/features/auth/data/auth_repository.dart';
+import 'package:cardfi/features/pro/data/pro_controller.dart';
+import 'package:cardfi/features/shell/presentation/app_shell.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -34,24 +37,35 @@ class _CardAppState extends State<CardApp> {
   static const _languagePreferenceKey = 'card-app-language-v1';
   ThemeMode _themeMode = ThemeMode.light;
   AppLanguage _language = AppLanguage.system;
+  bool _preferencesReady = false;
 
   @override
   void initState() {
     super.initState();
-    _restoreTheme();
-    _restoreLanguage();
+    _restorePreferences();
   }
 
-  Future<void> _restoreLanguage() async {
-    final preferences = await SharedPreferences.getInstance();
-    final storedLanguage = AppLanguage.fromStorage(
-      preferences.getString(_languagePreferenceKey),
-    );
-    final savedLanguage = AppLanguage.releaseLanguages.contains(storedLanguage)
-        ? storedLanguage
-        : AppLanguage.system;
-    if (!mounted || savedLanguage == _language) return;
-    setState(() => _language = savedLanguage);
+  Future<void> _restorePreferences() async {
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      final storedLanguage = AppLanguage.fromStorage(
+        preferences.getString(_languagePreferenceKey),
+      );
+      final savedLanguage =
+          AppLanguage.releaseLanguages.contains(storedLanguage)
+          ? storedLanguage
+          : AppLanguage.system;
+      final savedTheme = preferences.getString(_themePreferenceKey);
+      if (!mounted) return;
+      setState(() {
+        _language = savedLanguage;
+        _themeMode = savedTheme == 'dark' ? ThemeMode.dark : ThemeMode.light;
+        _preferencesReady = true;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _preferencesReady = true);
+    }
   }
 
   void _changeLanguage(AppLanguage language) {
@@ -61,13 +75,6 @@ class _CardAppState extends State<CardApp> {
       (preferences) =>
           preferences.setString(_languagePreferenceKey, language.storageKey),
     );
-  }
-
-  Future<void> _restoreTheme() async {
-    final preferences = await SharedPreferences.getInstance();
-    final savedTheme = preferences.getString(_themePreferenceKey);
-    if (!mounted || savedTheme != 'dark') return;
-    setState(() => _themeMode = ThemeMode.dark);
   }
 
   void _toggleTheme() {
@@ -92,11 +99,16 @@ class _CardAppState extends State<CardApp> {
         : Brightness.light;
     AppColors.configure(brightness);
     return MaterialApp(
-      onGenerateTitle: (context) => context.tr('集卡'),
+      onGenerateTitle: (context) => 'CardFi',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: _themeMode,
+      // Keep the app from showing a mixed light/dark frame. Custom surfaces
+      // read Theme.brightness directly, so the framework's default theme
+      // interpolation otherwise leaves them on the old palette too long.
+      themeAnimationDuration: MotionTokens.instant,
+      themeAnimationCurve: Curves.easeOutCubic,
       locale: _language.locale,
       localeResolutionCallback: (deviceLocale, supportedLocales) {
         if (_language != AppLanguage.system) return _language.locale;
@@ -105,21 +117,27 @@ class _CardAppState extends State<CardApp> {
       supportedLocales: AppLanguage.supportedLocales,
       localizationsDelegates: const [
         AppLocalizations.delegate,
+        appCountryLocalizationsDelegate,
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      home: AppShell(
-        enableRemoteData: widget.enableRemoteData,
-        proUnlocked: widget.proUnlocked,
-        proAccessTokenProvider: widget.proAccessTokenProvider,
-        proApplicationUserNameProvider: widget.proApplicationUserNameProvider,
-        authRepository: widget.authRepository,
-        isDarkMode: _themeMode == ThemeMode.dark,
-        onToggleTheme: _toggleTheme,
-        selectedLanguage: _language,
-        onLanguageChanged: _changeLanguage,
-      ),
+      home: _preferencesReady
+          ? CardFiStartupTransition(
+              child: AppShell(
+                enableRemoteData: widget.enableRemoteData,
+                proUnlocked: widget.proUnlocked,
+                proAccessTokenProvider: widget.proAccessTokenProvider,
+                proApplicationUserNameProvider:
+                    widget.proApplicationUserNameProvider,
+                authRepository: widget.authRepository,
+                isDarkMode: _themeMode == ThemeMode.dark,
+                onToggleTheme: _toggleTheme,
+                selectedLanguage: _language,
+                onLanguageChanged: _changeLanguage,
+              ),
+            )
+          : const CardFiStartupPlaceholder(),
     );
   }
 }

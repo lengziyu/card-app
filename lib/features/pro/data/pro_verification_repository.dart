@@ -1,6 +1,6 @@
-import 'package:card_app/core/network/api_client.dart';
-import 'package:card_app/features/pro/data/pro_config.dart';
-import 'package:card_app/features/pro/domain/pro_models.dart';
+import 'package:cardfi/core/network/api_client.dart';
+import 'package:cardfi/features/pro/data/pro_config.dart';
+import 'package:cardfi/features/pro/domain/pro_models.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 
 class ProVerificationRepository {

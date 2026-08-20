@@ -5,10 +5,12 @@ class CardAdvisorProfile {
     required this.useCase,
     required this.kycPreference,
     required this.language,
+    this.residenceCountryCode = '',
     this.note = '',
   });
 
   final String residence;
+  final String residenceCountryCode;
   final String document;
   final String useCase;
   final String kycPreference;
@@ -19,6 +21,8 @@ class CardAdvisorProfile {
 
   Map<String, Object?> toJson() => {
     'residence': residence,
+    if (residenceCountryCode.isNotEmpty)
+      'residenceCountryCode': residenceCountryCode,
     'document': document,
     'useCase': useCase,
     'kycPreference': kycPreference,

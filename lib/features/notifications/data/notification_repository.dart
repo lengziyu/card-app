@@ -1,4 +1,4 @@
-import 'package:card_app/core/network/api_client.dart';
+import 'package:cardfi/core/network/api_client.dart';
 
 class AppMessage {
   const AppMessage({

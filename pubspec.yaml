@@ -1,13 +1,14 @@
-name: card_app
-description: "集卡 Flutter App"
+name: cardfi
+description: "CardFi Flutter App"
 publish_to: 'none'
-version: 0.1.0+1
+version: 0.1.1+13
 
 environment:
   sdk: ^3.12.2
 
 dependencies:
   cached_network_image: ^3.4.1
+  country_picker: ^2.0.28
   firebase_core: ^3.15.1
   firebase_messaging: ^15.2.10
   flutter:
@@ -17,10 +18,15 @@ dependencies:
     sdk: flutter
   flutter_markdown: ^0.7.7+1
   flutter_svg: ^2.2.0
+  gal: ^2.3.2
   http: ^1.2.0
+  http_parser: ^4.1.2
   image_picker: ^1.2.3
   in_app_purchase: ^3.3.0
   package_info_plus: ^10.2.1
+  path_provider: ^2.1.5
+  phosphoricons_flutter: ^1.0.0
+  qr_flutter: ^4.1.0
   shared_preferences: ^2.5.5
   supabase_flutter: ^2.16.0
   url_launcher: ^6.3.2
@@ -36,5 +42,7 @@ flutter:
     - assets/brand-logos/
     - assets/cards/
     - assets/backgrounds/
+    - assets/branding/
     - assets/navigation/
+    - assets/payment-logos/
     - assets/stablecoins/

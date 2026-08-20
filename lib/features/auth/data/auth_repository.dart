@@ -1,4 +1,4 @@
-import 'package:card_app/features/auth/domain/auth_user.dart';
+import 'package:cardfi/features/auth/domain/auth_user.dart';
 
 class AuthFailure implements Exception {
   const AuthFailure(this.code, this.message);
@@ -30,4 +30,10 @@ abstract interface class AuthRepository {
   Future<void> signOut();
 
   Future<String?> idToken();
+}
+
+/// Optional live session updates for repositories whose access token can be
+/// refreshed or revoked outside an explicit sign-in/sign-out call.
+abstract interface class AuthStateRepository {
+  Stream<AuthUser?> get authStateChanges;
 }

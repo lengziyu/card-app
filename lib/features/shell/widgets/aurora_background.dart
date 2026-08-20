@@ -1,4 +1,4 @@
-import 'package:card_app/core/theme/app_colors.dart';
+import 'package:cardfi/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 
 class AuroraBackground extends StatelessWidget {
@@ -18,21 +18,28 @@ class AuroraBackground extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          if (AppColors.isDark || authBackground)
-            Image.asset(
-              AppColors.isDark
-                  ? 'assets/backgrounds/register-bg.webp'
-                  : 'assets/backgrounds/login-bg.webp',
-              fit: BoxFit.cover,
-              alignment: Alignment.center,
-              filterQuality: FilterQuality.high,
-            ),
-          IgnorePointer(
-            child: CustomPaint(
-              painter: _AuroraPainter(
-                dark: AppColors.isDark,
-                authBackground: authBackground,
-              ),
+          RepaintBoundary(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (AppColors.isDark || authBackground)
+                  Image.asset(
+                    AppColors.isDark
+                        ? 'assets/backgrounds/register-bg.webp'
+                        : 'assets/backgrounds/login-bg.webp',
+                    fit: BoxFit.cover,
+                    alignment: Alignment.center,
+                    filterQuality: FilterQuality.medium,
+                  ),
+                IgnorePointer(
+                  child: CustomPaint(
+                    painter: _AuroraPainter(
+                      dark: AppColors.isDark,
+                      authBackground: authBackground,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
           child,

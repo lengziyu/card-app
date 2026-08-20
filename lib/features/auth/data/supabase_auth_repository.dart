@@ -1,13 +1,16 @@
 import 'dart:async';
 
-import 'package:card_app/features/auth/data/auth_repository.dart';
-import 'package:card_app/features/auth/data/secure_supabase_storage.dart';
-import 'package:card_app/features/auth/data/supabase_auth_config.dart';
-import 'package:card_app/features/auth/domain/auth_user.dart';
+import 'package:cardfi/features/auth/data/auth_repository.dart';
+import 'package:cardfi/features/auth/data/secure_supabase_storage.dart';
+import 'package:cardfi/features/auth/data/supabase_auth_config.dart';
+import 'package:cardfi/features/auth/domain/auth_user.dart';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 
-class SupabaseAuthRepository implements AuthRepository {
+class SupabaseAuthRepository implements AuthRepository, AuthStateRepository {
+  SupabaseAuthRepository({supabase.SupabaseClient? clientOverride})
+    : _client = clientOverride;
+
   supabase.SupabaseClient? _client;
   Future<supabase.SupabaseClient>? _initializing;
   supabase.User? _pendingUser;
@@ -19,7 +22,16 @@ class SupabaseAuthRepository implements AuthRepository {
   @override
   Future<AuthUser?> initialize() async {
     final client = await _requireClient();
+    await _refreshExpiredSession(client);
     return _mapUser(client.auth.currentUser ?? _pendingUser);
+  }
+
+  @override
+  Stream<AuthUser?> get authStateChanges async* {
+    final client = await _requireClient();
+    await for (final state in client.auth.onAuthStateChange) {
+      yield _mapUser(state.session?.user ?? client.auth.currentUser);
+    }
   }
 
   @override
@@ -138,9 +150,24 @@ class SupabaseAuthRepository implements AuthRepository {
   @override
   Future<String?> idToken() async {
     final client = await _requireClient();
-    final user = client.auth.currentUser;
-    if (user?.emailConfirmedAt == null) return null;
-    return client.auth.currentSession?.accessToken;
+    final session = await _refreshExpiredSession(client);
+    if (session?.user.emailConfirmedAt == null) return null;
+    return session?.accessToken;
+  }
+
+  Future<supabase.Session?> _refreshExpiredSession(
+    supabase.SupabaseClient client,
+  ) async {
+    final current = client.auth.currentSession;
+    if (current == null || !current.isExpired) return current;
+    try {
+      final response = await client.auth.refreshSession();
+      return response.session;
+    } on supabase.AuthSessionMissingException {
+      return null;
+    } on supabase.AuthException catch (error) {
+      throw _failureFor(error);
+    }
   }
 
   Future<supabase.SupabaseClient> _requireClient() async {

@@ -1,8 +1,8 @@
 import 'dart:async';
 
-import 'package:card_app/core/localization/app_localizations.dart';
-import 'package:card_app/core/motion/motion_tokens.dart';
-import 'package:card_app/core/motion/app_haptics.dart';
+import 'package:cardfi/core/localization/app_localizations.dart';
+import 'package:cardfi/core/motion/motion_tokens.dart';
+import 'package:cardfi/core/motion/app_haptics.dart';
 import 'package:flutter/material.dart';
 
 typedef PressableScaleBuilder =
