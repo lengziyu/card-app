@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:cardfi/core/network/api_client.dart';
 import 'package:cardfi/core/localization/app_localizations.dart';
 import 'package:cardfi/core/theme/app_colors.dart';
@@ -7,6 +9,8 @@ import 'package:cardfi/features/market/presentation/card_advisor_page.dart';
 import 'package:country_picker/country_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
 void main() {
   testWidgets('English localizes the AI Card Match question and options', (
@@ -94,6 +98,14 @@ void main() {
     );
     tester.widget<Checkbox>(consentCheckbox).onChanged!(true);
     await tester.pump();
+    await tester.enterText(
+      find.byKey(const Key('card-advisor-note')),
+      'updated after consent',
+    );
+    await tester.pump();
+    expect(tester.widget<Checkbox>(consentCheckbox).value, isFalse);
+    tester.widget<Checkbox>(consentCheckbox).onChanged!(true);
+    await tester.pump();
     await tester.tap(find.byKey(const Key('card-advisor-submit')));
     await tester.pumpAndSettle();
     expect(find.text('Sign in to use AI Card Match.'), findsOneWidget);
@@ -179,5 +191,72 @@ void main() {
 
     await tester.tap(find.byKey(const Key('card-advisor-login')));
     expect(loginCount, 1);
+  });
+
+  testWidgets('AI result starts below the sticky header', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    AppColors.configure(Brightness.light);
+    final apiClient = ApiClient(
+      baseUrl: 'https://example.test',
+      client: MockClient(
+        (_) async => http.Response(
+          jsonEncode({
+            'advisor': {
+              'summary': '已找到符合条件的公开资料。',
+              'recommendations': [
+                {
+                  'cardId': localCardCatalog.first.id,
+                  'reason': '符合主要用途。',
+                  'cautions': '申请前确认官方规则。',
+                },
+              ],
+              'nextSteps': ['查看官方申请要求。'],
+              'disclaimer': '仅供信息参考。',
+            },
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        ),
+      ),
+    );
+    addTearDown(apiClient.close);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CardAdvisorPage(
+          repository: CardAdvisorRepository(
+            apiClient,
+            accessTokenProvider: () async => 'session-token',
+          ),
+          cards: localCardCatalog,
+          onBack: () {},
+          onOpenCard: (_) {},
+          onLoginRequired: () {},
+        ),
+      ),
+    );
+
+    for (var index = 0; index < 4; index++) {
+      await tester.tap(find.byKey(const Key('card-advisor-submit')));
+      await tester.pumpAndSettle();
+    }
+    final consent = find.byKey(const Key('card-advisor-ai-consent'));
+    tester
+        .widget<Checkbox>(
+          find.descendant(of: consent, matching: find.byType(Checkbox)),
+        )
+        .onChanged!(true);
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('card-advisor-submit')));
+    await tester.pumpAndSettle();
+
+    final result = find.byKey(const Key('card-advisor-result'));
+    expect(result, findsOneWidget);
+    final resultTop = tester.getTopLeft(result).dy;
+    expect(resultTop, greaterThanOrEqualTo(80));
+    expect(resultTop, lessThanOrEqualTo(86));
   });
 }

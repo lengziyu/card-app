@@ -13,10 +13,12 @@ class NotificationService {
 
   static const _enabledKey = 'content-push-enabled-v1';
   static const _installationKey = 'content-push-installation-id-v1';
+  static const _permissionRequestedKey = 'notification-permission-requested-v1';
 
   final NotificationRepository _repository;
   final _routes = StreamController<String>.broadcast();
   final _apns = _ApnsNotificationClient();
+  final _systemNotifications = _SystemNotificationClient();
   StreamSubscription<String>? _tokenRefreshSubscription;
   bool _firebaseReady = false;
 
@@ -24,6 +26,37 @@ class NotificationService {
 
   Future<bool> isEnabled() async =>
       (await SharedPreferences.getInstance()).getBool(_enabledKey) ?? false;
+
+  Future<NotificationStatus> status() async {
+    final preferences = await SharedPreferences.getInstance();
+    final subscriptionEnabled = preferences.getBool(_enabledKey) ?? false;
+    try {
+      final rawStatus = await _systemNotifications.authorizationStatus();
+      var permission = NotificationPermissionStatus.values.firstWhere(
+        (value) => value.name == rawStatus,
+        orElse: () => NotificationPermissionStatus.unavailable,
+      );
+      final permissionRequested =
+          preferences.getBool(_permissionRequestedKey) ?? false;
+      // Android 12 and below report notifications as authorized because no
+      // runtime permission exists. Treat a fresh, unsubscribed install as not
+      // determined so it still receives the one-time in-app explanation.
+      if (defaultTargetPlatform == TargetPlatform.android &&
+          !permissionRequested &&
+          !subscriptionEnabled) {
+        permission = NotificationPermissionStatus.notDetermined;
+      }
+      return NotificationStatus(
+        permission: permission,
+        subscriptionEnabled: subscriptionEnabled,
+      );
+    } catch (_) {
+      return NotificationStatus(
+        permission: NotificationPermissionStatus.unavailable,
+        subscriptionEnabled: subscriptionEnabled,
+      );
+    }
+  }
 
   Future<String> installationId() async {
     final preferences = await SharedPreferences.getInstance();
@@ -41,7 +74,11 @@ class NotificationService {
     try {
       final token = await _requestToken();
       if (token == null || token.isEmpty) {
-        return NotificationEnableResult.denied;
+        final permission = (await status()).permission;
+        return permission == NotificationPermissionStatus.authorized ||
+                permission == NotificationPermissionStatus.provisional
+            ? NotificationEnableResult.unavailable
+            : NotificationEnableResult.denied;
       }
       await _repository.subscribe(
         installationId: await installationId(),
@@ -67,6 +104,8 @@ class NotificationService {
       // Local opt-out takes effect immediately; the next launch retries server opt-out.
     }
   }
+
+  Future<bool> openSystemSettings() => _systemNotifications.openSettings();
 
   Future<void> start({required String locale}) async {
     if (!await isEnabled()) return;
@@ -119,10 +158,12 @@ class NotificationService {
   Future<String?> _requestToken() async {
     if (_usesApns) {
       await _apns.initialize(_emitRoute);
+      await _markPermissionRequested();
       if (!await _apns.requestPermission()) return null;
       return _apns.waitForToken();
     }
     await _ensureFirebase();
+    await _markPermissionRequested();
     final settings = await FirebaseMessaging.instance.requestPermission(
       alert: true,
       badge: true,
@@ -133,6 +174,13 @@ class NotificationService {
       return null;
     }
     return FirebaseMessaging.instance.getToken();
+  }
+
+  Future<void> _markPermissionRequested() async {
+    await (await SharedPreferences.getInstance()).setBool(
+      _permissionRequestedKey,
+      true,
+    );
   }
 
   Future<String?> _currentToken() async {
@@ -155,6 +203,40 @@ class NotificationService {
 }
 
 enum NotificationEnableResult { enabled, denied, unavailable }
+
+enum NotificationPermissionStatus {
+  notDetermined,
+  authorized,
+  denied,
+  provisional,
+  unavailable,
+}
+
+class NotificationStatus {
+  const NotificationStatus({
+    required this.permission,
+    required this.subscriptionEnabled,
+  });
+
+  final NotificationPermissionStatus permission;
+  final bool subscriptionEnabled;
+
+  bool get canDeliver =>
+      subscriptionEnabled &&
+      (permission == NotificationPermissionStatus.authorized ||
+          permission == NotificationPermissionStatus.provisional);
+}
+
+class _SystemNotificationClient {
+  static const _channel = MethodChannel('cardfi/notifications');
+
+  Future<String> authorizationStatus() async =>
+      await _channel.invokeMethod<String>('authorizationStatus') ??
+      NotificationPermissionStatus.unavailable.name;
+
+  Future<bool> openSettings() async =>
+      await _channel.invokeMethod<bool>('openSettings') ?? false;
+}
 
 /// Native APNs bridge used only on iOS. Android continues to use FCM.
 class _ApnsNotificationClient {

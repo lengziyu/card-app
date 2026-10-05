@@ -65,8 +65,16 @@ if (!String(legal.SUPPORT_EMAIL || '').includes('@')) {
 if (pro.ENABLE_PRO_BILLING !== true) {
   failures.push('ENABLE_PRO_BILLING must be true for the Pro store build')
 }
+if (pro.ENABLE_EDGE_SWIPE_BACK === true) {
+  failures.push(
+    'ENABLE_EDGE_SWIPE_BACK must stay false until the iOS/Android gesture regression is approved',
+  )
+}
 for (const key of ['PRO_MONTHLY_PRODUCT_ID', 'PRO_YEARLY_PRODUCT_ID']) {
   if (!String(pro[key] || '').trim()) failures.push(`${key} must be configured`)
+}
+if (pro.ENABLE_PRO_LIFETIME === true && !String(pro.PRO_LIFETIME_PRODUCT_ID || '').trim()) {
+  failures.push('PRO_LIFETIME_PRODUCT_ID must be configured when ENABLE_PRO_LIFETIME is true')
 }
 
 if (failures.length) {
@@ -75,7 +83,18 @@ if (failures.length) {
 }
 NODE
 
-echo "Release configuration is valid: Pro billing and legal links will be embedded."
+release_api_base_url="${CARD_APP_API_BASE_URL:-https://card.lengziyu.cn}"
+node tools/check_store_release_config.mjs "$pro_config" "$target" "$release_api_base_url"
+
+supabase_config="config/supabase.local.json"
+if [[ ! -f "$supabase_config" ]]; then
+  echo "Missing $supabase_config. Store releases require an explicit Auth configuration." >&2
+  exit 66
+fi
+node tools/check_auth_release_compatibility.mjs "$supabase_config" "$release_api_base_url" "$target"
+node tools/check_comment_release_config.mjs "$target" "$release_api_base_url"
+
+echo "Release configuration is valid: Pro billing, Auth, moderated comments and legal links are ready."
 if [[ "$check_only" == true ]]; then
   exit 0
 fi
@@ -85,9 +104,7 @@ defines=(
   "--dart-define-from-file=$pro_config"
 )
 
-if [[ -f config/supabase.local.json ]]; then
-  defines+=("--dart-define-from-file=config/supabase.local.json")
-fi
+defines+=("--dart-define-from-file=$supabase_config")
 
 firebase_config="config/firebase.ios.local.json"
 if [[ "$target" == "appbundle" ]]; then

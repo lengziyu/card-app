@@ -12,8 +12,10 @@ import 'package:cardfi/features/catalog/widgets/card_artwork.dart';
 import 'package:cardfi/features/catalog/widgets/interactive_card_artwork.dart';
 import 'package:cardfi/core/icons/app_icons.dart';
 import 'package:cardfi/core/localization/app_language.dart';
+import 'package:cardfi/core/motion/edge_swipe_back.dart';
 import 'package:cardfi/features/home/domain/card_layout_calculator.dart';
 import 'package:cardfi/features/home/domain/home_card_layout.dart';
+import 'package:cardfi/features/market/presentation/card_advisor_page.dart';
 import 'package:cardfi/features/market/presentation/market_page.dart';
 import 'package:cardfi/features/profile/data/local_guest_state.dart';
 import 'package:flutter/material.dart';
@@ -50,6 +52,20 @@ void main() {
         inInclusiveRange(520, 720),
       );
     }
+  });
+
+  test('iOS card details hide payment support while Android keeps it', () {
+    const channels = {
+      PaymentChannel.applePay,
+      PaymentChannel.googlePay,
+      PaymentChannel.wechatPay,
+    };
+
+    expect(paymentChannelsForPlatform(channels, TargetPlatform.iOS), isEmpty);
+    expect(
+      paymentChannelsForPlatform(channels, TargetPlatform.android),
+      channels,
+    );
   });
 
   testWidgets('renders the card collection home', (tester) async {
@@ -168,6 +184,64 @@ void main() {
     await tester.tap(find.byKey(const Key('ai-assistant-card-match')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('card-advisor-page')), findsOneWidget);
+  });
+
+  testWidgets('advisor detail hides the retained advisor until returning', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const CardApp(authRepository: _SignedInAuthRepository()),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('nav-市场')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('market-ai-advisor-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('ai-assistant-card-match')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('card-advisor-submit')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('card-advisor-previous')),
+      findsOneWidget,
+      reason: 'the advisor should be on its second step before opening detail',
+    );
+
+    tester
+        .widget<CardAdvisorPage>(find.byType(CardAdvisorPage))
+        .onOpenCard(localCardCatalog.first);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('card-preview-page')), findsOneWidget);
+    expect(find.byKey(const Key('card-advisor-page')), findsNothing);
+    expect(
+      find.byKey(const Key('card-advisor-page'), skipOffstage: false),
+      findsOneWidget,
+      reason:
+          'the advisor stays mounted so its result and scroll state survive',
+    );
+    final retainedLayer = tester.widget<Offstage>(
+      find.byKey(const Key('card-advisor-retained-layer')),
+    );
+    expect(retainedLayer.offstage, isTrue);
+
+    await tester.tap(find.byKey(const Key('preview-back')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('card-preview-page')), findsNothing);
+    expect(find.byKey(const Key('card-advisor-page')), findsOneWidget);
+    expect(find.byKey(const Key('card-advisor-previous')), findsOneWidget);
+    expect(
+      tester
+          .widget<Offstage>(
+            find.byKey(const Key('card-advisor-retained-layer')),
+          )
+          .offstage,
+      isFalse,
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('card detail opens AI application prep for the current card', (
@@ -348,6 +422,7 @@ void main() {
     expect(find.byKey(const Key('pro-workspace-page')), findsOneWidget);
     expect(find.text('卡包结构报告'), findsOneWidget);
     expect(find.byKey(const Key('pro-open-bill-analysis')), findsOneWidget);
+    expect(find.byKey(const Key('pro-open-bill-history')), findsNothing);
     await Scrollable.ensureVisible(
       tester.element(find.byKey(const Key('pro-open-bill-analysis'))),
       alignment: .5,
@@ -358,6 +433,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('bill-analysis-page')), findsOneWidget);
     expect(find.text('识别真实消费成本'), findsOneWidget);
+    expect(find.byKey(const Key('bill-open-history')), findsOneWidget);
     await tester.tap(find.byKey(const Key('bill-analysis-back')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('pro-workspace-page')), findsOneWidget);
@@ -398,6 +474,33 @@ void main() {
     expect(find.byKey(const Key('pro-workspace-page')), findsOneWidget);
   });
 
+  testWidgets('bill analysis returns to the main tab it was opened from', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const CardApp(
+        proUnlocked: true,
+        authRepository: _SignedInAuthRepository(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('nav-市场')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('market-page')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('nav-add')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('nav-quick-bill')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('bill-analysis-page')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('bill-analysis-back')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('market-page')), findsOneWidget);
+    expect(find.byKey(const Key('pro-workspace-page')), findsNothing);
+  });
+
   testWidgets('home switches to the ArkFlow-style focus mode smoothly', (
     tester,
   ) async {
@@ -428,7 +531,18 @@ void main() {
     expect(find.byKey(const Key('home-card-previous')), findsNothing);
     expect(find.byKey(const Key('home-card-next')), findsNothing);
     expect(find.text('轻触查看'), findsNothing);
-    expect(find.byKey(const Key('home-card-blur-bybit-card')), findsOneWidget);
+    expect(find.byKey(const Key('home-card-blur-bybit-card')), findsNothing);
+    expect(find.byKey(const Key('home-card-veil-bybit-card')), findsNothing);
+
+    double visualWidth(Finder finder) =>
+        (tester.getTopRight(finder) - tester.getTopLeft(finder)).distance;
+    expect(
+      visualWidth(find.byKey(const Key('home-focus-card-redotpay'))),
+      greaterThan(
+        visualWidth(find.byKey(const Key('home-focus-card-bybit-card'))),
+      ),
+      reason: 'the focused middle card must be the widest layer',
+    );
 
     final initiallyFocused = find.byKey(const Key('home-focus-card-redotpay'));
     final initialTop = tester.getTopLeft(initiallyFocused).dy;
@@ -436,6 +550,22 @@ void main() {
       find.byKey(const Key('home-focus-stack')),
       const Offset(0, -280),
     );
+    await tester.pump(const Duration(milliseconds: 80));
+
+    // 上一轮吸附尚未结束时再次落指，卡列应从当前画面直接接管，不能
+    // 瞬移到上一轮目标位置。2px 的新手势只允许产生很小的视觉位移。
+    final interruptedTop = tester.getTopLeft(initiallyFocused).dy;
+    final continuedGesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const Key('home-focus-stack'))),
+    );
+    await continuedGesture.moveBy(const Offset(0, -2));
+    await tester.pump();
+    expect(
+      (tester.getTopLeft(initiallyFocused).dy - interruptedTop).abs(),
+      lessThan(12),
+    );
+    await continuedGesture.moveBy(const Offset(0, -96));
+    await continuedGesture.up();
     await tester.pumpAndSettle();
 
     expect(tester.getTopLeft(initiallyFocused).dy, lessThan(initialTop));
@@ -652,10 +782,9 @@ void main() {
     expect(find.text('帮助中心'), findsNothing);
     expect(find.byKey(const Key('auth-back')), findsNothing);
 
-    await tester.tap(find.byKey(const Key('switch-to-register')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('register-page')), findsOneWidget);
-    expect(find.text('已有账号'), findsOneWidget);
+    expect(find.text('邮箱地址'), findsOneWidget);
+    expect(find.text('获取验证码'), findsOneWidget);
+    expect(find.byKey(const Key('auth-password-field')), findsNothing);
   });
 
   testWidgets('a verified sign-in returns home with the card celebration', (
@@ -674,10 +803,9 @@ void main() {
       find.byKey(const Key('auth-account-field')),
       'member@example.com',
     );
-    await tester.enterText(
-      find.byKey(const Key('auth-password-field')),
-      'correct-horse',
-    );
+    await tester.tap(find.byKey(const Key('auth-submit')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('auth-otp-field')), '123456');
     await tester.tap(find.byKey(const Key('auth-submit')));
     await tester.pump();
 
@@ -698,6 +826,130 @@ void main() {
 
     expect(find.byKey(const Key('card-preview-page')), findsOneWidget);
     expect(find.byKey(const Key('market-card-transition')), findsOneWidget);
+  });
+
+  testWidgets('home card detail starts from particles without a full card', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      'card-app-language-v1': 'zh-CN',
+      'card-app-card-visual-effect-v1': CardVisualEffect.flame.name,
+    });
+    await tester.pumpWidget(const CardApp());
+    await tester.pumpAndSettle();
+
+    final redotpay = find.byKey(const Key('home-card-redotpay'));
+    final redotpaySize = tester.getSize(redotpay);
+    await tester.tapAt(
+      tester.getTopLeft(redotpay) + Offset(redotpaySize.width / 2, 20),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    final interactiveArtwork = tester.widget<InteractiveCardArtwork>(
+      find.byType(InteractiveCardArtwork),
+    );
+    expect(interactiveArtwork.effect, CardVisualEffect.flame);
+    expect(
+      interactiveArtwork.animateInitialEffect,
+      isTrue,
+      reason: 'the reconstruction must start on the first detail frame',
+    );
+    expect(
+      interactiveArtwork.animateEffectChanges,
+      isTrue,
+      reason: 'restoring a saved effect must not settle to a full card',
+    );
+
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('market-card-transition')),
+        matching: find.byType(CardArtwork),
+      ),
+      findsNothing,
+      reason: 'a complete card must not appear before particle reconstruction',
+    );
+    expect(
+      find.byKey(const Key('market-card-flight-position')),
+      findsNothing,
+      reason: 'the home entrance is owned entirely by the effect stage',
+    );
+    expect(
+      tester
+          .widget<InteractiveCardArtwork>(find.byType(InteractiveCardArtwork))
+          .animateInitialEffect,
+      isTrue,
+    );
+    final detailOpacity = tester
+        .widget<Opacity>(find.byKey(const Key('detail-card-handoff-opacity')))
+        .opacity;
+    expect(detailOpacity, 1);
+
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<Opacity>(find.byKey(const Key('detail-card-handoff-opacity')))
+          .opacity,
+      1,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('market card detail runs the effect before the full card', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      'card-app-language-v1': 'zh-CN',
+      'card-app-card-visual-effect-v1': CardVisualEffect.flame.name,
+    });
+    await tester.pumpWidget(
+      const CardApp(catalogRepository: LocalCardCatalogRepository()),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('nav-市场')));
+    await tester.pumpAndSettle();
+
+    await tester.drag(
+      find.byKey(const Key('market-page')),
+      const Offset(0, -320),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('catalog-card-etherfi-core')));
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pump();
+
+    final interactiveArtwork = tester.widget<InteractiveCardArtwork>(
+      find.byType(InteractiveCardArtwork),
+    );
+    expect(interactiveArtwork.effect, CardVisualEffect.flame);
+    expect(
+      interactiveArtwork.animateInitialEffect,
+      isTrue,
+      reason: 'the selected effect must own the first detail frame',
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('market-card-transition')),
+        matching: find.byType(CardArtwork),
+      ),
+      findsNothing,
+      reason: 'the complete shared card must not render before the effect',
+    );
+    expect(
+      find.byKey(const Key('market-card-flight-position')),
+      findsNothing,
+      reason: 'the forward market transition must not flash a complete card',
+    );
+    expect(
+      tester
+          .widget<Opacity>(find.byKey(const Key('detail-card-handoff-opacity')))
+          .opacity,
+      1,
+    );
+
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('card-preview-page')), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('card detail shows its published rating and review count', (
@@ -810,6 +1062,96 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('加密相关'), findsWidgets);
+  });
+
+  testWidgets('card detail shows all published opening requirements', (
+    tester,
+  ) async {
+    const card = CardSummary(
+      id: 'opening-requirement-card',
+      name: 'Opening Card',
+      issuer: 'Issuer',
+      category: CardCategory.uCard,
+      label: '测试卡',
+      tint: 0xFF685CFF,
+    );
+    const detail = CardDetail(
+      cardId: 'opening-requirement-card',
+      tags: [],
+      region: '全球',
+      funding: 'USDT',
+      availability: '开放申请',
+      features: [],
+      fees: [
+        FeeLine(label: '外汇费', value: '0%', note: 'Core：0–0.5%\nLuxe：0–0.25%'),
+      ],
+      kycNote: '身份材料以官方流程为准。',
+      paymentChannels: <PaymentChannel>{},
+      sourceLabel: '测试来源',
+      note: '测试说明',
+      openingRequirements: CardOpeningRequirements(
+        summary: '护照 + 海外证明',
+        states: {
+          OpeningRequirementKind.inviteCode:
+              OpeningRequirementState.notRequired,
+          OpeningRequirementKind.idCard: OpeningRequirementState.notRequired,
+          OpeningRequirementKind.passport: OpeningRequirementState.required,
+          OpeningRequirementKind.overseasAddressProof:
+              OpeningRequirementState.required,
+          OpeningRequirementKind.overseasPhone: OpeningRequirementState.unknown,
+        },
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CardPreviewPage(
+            card: card,
+            detail: detail,
+            added: false,
+            favorite: false,
+            onBack: () {},
+            onAddedChanged: (_) {},
+            onFavoriteChanged: (_) {},
+            onCorrection: () {},
+            onCompare: () {},
+            onViewSimilar: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('detail-opening-requirements')),
+      260,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    expect(find.text('开卡条件'), findsOneWidget);
+    expect(find.text('通常需要：护照 + 海外证明'), findsOneWidget);
+    for (final kind in OpeningRequirementKind.values) {
+      expect(
+        find.byKey(Key('opening-requirement-${kind.name}')),
+        findsOneWidget,
+      );
+    }
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('detail-fees')),
+      260,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -180));
+    await tester.pumpAndSettle();
+    final feeValue = tester.widget<Align>(
+      find.byKey(const Key('detail-fee-value-外汇费')),
+    );
+    expect(feeValue.alignment, Alignment.centerRight);
+    expect(find.byKey(const Key('detail-fee-notes')), findsNothing);
+    expect(find.text('Core：0–0.5%\nLuxe：0–0.25%'), findsNothing);
+    await tester.tap(find.byKey(const Key('detail-fee-外汇费')));
+    await tester.pumpAndSettle();
+    expect(find.text('Core：0–0.5%\nLuxe：0–0.25%'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('card detail keeps funding and availability in one compact row', (
@@ -1548,6 +1890,51 @@ void main() {
     expect(find.byKey(const Key('nav-市场')), findsNothing);
   });
 
+  testWidgets('leading-edge swipe closes an AppShell overlay', (tester) async {
+    await tester.pumpWidget(const CardApp(edgeSwipeBackEnabled: true));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('nav-我的')));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('profile-menu-settings')),
+      180,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.drag(
+      find.byKey(const Key('profile-page')),
+      const Offset(0, -80),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('profile-menu-settings')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('profile-subpage-settings')), findsOneWidget);
+    expect(find.byType(EdgeSwipeBack), findsOneWidget);
+    expect(
+      tester.widget<EdgeSwipeBack>(find.byType(EdgeSwipeBack)).enabled,
+      isTrue,
+    );
+
+    final hitRegion = find.byKey(const Key('edge-swipe-back-hit-region'));
+    final pageLeft = tester
+        .getTopLeft(find.byKey(const Key('profile-subpage-settings')))
+        .dx;
+    final gesture = await tester.startGesture(tester.getCenter(hitRegion));
+    await gesture.moveBy(const Offset(30, 0));
+    await tester.pump();
+    await gesture.moveBy(const Offset(300, 0));
+    await tester.pump();
+    expect(
+      tester.getTopLeft(find.byKey(const Key('profile-subpage-settings'))).dx,
+      greaterThan(pageLeft + 250),
+    );
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('profile-subpage-settings')), findsNothing);
+    expect(find.byKey(const Key('profile-menu-settings')), findsOneWidget);
+  });
+
   testWidgets('add navigation is available without login', (tester) async {
     await tester.pumpWidget(const CardApp());
     await tester.pumpAndSettle();
@@ -2006,7 +2393,7 @@ void main() {
   });
 
   testWidgets(
-    'guest settings hide account tools and expose legal information',
+    'guest settings expose public notifications and hide account tools',
     (tester) async {
       await tester.pumpWidget(const CardApp());
       await tester.pumpAndSettle();
@@ -2041,9 +2428,9 @@ void main() {
       }
       expect(
         find.byKey(const Key('settings-notification-permission')),
-        findsNothing,
+        findsOneWidget,
       );
-      expect(find.byKey(const Key('settings-reminder-config')), findsNothing);
+      expect(find.byKey(const Key('settings-reminder-config')), findsOneWidget);
       expect(find.byKey(const Key('settings-feedback')), findsNothing);
       expect(find.byKey(const Key('settings-app-messages')), findsNothing);
       expect(find.byKey(const Key('settings-help')), findsOneWidget);
@@ -2511,6 +2898,8 @@ class CardApp extends app.CardApp {
   const CardApp({
     super.enableRemoteData,
     super.proUnlocked,
+    super.catalogRepository,
+    super.edgeSwipeBackEnabled,
     AuthRepository? authRepository,
     super.key,
   }) : super(authRepository: authRepository ?? const _GuestAuthRepository());
@@ -2555,11 +2944,43 @@ class _GuestAuthRepository implements AuthRepository {
       Future.error(const AuthFailure('UNAVAILABLE', 'Unavailable in test'));
 }
 
-class _VerifiedAuthRepository implements AuthRepository {
+class _VerifiedAuthRepository
+    implements AuthRepository, PasswordlessAuthRepository {
   const _VerifiedAuthRepository();
 
   @override
   bool get configured => true;
+
+  @override
+  bool get appleConfigured => false;
+
+  @override
+  bool get googleConfigured => false;
+
+  @override
+  Future<void> sendEmailOtp(String email) async {}
+
+  @override
+  Future<AuthUser> verifyEmailOtp({
+    required String email,
+    required String token,
+  }) => Future.value(_user(email));
+
+  @override
+  Future<AuthUser> signInWithApple() =>
+      Future.error(const AuthFailure('UNAVAILABLE', 'Unavailable in test'));
+
+  @override
+  Future<AuthUser> signInWithGoogle() =>
+      Future.error(const AuthFailure('UNAVAILABLE', 'Unavailable in test'));
+
+  @override
+  Future<AuthUser> linkAppleIdentity() =>
+      Future.error(const AuthFailure('UNAVAILABLE', 'Unavailable in test'));
+
+  @override
+  Future<AuthUser> linkGoogleIdentity() =>
+      Future.error(const AuthFailure('UNAVAILABLE', 'Unavailable in test'));
 
   @override
   Future<AuthUser?> initialize() async => null;

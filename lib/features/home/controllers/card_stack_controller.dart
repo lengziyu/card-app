@@ -51,6 +51,10 @@ class CardStackController extends ChangeNotifier {
   Map<String, CardTransformState> _from = const {};
   Map<String, CardTransformState> _target = const {};
   Curve _curve = settleCurve;
+  double? _focusMotionFromPosition;
+  double? _focusMotionToPosition;
+  double? _focusTransformCachePosition;
+  Map<String, CardTransformState> _focusTransformCache = const {};
 
   CardStackMode get mode => _mode;
   List<String> get cardIds => List.unmodifiable(_cardIds);
@@ -88,6 +92,7 @@ class CardStackController extends ChangeNotifier {
         : const <String, CardTransformState>{};
     _screenSize = screenSize;
     _cardSize = cardSize;
+    _clearFocusTransformCache();
     final next = _calculateTarget();
     if (current.isEmpty || _motion.value == 1) {
       _from = next;
@@ -178,6 +183,25 @@ class CardStackController extends ChangeNotifier {
       return;
     }
     if (_motion.isAnimating) {
+      if (_mode == CardStackMode.focus &&
+          _focusMotionFromPosition != null &&
+          _focusMotionToPosition != null) {
+        // 连续快划经常会在上一次吸附尚未结束时再次落指。把动画当前的
+        // 小数卡位还原成 dragOffset，新的手势便可从屏幕上的精确位置
+        // 接管，而不是先跳到上一轮的目标卡。
+        final position = _currentFocusMotionPosition;
+        _motion.stop();
+        _focusMotionFromPosition = null;
+        _focusMotionToPosition = null;
+        final anchor = position.round().clamp(0, _cardIds.length - 1);
+        _selectedId = _cardIds[anchor];
+        _dragOffset = (anchor - position) * _fanDragStep();
+        final rebased = _calculateTarget();
+        _from = rebased;
+        _target = rebased;
+        _motion.value = 1;
+        return;
+      }
       final current = _snapshotCurrent();
       _motion.stop();
       _from = current;
@@ -237,6 +261,7 @@ class CardStackController extends ChangeNotifier {
     }
     final current = _snapshotCurrent();
     var nextIndex = selectedIndex;
+    double? focusPosition;
     if (_mode == CardStackMode.wallet) {
       final distancePassed =
           _dragOffset.abs() >= _cardSize.height * distanceThresholdFactor;
@@ -249,6 +274,7 @@ class CardStackController extends ChangeNotifier {
       // 松手时把当前小数位置沿速度方向做惯性投影，再吸附到最近的卡。
       final step = _fanDragStep();
       final position = selectedIndex - _dragOffset / step;
+      if (_mode == CardStackMode.focus) focusPosition = position;
       final projected = position - velocity * .12 / step;
       nextIndex = projected.round();
       if (nextIndex == selectedIndex) {
@@ -263,7 +289,13 @@ class CardStackController extends ChangeNotifier {
     _hasUserSelected = true;
     _selectedId = _cardIds[nextIndex];
     _dragOffset = 0;
-    _startMotion(current, _calculateTarget(), curve: settleCurve);
+    _startMotion(
+      current,
+      _calculateTarget(),
+      curve: settleCurve,
+      focusFromPosition: focusPosition,
+      focusToPosition: focusPosition == null ? null : nextIndex.toDouble(),
+    );
     return nextIndex;
   }
 
@@ -381,6 +413,13 @@ class CardStackController extends ChangeNotifier {
         end.copyWith(top: end.top + 24, scale: end.scale * .96, opacity: 0);
     if (_motion.value >= 1) return end;
     final progress = _curve.transform(_motion.value).clamp(0.0, 1.0);
+    if (_mode == CardStackMode.focus &&
+        _focusMotionFromPosition != null &&
+        _focusMotionToPosition != null) {
+      // 聚焦吸附不在两个终态之间直接 lerp。直接插值“小数卡位”可让
+      // 跨越多张卡的快速划动逐张经过同一展开槽，间距和层级始终稳定。
+      return _focusTransformsAtPosition(_currentFocusMotionPosition)[id] ?? end;
+    }
     final lerped = CardTransformState.lerp(begin, end, progress);
     // 层级在动画一开始就切到目标值，避免绘制顺序在过渡中反复重排造成抖动。
     return lerped.copyWith(zIndex: end.zIndex);
@@ -425,12 +464,19 @@ class CardStackController extends ChangeNotifier {
     Map<String, CardTransformState> current,
     Map<String, CardTransformState> next, {
     required Curve curve,
+    double? focusFromPosition,
+    double? focusToPosition,
   }) {
     _curve = curve;
     _from = current;
     _target = next;
+    _focusMotionFromPosition = focusFromPosition;
+    _focusMotionToPosition = focusToPosition;
+    _clearFocusTransformCache();
     if (_reduceMotion) {
       _from = next;
+      _focusMotionFromPosition = null;
+      _focusMotionToPosition = null;
       _motion.value = 1;
       notifyListeners();
       return;
@@ -438,6 +484,42 @@ class CardStackController extends ChangeNotifier {
     _motion
       ..duration = motionDuration
       ..forward(from: 0);
+  }
+
+  double get _currentFocusMotionPosition {
+    final from = _focusMotionFromPosition;
+    final to = _focusMotionToPosition;
+    if (from == null || to == null) return selectedIndex.toDouble();
+    final progress = _curve.transform(_motion.value).clamp(0.0, 1.0);
+    return from + (to - from) * progress;
+  }
+
+  Map<String, CardTransformState> _focusTransformsAtPosition(double position) {
+    if (_focusTransformCachePosition == position) {
+      return _focusTransformCache;
+    }
+    final anchor = position.round().clamp(0, _cardIds.length - 1);
+    final states = CardLayoutCalculator.calculate(
+      mode: CardStackMode.focus,
+      selectedIndex: anchor,
+      dragOffset: (anchor - position) * _fanDragStep(),
+      screenSize: _screenSize,
+      cardSize: _cardSize,
+      itemCount: _cardIds.length,
+      revealScale: _revealScale,
+    );
+    final transforms = {
+      for (var index = 0; index < _cardIds.length; index++)
+        _cardIds[index]: states[index],
+    };
+    _focusTransformCachePosition = position;
+    _focusTransformCache = transforms;
+    return transforms;
+  }
+
+  void _clearFocusTransformCache() {
+    _focusTransformCachePosition = null;
+    _focusTransformCache = const {};
   }
 
   Map<String, CardTransformState> _calculateTarget() {
@@ -508,6 +590,9 @@ class CardStackController extends ChangeNotifier {
   void _handleMotionStatus(AnimationStatus status) {
     if (status != AnimationStatus.completed) return;
     _from = _target;
+    _focusMotionFromPosition = null;
+    _focusMotionToPosition = null;
+    _clearFocusTransformCache();
   }
 
   @override

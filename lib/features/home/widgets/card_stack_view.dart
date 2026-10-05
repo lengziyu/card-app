@@ -6,7 +6,6 @@ import 'package:cardfi/features/catalog/domain/card_summary.dart';
 import 'package:cardfi/features/catalog/widgets/catalog_card_row.dart';
 import 'package:cardfi/features/home/controllers/card_stack_controller.dart';
 import 'package:cardfi/features/home/domain/card_layout_calculator.dart';
-import 'package:cardfi/features/home/domain/card_transform_state.dart';
 import 'package:cardfi/features/home/domain/home_card_layout.dart';
 import 'package:cardfi/features/home/widgets/wallet_card_item.dart';
 import 'package:flutter/material.dart';
@@ -465,9 +464,6 @@ class _PositionedWalletCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = controller.transformFor(card.id);
-    final depthState = mode == CardStackMode.focus && controller.isAnimating
-        ? controller.targetTransformFor(card.id) ?? state
-        : state;
     return Positioned(
       top: state.top,
       left: state.left,
@@ -482,45 +478,24 @@ class _PositionedWalletCard extends StatelessWidget {
             child: Transform.scale(
               scale: state.scale,
               alignment: Alignment.topCenter,
-              child: Transform.scale(
-                scaleX: _focusWidthScaleFor(depthState),
-                alignment: Alignment.topCenter,
-                child: WalletCardItem(
-                  card: card,
-                  mode: mode,
-                  selected: selected,
-                  elevation: state.elevation,
-                  aspectRatio: cardAspectRatio,
-                  focusDepth: _focusDepthFor(depthState),
-                  onLongPressStart: onLongPressStart,
-                  onLongPressMoveUpdate: onLongPressMoveUpdate,
-                  onLongPressEnd: onLongPressEnd,
-                  onLongPressCancel: onLongPressCancel,
-                  onTap: onTap,
-                  onTapWithGeometry: onTapWithGeometry,
-                  sharedContentHidden: sharedContentHidden,
-                ),
+              child: WalletCardItem(
+                card: card,
+                mode: mode,
+                selected: selected,
+                elevation: state.elevation,
+                aspectRatio: cardAspectRatio,
+                onLongPressStart: onLongPressStart,
+                onLongPressMoveUpdate: onLongPressMoveUpdate,
+                onLongPressEnd: onLongPressEnd,
+                onLongPressCancel: onLongPressCancel,
+                onTap: onTap,
+                onTapWithGeometry: onTapWithGeometry,
+                sharedContentHidden: sharedContentHidden,
               ),
             ),
           ),
         ),
       ),
     );
-  }
-
-  /// 聚焦模式的深度直接从动画中的缩放几何推导，模式切换和拖拽时
-  /// 模糊与蒙层都会随之连续过渡；其余模式不做深度处理。
-  double _focusDepthFor(CardTransformState state) {
-    if (mode != CardStackMode.focus) return 0;
-    return ((1 - state.scale) / CardLayoutCalculator.focusDepthScaleStep)
-        .clamp(0.0, 3.5)
-        .toDouble();
-  }
-
-  /// 远景卡除整体缩小外，再轻微收窄横向尺寸，避免与当前卡同宽。
-  double _focusWidthScaleFor(CardTransformState state) {
-    if (mode != CardStackMode.focus) return 1;
-    final depth = _focusDepthFor(state);
-    return (1 - depth * .05).clamp(.84, 1.0).toDouble();
   }
 }

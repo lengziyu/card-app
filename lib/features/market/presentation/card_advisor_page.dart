@@ -40,6 +40,7 @@ class CardAdvisorPage extends StatefulWidget {
 class _CardAdvisorPageState extends State<CardAdvisorPage> {
   final _noteController = TextEditingController();
   final _scrollController = ScrollController();
+  final _resultKey = GlobalKey();
   AiResidenceSelection _residence = AiResidenceSelection.mainlandChina;
   final Set<String> _documents = {'护照'};
   String _useCase = '日常消费';
@@ -73,6 +74,7 @@ class _CardAdvisorPageState extends State<CardAdvisorPage> {
       setState(() => _message = '请先同意将本次资料发送给阿里云百炼处理。');
       return;
     }
+    FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
       _loading = true;
       _message = null;
@@ -94,6 +96,11 @@ class _CardAdvisorPageState extends State<CardAdvisorPage> {
         _result = result;
         _resultCelebrationVersion++;
       });
+      revealAiAssistantResultAfterLayout(
+        pageContext: context,
+        resultKey: _resultKey,
+        scrollController: _scrollController,
+      );
     } on ApiException catch (error) {
       if (!mounted) return;
       setState(() => _message = error.message);
@@ -209,13 +216,28 @@ class _CardAdvisorPageState extends State<CardAdvisorPage> {
                     _aiDataConsent = value ?? false;
                     _message = null;
                   }),
+                  onNoteChanged: (_) {
+                    if (_aiDataConsent) {
+                      setState(() {
+                        _aiDataConsent = false;
+                        _message = null;
+                      });
+                    }
+                  },
                 ),
               if (_result case final result?) ...[
                 const SizedBox(height: 22),
                 _ResultSection(
+                  key: _resultKey,
                   result: result,
                   cards: widget.cards,
                   onOpenCard: widget.onOpenCard,
+                ),
+                SizedBox(
+                  height: aiAssistantResultTrailingSpace(
+                    context,
+                    footerHeight: footerHeight,
+                  ),
                 ),
               ],
             ],
@@ -476,6 +498,7 @@ class _AdvisorReviewCard extends StatelessWidget {
     required this.noteController,
     required this.aiDataConsent,
     required this.onAiDataConsentChanged,
+    required this.onNoteChanged,
   });
 
   final String residence;
@@ -485,6 +508,7 @@ class _AdvisorReviewCard extends StatelessWidget {
   final TextEditingController noteController;
   final bool aiDataConsent;
   final ValueChanged<bool?> onAiDataConsentChanged;
+  final ValueChanged<String> onNoteChanged;
 
   @override
   Widget build(BuildContext context) => _GlassPanel(
@@ -506,7 +530,7 @@ class _AdvisorReviewCard extends StatelessWidget {
         _AdvisorReviewLine(label: '主要场景', value: useCase),
         _AdvisorReviewLine(label: '认证偏好', value: kycPreference),
         const SizedBox(height: 18),
-        _GlassNoteField(controller: noteController),
+        _GlassNoteField(controller: noteController, onChanged: onNoteChanged),
         const SizedBox(height: 8),
         AiDataConsentTile(
           key: const Key('card-advisor-ai-consent'),
@@ -577,8 +601,9 @@ class _AdvisorReviewLine extends StatelessWidget {
 }
 
 class _GlassNoteField extends StatelessWidget {
-  const _GlassNoteField({required this.controller});
+  const _GlassNoteField({required this.controller, required this.onChanged});
   final TextEditingController controller;
+  final ValueChanged<String> onChanged;
 
   @override
   Widget build(BuildContext context) => ClipRRect(
@@ -590,6 +615,7 @@ class _GlassNoteField extends StatelessWidget {
         child: TextField(
           key: const Key('card-advisor-note'),
           controller: controller,
+          onChanged: onChanged,
           minLines: 3,
           maxLines: 4,
           maxLength: 500,
@@ -853,6 +879,7 @@ class _ResultSection extends StatelessWidget {
     required this.result,
     required this.cards,
     required this.onOpenCard,
+    super.key,
   });
 
   final CardAdvisorResult result;
@@ -863,6 +890,7 @@ class _ResultSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final cardById = {for (final card in cards) card.id: card};
     return Column(
+      key: const Key('card-advisor-result'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(

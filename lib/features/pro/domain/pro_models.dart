@@ -1,14 +1,16 @@
-enum ProPlan { monthly, yearly }
+enum ProPlan { monthly, yearly, lifetime }
 
 extension ProPlanCopy on ProPlan {
   String get label => switch (this) {
     ProPlan.monthly => '月度 Pro',
     ProPlan.yearly => '年度 Pro',
+    ProPlan.lifetime => '永久 Pro',
   };
 
   String get periodLabel => switch (this) {
     ProPlan.monthly => '按月自动续费',
     ProPlan.yearly => '按年自动续费',
+    ProPlan.lifetime => '一次购买，永久解锁',
   };
 }
 
@@ -113,6 +115,7 @@ class ProServiceConfiguration {
     required this.enabled,
     required this.monthlyProductId,
     required this.yearlyProductId,
+    required this.lifetimeProductId,
     required this.appStoreEnabled,
     required this.googlePlayEnabled,
   });
@@ -121,18 +124,26 @@ class ProServiceConfiguration {
     : enabled = false,
       monthlyProductId = null,
       yearlyProductId = null,
+      lifetimeProductId = null,
       appStoreEnabled = false,
       googlePlayEnabled = false;
 
   final bool enabled;
   final String? monthlyProductId;
   final String? yearlyProductId;
+  final String? lifetimeProductId;
   final bool appStoreEnabled;
   final bool googlePlayEnabled;
 
-  bool matchesProducts({required String monthly, required String yearly}) =>
-      monthlyProductId == monthly && yearlyProductId == yearly;
+  bool matchesProducts({
+    required String monthly,
+    required String yearly,
+    String? lifetime,
+  }) =>
+      monthlyProductId == monthly &&
+      yearlyProductId == yearly &&
+      (lifetime == null || lifetimeProductId == lifetime);
 
   bool canLoadEntitlements({required String monthly, required String yearly}) =>
-      enabled && matchesProducts(monthly: monthly, yearly: yearly);
+      enabled && monthlyProductId == monthly && yearlyProductId == yearly;
 }

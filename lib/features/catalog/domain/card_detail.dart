@@ -24,6 +24,44 @@ enum ChinaKycStatus {
   final String label;
 }
 
+enum OpeningRequirementState { required, notRequired, unknown }
+
+enum OpeningRequirementKind {
+  inviteCode('邀请码'),
+  idCard('身份证'),
+  passport('护照'),
+  overseasAddressProof('海外证明'),
+  overseasPhone('海外手机号');
+
+  const OpeningRequirementKind(this.label);
+
+  final String label;
+}
+
+/// Published onboarding requirements maintained by the admin console.
+///
+/// These values describe whether an item is required during application. They
+/// do not expose the actual invite code or invite URL, which remain controlled
+/// by the separate public-content switches.
+class CardOpeningRequirements {
+  const CardOpeningRequirements({
+    required this.states,
+    this.summary = '',
+    this.note = '',
+    this.sourceName = '',
+    this.checkedAt,
+  });
+
+  final Map<OpeningRequirementKind, OpeningRequirementState> states;
+  final String summary;
+  final String note;
+  final String sourceName;
+  final DateTime? checkedAt;
+
+  OpeningRequirementState stateFor(OpeningRequirementKind kind) =>
+      states[kind] ?? OpeningRequirementState.unknown;
+}
+
 /// Mainland-China onboarding facts for a global account.
 ///
 /// This is deliberately separate from generic KYC documents: a provider can
@@ -92,6 +130,7 @@ class CardDetail {
     this.reviewCount,
     this.supportedCurrencies = const [],
     this.chinaKyc,
+    this.openingRequirements,
     this.inviteCode,
     this.inviteUrl,
   });
@@ -115,6 +154,7 @@ class CardDetail {
   final int? reviewCount;
   final List<String> supportedCurrencies;
   final ChinaKycInfo? chinaKyc;
+  final CardOpeningRequirements? openingRequirements;
   final String? inviteCode;
   final String? inviteUrl;
 }

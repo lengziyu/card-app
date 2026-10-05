@@ -9,12 +9,14 @@ import 'package:cardfi/core/network/api_exception.dart';
 import 'package:cardfi/core/theme/app_colors.dart';
 import 'package:cardfi/core/widgets/app_feedback.dart';
 import 'package:cardfi/features/catalog/domain/card_summary.dart';
+import 'package:cardfi/features/auth/domain/auth_user.dart';
 import 'package:cardfi/features/catalog/widgets/catalog_card_row.dart';
 import 'package:cardfi/features/profile/data/local_guest_state.dart';
 import 'package:cardfi/features/profile/data/app_version_repository.dart';
 import 'package:cardfi/features/profile/data/legal_config.dart';
 import 'package:cardfi/features/profile/presentation/profile_page.dart';
 import 'package:cardfi/features/notifications/data/notification_repository.dart';
+import 'package:cardfi/features/notifications/data/notification_service.dart';
 import 'package:cardfi/features/ranking/domain/local_article.dart';
 import 'package:cardfi/features/shell/widgets/animated_glass_segment.dart';
 import 'package:cardfi/features/shell/widgets/sticky_page_header.dart';
@@ -44,6 +46,7 @@ class ProfileSubpage extends StatefulWidget {
     required this.selectedLanguage,
     required this.onLanguageChanged,
     required this.pushEnabled,
+    required this.notificationPermissionStatus,
     required this.onPushEnabledChanged,
     required this.hapticsEnabled,
     required this.cardSwipeHapticsEnabled,
@@ -52,14 +55,23 @@ class ProfileSubpage extends StatefulWidget {
     required this.onHapticsEnabledChanged,
     required this.onCardSwipeHapticsEnabledChanged,
     required this.onHapticStrengthChanged,
+    this.referralEnabled = false,
     this.appVersionRepository,
     this.profileName,
     this.profileUserId,
+    this.profileEmail,
     this.avatarUrl,
     this.onProfileNameChanged,
     this.onAvatarChanged,
     this.onLogout,
     this.onDeleteAccount,
+    this.loginProviders = const <AuthLoginProvider>{},
+    this.googleAuthAvailable = false,
+    this.appleAuthAvailable = false,
+    this.onLinkGoogle,
+    this.onLinkApple,
+    this.onUnlinkGoogle,
+    this.onUnlinkApple,
     super.key,
   });
 
@@ -79,22 +91,32 @@ class ProfileSubpage extends StatefulWidget {
   final AppLanguage selectedLanguage;
   final ValueChanged<AppLanguage> onLanguageChanged;
   final bool pushEnabled;
+  final NotificationPermissionStatus notificationPermissionStatus;
   final Future<void> Function(bool enabled) onPushEnabledChanged;
   final bool hapticsEnabled;
   final bool cardSwipeHapticsEnabled;
   final AppHapticStrength hapticStrength;
   final bool hasVerifiedAccount;
+  final bool referralEnabled;
   final ValueChanged<bool> onHapticsEnabledChanged;
   final ValueChanged<bool> onCardSwipeHapticsEnabledChanged;
   final ValueChanged<AppHapticStrength> onHapticStrengthChanged;
   final AppVersionRepository? appVersionRepository;
   final String? profileName;
   final String? profileUserId;
+  final String? profileEmail;
   final String? avatarUrl;
   final Future<bool> Function(String name)? onProfileNameChanged;
   final Future<bool> Function(XFile image)? onAvatarChanged;
   final Future<void> Function()? onLogout;
   final Future<bool> Function()? onDeleteAccount;
+  final Set<AuthLoginProvider> loginProviders;
+  final bool googleAuthAvailable;
+  final bool appleAuthAvailable;
+  final Future<bool> Function()? onLinkGoogle;
+  final Future<bool> Function()? onLinkApple;
+  final Future<bool> Function()? onUnlinkGoogle;
+  final Future<bool> Function()? onUnlinkApple;
 
   @override
   State<ProfileSubpage> createState() => _ProfileSubpageState();
@@ -280,6 +302,7 @@ class _ProfileSubpageState extends State<ProfileSubpage> {
             ('Pro 会员', '请从个人中心的 Pro 会员入口查看权益与订阅状态。'),
           ]),
           ProfileSection.favorites => _favorites(),
+          ProfileSection.bills => const SizedBox.shrink(),
           ProfileSection.history => _collection(
             title: '最近浏览',
             emptyCopy: '浏览卡片详情后会显示在这里。',
@@ -295,11 +318,15 @@ class _ProfileSubpageState extends State<ProfileSubpage> {
             ),
             (
               'AI精选好卡',
-              '从市场页进入“AI精选好卡”，填写所在地区、可用证件类型、KYC 偏好和主要用途。普通版每月可用 5 次，Pro 每月可用 30 次；结果不构成申请、审批或金融建议。',
+              '从市场页进入“AI精选好卡”，填写所在地区、可用证件类型、KYC 偏好和主要用途。普通版每月可用 6 次，Pro 每月可用 20 次；结果不构成申请、审批或金融建议。',
             ),
             (
               'AI 协助开卡',
-              '在卡片详情点击“AI 协助开卡”，可查看公开材料清单、操作步骤、费用与风险提醒。普通版每月可用 5 次，Pro 每月可用 30 次；请以发卡方官方实时流程为准。',
+              '在卡片详情点击“AI 协助开卡”，可查看公开材料清单、操作步骤、费用与风险提醒。普通版每月可用 6 次，Pro 每月可用 20 次；请以发卡方官方实时流程为准。',
+            ),
+            (
+              'AI 识别账单',
+              '从底部快捷入口选择账单截图，普通版每月可用 8 次，Pro 每月可用 30 次；图片只用于当次字段提取，费用结果由固定公式计算。',
             ),
             (
               '卡片对比与费用场景',
@@ -340,7 +367,7 @@ class _ProfileSubpageState extends State<ProfileSubpage> {
               ),
               (
                 '图片与账单',
-                '只有你主动选择并逐次同意时，App 才会把消费账单截图经 CardFi 服务器发送给 OpenAI。上传前必须移除完整卡号、姓名、订单号、地址和二维码；CardFi 不把原图写入账单记录。',
+                '只有你主动选择并逐次同意时，App 才会把消费账单截图经 CardFi 服务器发送给阿里云百炼 Qwen。上传前必须移除完整卡号、姓名、订单号、地址和二维码；CardFi 不把原图写入账单记录。',
               ),
               (
                 '我们不会收集',
@@ -352,7 +379,7 @@ class _ProfileSubpageState extends State<ProfileSubpage> {
               ),
               (
                 '保留与安全',
-                '登录令牌保存在 iOS Keychain 或 Android Keystore。账号数据保留至你删除账号或功能不再需要；提交内容按审核与争议处理需要保留，并支持依法提出删除请求。',
+                '登录令牌保存在系统安全存储中。账号数据保留至你删除账号或功能不再需要；提交内容按审核与争议处理需要保留，并支持依法提出删除请求。',
               ),
               (
                 '你的权利',
@@ -411,10 +438,7 @@ class _ProfileSubpageState extends State<ProfileSubpage> {
                 '无法恢复',
                 '账号删除不可撤销。为避免误删，删除前可能要求重新登录。因安全、财务或法律义务必须保留的最少记录，会按适用期限隔离保留后删除。',
               ),
-              (
-                '商店订阅',
-                '删除 CardFi 账号不会自动取消 App Store 或 Google Play 订阅。如未来开通订阅，需同时前往系统订阅管理页取消。',
-              ),
+              ('商店订阅', '删除 CardFi 账号不会自动取消已有的应用商店订阅。如未来开通订阅，需同时前往系统订阅管理页取消。'),
               (
                 '无法登录时',
                 '如果无法进入账号，可通过“联系支持”提交删除请求。为保护账号，处理前需要验证邮箱所有权；请勿发送密码、验证码、完整卡号或身份证件。',
@@ -429,7 +453,7 @@ class _ProfileSubpageState extends State<ProfileSubpage> {
             ('Pro 工作区同步', '关注项和对比方案的独立接口已预留，只有安全账号与有效 Pro 权益才能访问。'),
             (
               'Pro 会员',
-              '将 AI精选好卡、AI 协助开卡、账单识别分别提升至每月 30、30、20 次，并包含 2–4 卡对比、费用情景估算、长期数据与 Pro 工作区。',
+              '将 AI精选好卡、AI 协助开卡、账单识别分别提升至每月 20、20、30 次，并包含 2–4 卡对比、费用情景估算、长期数据与 Pro 工作区。',
             ),
             ('离线与提醒', '公开卡片资料可保存到本机；规则关注已可管理，实时提醒仍需正式账号与推送任务接入。'),
           ]),
@@ -553,16 +577,66 @@ class _ProfileSubpageState extends State<ProfileSubpage> {
     );
   }
 
+  Future<void> _manageIdentity({
+    required AuthLoginProvider provider,
+    required String label,
+    required Future<bool> Function()? onLink,
+    required Future<bool> Function()? onUnlink,
+  }) async {
+    final linked = widget.loginProviders.contains(provider);
+    if (!linked) {
+      final completed = await onLink?.call() ?? false;
+      if (!mounted) return;
+      if (completed) {
+        AppNotice.success(context, '$label 账号已绑定。', title: '绑定成功');
+      } else {
+        AppNotice.error(context, '$label 账号绑定失败，请稍后重试。', title: '绑定失败');
+      }
+      return;
+    }
+    if (widget.loginProviders.length <= 1) {
+      AppNotice.info(context, '请先绑定另一种登录方式，避免无法再次登录。', title: '不能解除绑定');
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('解除 $label 绑定？'),
+        content: Text('解除后将不能再用 $label 登录当前账号，但账号和已同步数据不会删除。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('解除绑定'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final completed = await onUnlink?.call() ?? false;
+    if (!mounted) return;
+    if (completed) {
+      AppNotice.success(context, '$label 账号已解除绑定。', title: '解绑成功');
+    } else {
+      AppNotice.error(context, '$label 账号解绑失败，请稍后重试。', title: '解绑失败');
+    }
+  }
+
   Widget _settings() {
+    final hasUserId = widget.profileUserId?.trim().isNotEmpty == true;
+    final hasEmail = widget.profileEmail?.trim().isNotEmpty == true;
+    final canEditAvatar = widget.onAvatarChanged != null;
+    final canEditName = widget.onProfileNameChanged != null;
     return Column(
       children: [
-        if (widget.profileUserId?.trim().isNotEmpty == true ||
-            widget.onAvatarChanged != null ||
-            widget.onProfileNameChanged != null) ...[
+        if (hasUserId || hasEmail || canEditAvatar || canEditName) ...[
           _InfoCard(
             child: Column(
               children: [
-                if (widget.profileUserId?.trim().isNotEmpty == true) ...[
+                if (hasUserId) ...[
                   _SettingsActionRow(
                     key: const Key('settings-profile-uid'),
                     icon: Icons.fingerprint_rounded,
@@ -573,11 +647,23 @@ class _ProfileSubpageState extends State<ProfileSubpage> {
                     showChevron: false,
                     minHeight: 54,
                   ),
-                  if (widget.onAvatarChanged != null ||
-                      widget.onProfileNameChanged != null)
+                  if (hasEmail || canEditAvatar || canEditName)
                     Divider(height: 1, color: AppColors.line),
                 ],
-                if (widget.onAvatarChanged != null) ...[
+                if (hasEmail) ...[
+                  _SettingsActionRow(
+                    key: const Key('settings-profile-email'),
+                    icon: Icons.alternate_email_rounded,
+                    title: '注册邮箱',
+                    trailingText: widget.profileEmail!.trim(),
+                    trailingTextFlex: 3,
+                    showChevron: false,
+                    minHeight: 54,
+                  ),
+                  if (canEditAvatar || canEditName)
+                    Divider(height: 1, color: AppColors.line),
+                ],
+                if (canEditAvatar) ...[
                   _SettingsActionRow(
                     key: const Key('settings-profile-avatar'),
                     icon: Icons.add_a_photo_outlined,
@@ -586,10 +672,9 @@ class _ProfileSubpageState extends State<ProfileSubpage> {
                     onTap: _pickAvatar,
                     minHeight: 54,
                   ),
-                  if (widget.onProfileNameChanged != null)
-                    Divider(height: 1, color: AppColors.line),
+                  if (canEditName) Divider(height: 1, color: AppColors.line),
                 ],
-                if (widget.onProfileNameChanged != null)
+                if (canEditName)
                   _SettingsActionRow(
                     key: const Key('settings-profile-name'),
                     icon: Icons.person_outline_rounded,
@@ -603,13 +688,14 @@ class _ProfileSubpageState extends State<ProfileSubpage> {
           ),
           const SizedBox(height: 14),
         ],
-        if (widget.hasVerifiedAccount) ...[
+        if (widget.hasVerifiedAccount &&
+            (widget.googleAuthAvailable || widget.appleAuthAvailable)) ...[
           Align(
             alignment: Alignment.centerLeft,
             child: Padding(
               padding: const EdgeInsets.only(left: 4, bottom: 10),
               child: Text(
-                '通知与反馈',
+                '登录方式',
                 style: TextStyle(
                   color: AppColors.textMuted,
                   fontSize: 14,
@@ -621,25 +707,118 @@ class _ProfileSubpageState extends State<ProfileSubpage> {
           _InfoCard(
             child: Column(
               children: [
-                _SettingsActionRow(
-                  key: const Key('settings-notification-permission'),
-                  icon: Icons.notifications_none_rounded,
-                  title: '通知权限',
-                  trailingText: widget.pushEnabled ? '已开启' : '未设置',
-                  onTap: () => widget.onPushEnabledChanged(!widget.pushEnabled),
-                ),
-                Divider(height: 1, color: AppColors.line),
-                _SettingsActionRow(
-                  key: const Key('settings-reminder-config'),
-                  icon: Icons.notifications_active_outlined,
-                  title: '提醒配置',
-                  onTap: () => widget.onOpenSection(ProfileSection.reminders),
-                ),
+                if (widget.appleAuthAvailable) ...[
+                  _SettingsActionRow(
+                    key: const Key('settings-link-apple'),
+                    icon: Icons.apple,
+                    title: 'Apple',
+                    trailingText:
+                        widget.loginProviders.contains(AuthLoginProvider.apple)
+                        ? '已绑定'
+                        : '未绑定',
+                    onTap: () => _manageIdentity(
+                      provider: AuthLoginProvider.apple,
+                      label: 'Apple',
+                      onLink: widget.onLinkApple,
+                      onUnlink: widget.onUnlinkApple,
+                    ),
+                    actionLabel:
+                        widget.loginProviders.contains(AuthLoginProvider.apple)
+                        ? '解绑'
+                        : '绑定',
+                    showChevron: false,
+                    minHeight: 54,
+                  ),
+                  if (widget.googleAuthAvailable)
+                    Divider(height: 1, color: AppColors.line),
+                ],
+                if (widget.googleAuthAvailable)
+                  _SettingsActionRow(
+                    key: const Key('settings-link-google'),
+                    icon: Icons.account_circle_outlined,
+                    title: 'Google',
+                    trailingText:
+                        widget.loginProviders.contains(AuthLoginProvider.google)
+                        ? '已绑定'
+                        : '未绑定',
+                    onTap: () => _manageIdentity(
+                      provider: AuthLoginProvider.google,
+                      label: 'Google',
+                      onLink: widget.onLinkGoogle,
+                      onUnlink: widget.onUnlinkGoogle,
+                    ),
+                    actionLabel:
+                        widget.loginProviders.contains(AuthLoginProvider.google)
+                        ? '解绑'
+                        : '绑定',
+                    showChevron: false,
+                    minHeight: 54,
+                  ),
               ],
             ),
           ),
-          SizedBox(height: 14),
+          const SizedBox(height: 14),
         ],
+        if (widget.hasVerifiedAccount && widget.referralEnabled) ...[
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 4, bottom: 10),
+              child: Text(
+                '会员与邀请',
+                style: TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ),
+          _InfoCard(
+            child: _SettingsDestination(
+              key: const Key('settings-referral'),
+              section: ProfileSection.referral,
+              subtitle: '邀请好友并查看 Pro 奖励进度',
+              onTap: () => widget.onOpenSection(ProfileSection.referral),
+            ),
+          ),
+          const SizedBox(height: 14),
+        ],
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 10),
+            child: Text(
+              '通知',
+              style: TextStyle(
+                color: AppColors.textMuted,
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ),
+        _InfoCard(
+          child: Column(
+            children: [
+              _SettingsActionRow(
+                key: const Key('settings-notification-permission'),
+                icon: Icons.notifications_none_rounded,
+                title: '通知权限',
+                trailingText: _notificationStatusLabel,
+                onTap: () => widget.onPushEnabledChanged(!widget.pushEnabled),
+              ),
+              Divider(height: 1, color: AppColors.line),
+              _SettingsActionRow(
+                key: const Key('settings-reminder-config'),
+                icon: Icons.notifications_active_outlined,
+                title: '提醒配置',
+                onTap: () => widget.onOpenSection(ProfileSection.reminders),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(height: 14),
         _InfoCard(
           child: Column(
             children: [
@@ -759,10 +938,7 @@ class _ProfileSubpageState extends State<ProfileSubpage> {
         ),
         if (widget.onLogout != null) ...[
           SizedBox(height: 14),
-          _SettingsLogoutAction(
-            onLogout: widget.onLogout!,
-            onCompleted: widget.onBack,
-          ),
+          _SettingsLogoutAction(onLogout: widget.onLogout!),
         ],
         if (widget.onDeleteAccount != null) ...[
           SizedBox(height: 10),
@@ -804,6 +980,17 @@ class _ProfileSubpageState extends State<ProfileSubpage> {
         ),
       ],
     );
+  }
+
+  String get _notificationStatusLabel {
+    if (widget.pushEnabled) return '已开启';
+    return switch (widget.notificationPermissionStatus) {
+      NotificationPermissionStatus.denied => '系统已关闭',
+      NotificationPermissionStatus.authorized ||
+      NotificationPermissionStatus.provisional => '已关闭',
+      NotificationPermissionStatus.unavailable => '暂不可用',
+      NotificationPermissionStatus.notDetermined => '未设置',
+    };
   }
 
   Widget _feedback() {
@@ -946,20 +1133,25 @@ class _ProfileSubpageState extends State<ProfileSubpage> {
   Widget _appUpdateCard(PackageInfo packageInfo) {
     final update = _appVersionUpdate;
     final localizations = AppLocalizations.of(context);
-    final title = switch (update?.status) {
-      AppUpdateStatus.upToDate => '已是最新版本',
-      AppUpdateStatus.optional => '发现新版本',
-      AppUpdateStatus.required => '需要更新后继续使用',
+    final title = switch ((update?.configurationInvalid, update?.status)) {
+      (true, _) => '更新配置暂不可用',
+      (_, AppUpdateStatus.upToDate) => '已是最新版本',
+      (_, AppUpdateStatus.optional) => '发现新版本',
+      (_, AppUpdateStatus.required) => '需要更新后继续使用',
       _ => '更新方式',
     };
-    final body = switch (update?.status) {
-      AppUpdateStatus.upToDate => '当前安装包已是服务端配置的最新版本。',
-      AppUpdateStatus.optional =>
+    final body = switch ((update?.configurationInvalid, update?.status)) {
+      (true, _) => '服务端更新信息缺少有效的 HTTPS 商店链接，本次不会阻止使用。',
+      (_, AppUpdateStatus.upToDate) => '当前安装包已是服务端配置的最新版本。',
+      (_, AppUpdateStatus.optional) =>
         '${localizations.text('可更新至 ')}${update!.latestVersion}${localizations.text('（构建 ')}${update.latestBuildNumber}${localizations.text('）。')}',
-      AppUpdateStatus.required => '当前版本已不再受支持，请前往应用商店安装最新版本。',
+      (_, AppUpdateStatus.required) =>
+        update!.minimumVersion.isEmpty
+            ? '当前版本已不再受支持，请前往应用商店安装最新版本。'
+            : '${localizations.text('当前版本低于最低支持版本 ')}${update.minimumVersion}${localizations.text('（构建 ')}${update.minimumBuildNumber}${localizations.text('）。请前往应用商店安装最新版本。')}',
       _ when _appVersionCheckFailed => '暂时无法检查更新，请确认网络后重试。',
       _ when widget.appVersionRepository != null => '服务端暂未发布此平台的版本更新信息。',
-      _ => '公开发布后，新版本将通过 App Store 或 Google Play 安装。App 不会绕过应用商店静默更新。',
+      _ => '公开发布后，新版本将通过系统应用商店安装。App 不会绕过应用商店静默更新。',
     };
     final canOpenStore =
         update?.needsUpdate == true && update?.updateUrl.isNotEmpty == true;
@@ -1017,6 +1209,29 @@ class _ProfileSubpageState extends State<ProfileSubpage> {
                 color: AppColors.text,
                 fontSize: 12.5,
                 height: 1.55,
+              ),
+            ),
+          ],
+          if (update?.forceUpdateEnabled == true &&
+              update?.minimumVersion.isNotEmpty == true) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              decoration: BoxDecoration(
+                color: AppColors.pink.withValues(alpha: .09),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: AppColors.pink.withValues(alpha: .22),
+                ),
+              ),
+              child: Text(
+                '${localizations.text('强制更新策略：最低支持 ')}${update!.minimumVersion}${localizations.text('（构建 ')}${update.minimumBuildNumber}${localizations.text('）')}',
+                style: TextStyle(
+                  color: AppColors.pink,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
           ],
@@ -2150,10 +2365,11 @@ class _SettingsActionRow extends StatelessWidget {
   const _SettingsActionRow({
     required this.icon,
     required this.title,
-    required this.onTap,
     this.trailingText,
+    this.trailingTextFlex,
     this.trailing,
     this.actionLabel,
+    this.onTap,
     this.showChevron = true,
     this.minHeight = 68,
     super.key,
@@ -2162,10 +2378,11 @@ class _SettingsActionRow extends StatelessWidget {
   final IconData icon;
   final String title;
   final String? trailingText;
+  final int? trailingTextFlex;
   final Widget? trailing;
   final String? actionLabel;
   final bool showChevron;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final double minHeight;
 
   @override
@@ -2189,6 +2406,8 @@ class _SettingsActionRow extends StatelessWidget {
               Expanded(
                 child: Text(
                   title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: AppColors.text,
                     fontSize: 14,
@@ -2200,14 +2419,33 @@ class _SettingsActionRow extends StatelessWidget {
                 widget,
                 const SizedBox(width: 8),
               ] else if (trailingText case final text?) ...[
-                Text(
-                  text,
-                  style: TextStyle(
-                    color: AppColors.textMuted,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
+                if (trailingTextFlex case final flex?)
+                  Expanded(
+                    flex: flex,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        text,
+                        maxLines: 1,
+                        style: TextStyle(
+                          color: AppColors.textMuted,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  )
+                else
+                  Text(
+                    text,
+                    maxLines: 1,
+                    style: TextStyle(
+                      color: AppColors.textMuted,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                ),
                 const SizedBox(width: 4),
               ],
               if (actionLabel case final label?) ...[
@@ -2412,13 +2650,9 @@ class _SettingsDestination extends StatelessWidget {
 }
 
 class _SettingsLogoutAction extends StatefulWidget {
-  const _SettingsLogoutAction({
-    required this.onLogout,
-    required this.onCompleted,
-  });
+  const _SettingsLogoutAction({required this.onLogout});
 
   final Future<void> Function() onLogout;
-  final VoidCallback onCompleted;
 
   @override
   State<_SettingsLogoutAction> createState() => _SettingsLogoutActionState();
@@ -2513,9 +2747,6 @@ class _SettingsLogoutActionState extends State<_SettingsLogoutAction> {
     setState(() => _busy = true);
     try {
       await widget.onLogout();
-      if (!mounted) return;
-      AppNotice.success(context, '已退出账号。', title: '退出登录');
-      widget.onCompleted();
     } finally {
       if (mounted) setState(() => _busy = false);
     }

@@ -4,10 +4,81 @@ import 'package:cardfi/core/theme/app_colors.dart';
 import 'package:cardfi/features/profile/data/local_guest_state.dart';
 import 'package:cardfi/features/profile/presentation/profile_page.dart';
 import 'package:cardfi/features/profile/presentation/profile_subpage.dart';
+import 'package:cardfi/features/notifications/data/notification_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('settings gates the referral entry with the client flag', (
+    tester,
+  ) async {
+    AppColors.configure(Brightness.light);
+    ProfileSection? openedSection;
+
+    Future<void> pumpSettings({
+      required bool referralEnabled,
+      required bool hasVerifiedAccount,
+    }) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ProfileSubpage(
+              section: ProfileSection.settings,
+              favoriteCards: const [],
+              recentCards: const [],
+              favoriteArticles: const [],
+              submissions: const [],
+              appMessages: const [],
+              onBack: () {},
+              onOpenCard: (_) {},
+              onOpenArticle: (_) {},
+              onOpenSection: (section) => openedSection = section,
+              onSubmit: (_) async {},
+              onRefreshNotifications: () async {},
+              onOpenAppMessage: (_) {},
+              selectedLanguage: AppLanguage.system,
+              onLanguageChanged: (_) {},
+              pushEnabled: false,
+              notificationPermissionStatus:
+                  NotificationPermissionStatus.notDetermined,
+              onPushEnabledChanged: (_) async {},
+              hapticsEnabled: true,
+              cardSwipeHapticsEnabled: true,
+              hapticStrength: AppHapticStrength.medium,
+              hasVerifiedAccount: hasVerifiedAccount,
+              referralEnabled: referralEnabled,
+              onHapticsEnabledChanged: (_) {},
+              onCardSwipeHapticsEnabledChanged: (_) {},
+              onHapticStrengthChanged: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+    }
+
+    await pumpSettings(referralEnabled: true, hasVerifiedAccount: true);
+
+    final referral = find.byKey(const Key('settings-referral'));
+    expect(referral, findsOneWidget);
+    expect(find.text('会员与邀请'), findsOneWidget);
+    expect(find.text('邀请好友并查看 Pro 奖励进度'), findsOneWidget);
+
+    tester
+        .widget<InkWell>(
+          find.descendant(of: referral, matching: find.byType(InkWell)),
+        )
+        .onTap!();
+    expect(openedSection, ProfileSection.referral);
+
+    await pumpSettings(referralEnabled: false, hasVerifiedAccount: true);
+    expect(referral, findsNothing);
+
+    await pumpSettings(referralEnabled: true, hasVerifiedAccount: false);
+    expect(referral, findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('contribution center shows progress, adoption and admin reply', (
     tester,
   ) async {
@@ -55,6 +126,8 @@ void main() {
               selectedLanguage: AppLanguage.system,
               onLanguageChanged: (_) {},
               pushEnabled: false,
+              notificationPermissionStatus:
+                  NotificationPermissionStatus.notDetermined,
               onPushEnabledChanged: (_) async {},
               hapticsEnabled: true,
               cardSwipeHapticsEnabled: true,

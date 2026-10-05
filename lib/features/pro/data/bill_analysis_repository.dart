@@ -11,14 +11,20 @@ class BillAnalysisRepository {
   factory BillAnalysisRepository(
     ApiClient apiClient, {
     required Future<String?> Function() accessTokenProvider,
-  }) => BillAnalysisRepository._(apiClient, accessTokenProvider);
+    String path = ProConfig.billAnalysisPath,
+  }) => BillAnalysisRepository._(apiClient, accessTokenProvider, path);
 
-  BillAnalysisRepository._(this._apiClient, this._accessTokenProvider);
+  BillAnalysisRepository._(
+    this._apiClient,
+    this._accessTokenProvider,
+    this._path,
+  );
 
   static const maxImageBytes = 1_350_000;
 
   final ApiClient _apiClient;
   final Future<String?> Function() _accessTokenProvider;
+  final String _path;
 
   Future<BillAnalysis> analyze({
     required Uint8List imageBytes,
@@ -35,14 +41,11 @@ class BillAnalysisRepository {
     }
     final token = (await _accessTokenProvider())?.trim();
     if (token == null || token.isEmpty) {
-      throw const ApiException(
-        code: 'UNAUTHORIZED',
-        message: '请先登录并确认 Pro 权益后使用账单分析',
-      );
+      throw const ApiException(code: 'UNAUTHORIZED', message: '请先登录后使用账单分析');
     }
     final response = jsonObject(
       await _apiClient.post(
-        ProConfig.billAnalysisPath,
+        _path,
         headers: {'authorization': 'Bearer $token'},
         body: {
           'mimeType': mimeType,

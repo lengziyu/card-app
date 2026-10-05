@@ -17,6 +17,7 @@ class MarketCardTransition extends StatelessWidget {
     required this.sourceTitleRect,
     required this.targetTitleRect,
     this.animateTitle = true,
+    this.hideArtworkOnForward = false,
     super.key,
   });
 
@@ -27,12 +28,20 @@ class MarketCardTransition extends StatelessWidget {
   final Rect sourceTitleRect;
   final Rect targetTitleRect;
   final bool animateTitle;
+  final bool hideArtworkOnForward;
 
   @override
   Widget build(BuildContext context) {
     if (MediaQuery.disableAnimationsOf(context)) {
       return const SizedBox.shrink();
     }
+    // The flight changes logical size on every animation frame. Pinning the
+    // decoded image width to the final card size prevents CachedNetworkImage
+    // from cycling through a new resize key (and its placeholder) per frame.
+    final targetImageCacheWidth =
+        (targetRect.width * MediaQuery.devicePixelRatioOf(context))
+            .round()
+            .clamp(1, 1280);
     return Positioned.fill(
       child: IgnorePointer(
         child: AnimatedBuilder(
@@ -50,46 +59,58 @@ class MarketCardTransition extends StatelessWidget {
             )!;
             final handoff =
                 1 -
-                const Interval(.86, 1, curve: Curves.easeOut).transform(value);
+                const Interval(
+                  .86,
+                  1,
+                  curve: Curves.easeOut,
+                ).transform(animation.value);
             final radius = card.isGlobalAccount ? 14.0 : 10 + (10 * value);
+            // 首页进入详情时由详情页的粒子重建接管开场，不能让一张完整
+            // 卡面先飞到终点。返回时仍恢复共享卡片飞行，保持关闭连贯。
+            final showArtwork =
+                !hideArtworkOnForward ||
+                animation.status == AnimationStatus.reverse;
             return Stack(
               children: [
-                Positioned.fromRect(
-                  key: const Key('market-card-flight-position'),
-                  rect: rect,
-                  child: Opacity(
-                    opacity: handoff,
-                    child: RepaintBoundary(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(radius),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(
-                                alpha: .10 + (.10 * value),
-                              ),
-                              blurRadius: 12 + (10 * value),
-                              spreadRadius: -3,
-                              offset: Offset(0, 5 + (5 * value)),
-                            ),
-                          ],
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(radius),
-                          child: card.isGlobalAccount
-                              ? GlobalAccountCover(
-                                  card: card,
-                                  compact: value < .55,
-                                )
-                              : CardArtwork(
-                                  card: card,
-                                  showGeneratedLabels: false,
+                if (showArtwork)
+                  Positioned.fromRect(
+                    key: const Key('market-card-flight-position'),
+                    rect: rect,
+                    child: Opacity(
+                      key: const Key('market-card-flight-opacity'),
+                      opacity: handoff,
+                      child: RepaintBoundary(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(radius),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(
+                                  alpha: .10 + (.10 * value),
                                 ),
+                                blurRadius: 12 + (10 * value),
+                                spreadRadius: -3,
+                                offset: Offset(0, 5 + (5 * value)),
+                              ),
+                            ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(radius),
+                            child: card.isGlobalAccount
+                                ? GlobalAccountCover(
+                                    card: card,
+                                    compact: value < .55,
+                                  )
+                                : CardArtwork(
+                                    card: card,
+                                    showGeneratedLabels: false,
+                                    memCacheWidth: targetImageCacheWidth,
+                                  ),
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
                 if (animateTitle)
                   Positioned.fromRect(
                     key: const Key('market-card-flight-title-position'),

@@ -165,6 +165,7 @@ class _CardApplicationAssistantPageState
       });
       return;
     }
+    FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
       _loading = true;
       _message = null;
@@ -188,16 +189,11 @@ class _CardApplicationAssistantPageState
         _result = result;
         _resultCelebrationVersion++;
       });
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final target = _resultKey.currentContext;
-        if (target == null || !mounted) return;
-        Scrollable.ensureVisible(
-          target,
-          alignment: .06,
-          duration: const Duration(milliseconds: 480),
-          curve: Curves.easeOutCubic,
-        );
-      });
+      revealAiAssistantResultAfterLayout(
+        pageContext: context,
+        resultKey: _resultKey,
+        scrollController: _scrollController,
+      );
     } on ApiException catch (error) {
       if (!mounted) return;
       setState(() {
@@ -274,6 +270,15 @@ class _CardApplicationAssistantPageState
                     _message = null;
                     _messageCode = null;
                   }),
+                  onQuestionChanged: (_) {
+                    if (_aiDataConsent) {
+                      setState(() {
+                        _aiDataConsent = false;
+                        _message = null;
+                        _messageCode = null;
+                      });
+                    }
+                  },
                 )
               else
                 _QuestionPanel(
@@ -299,6 +304,12 @@ class _CardApplicationAssistantPageState
                   key: _resultKey,
                   result: result,
                   onOpenArticle: widget.onOpenArticle,
+                ),
+                SizedBox(
+                  height: aiAssistantResultTrailingSpace(
+                    context,
+                    footerHeight: footerHeight,
+                  ),
                 ),
               ],
             ],
@@ -536,6 +547,7 @@ class _ReviewPanel extends StatelessWidget {
     required this.controller,
     required this.aiDataConsent,
     required this.onAiDataConsentChanged,
+    required this.onQuestionChanged,
   });
 
   final CardSummary card;
@@ -546,6 +558,7 @@ class _ReviewPanel extends StatelessWidget {
   final TextEditingController controller;
   final bool aiDataConsent;
   final ValueChanged<bool?> onAiDataConsentChanged;
+  final ValueChanged<String> onQuestionChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -570,6 +583,7 @@ class _ReviewPanel extends StatelessWidget {
           TextField(
             key: const Key('application-assistant-question'),
             controller: controller,
+            onChanged: onQuestionChanged,
             minLines: 4,
             maxLines: 6,
             maxLength: 500,

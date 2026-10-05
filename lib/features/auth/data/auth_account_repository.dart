@@ -13,6 +13,14 @@ class AuthAccountRepository {
     'AUTH_ACCOUNT_PATH',
     defaultValue: '/api/auth/account',
   );
+  static const _appleCredentialPath = String.fromEnvironment(
+    'AUTH_APPLE_CREDENTIAL_PATH',
+    defaultValue: '/api/auth/apple-credential',
+  );
+  static const _clientContextPath = String.fromEnvironment(
+    'AUTH_CLIENT_CONTEXT_PATH',
+    defaultValue: '/api/auth/client-context',
+  );
 
   final ApiClient _client;
   final Future<String?> Function() _accessTokenProvider;
@@ -42,6 +50,54 @@ class AuthAccountRepository {
     }
     await _client.delete(
       _accountPath,
+      headers: {'authorization': 'Bearer $token'},
+    );
+  }
+
+  Future<void> reportClientContext({
+    required String platform,
+    required String authMethod,
+    required bool isRegistration,
+    required String appVersion,
+    required String appBuildNumber,
+  }) async {
+    final token = (await _accessTokenProvider())?.trim();
+    if (token == null || token.isEmpty) return;
+    await _client.post(
+      _clientContextPath,
+      headers: {'authorization': 'Bearer $token'},
+      body: {
+        'platform': platform,
+        'authMethod': authMethod,
+        'isRegistration': isRegistration,
+        'appVersion': appVersion,
+        'appBuildNumber': appBuildNumber,
+      },
+    );
+  }
+
+  Future<void> registerAppleAuthorizationCode(
+    String authorizationCode, [
+    String? accessToken,
+  ]) async {
+    final token = (accessToken ?? await _accessTokenProvider())?.trim();
+    if (token == null || token.isEmpty) {
+      throw const ApiException(code: 'UNAUTHORIZED', message: 'Apple 登录会话无效');
+    }
+    await _client.post(
+      _appleCredentialPath,
+      headers: {'authorization': 'Bearer $token'},
+      body: {'authorizationCode': authorizationCode},
+    );
+  }
+
+  Future<void> revokeAppleCredential() async {
+    final token = (await _accessTokenProvider())?.trim();
+    if (token == null || token.isEmpty) {
+      throw const ApiException(code: 'UNAUTHORIZED', message: 'Apple 登录会话无效');
+    }
+    await _client.delete(
+      _appleCredentialPath,
       headers: {'authorization': 'Bearer $token'},
     );
   }

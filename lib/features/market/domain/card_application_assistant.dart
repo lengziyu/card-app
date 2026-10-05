@@ -45,8 +45,8 @@ class CardApplicationChecklistItem {
 
   factory CardApplicationChecklistItem.fromJson(Map<String, dynamic> json) =>
       CardApplicationChecklistItem(
-        title: json['title']?.toString().trim() ?? '',
-        detail: json['detail']?.toString().trim() ?? '',
+        title: _resultText(json['title']),
+        detail: _resultText(json['detail']),
         sourceIds: _stringList(json['sourceIds']),
       );
 }
@@ -105,7 +105,7 @@ class CardApplicationAssistantResult {
 
   factory CardApplicationAssistantResult.fromJson(Map<String, dynamic> json) {
     return CardApplicationAssistantResult(
-      summary: json['summary']?.toString().trim() ?? '',
+      summary: _resultText(json['summary']),
       sourceMode: json['sourceMode']?.toString().trim() ?? 'project_articles',
       checklist: _objectList(json['checklist'])
           .map(CardApplicationChecklistItem.fromJson)
@@ -120,17 +120,77 @@ class CardApplicationAssistantResult {
           .where((source) => source.id.isNotEmpty && source.title.isNotEmpty)
           .take(8)
           .toList(growable: false),
-      disclaimer: json['disclaimer']?.toString().trim() ?? '',
+      disclaimer: _resultText(json['disclaimer']),
     );
   }
 }
 
 List<String> _stringList(Object? value, {int limit = 12}) =>
     (value is List ? value : const <Object?>[])
-        .map((item) => item.toString().trim())
+        .map(_resultText)
         .where((item) => item.isNotEmpty)
         .take(limit)
         .toList(growable: false);
+
+String _resultText(Object? value) {
+  if (value == null) return '';
+  if (value is String || value is num || value is bool) {
+    return _sanitizeResultText(value.toString());
+  }
+  if (value is List) {
+    return value.map(_resultText).where((item) => item.isNotEmpty).join('；');
+  }
+  if (value is Map) {
+    final normalized = value.map((key, item) => MapEntry(key.toString(), item));
+    final title = _resultText(
+      normalized['title'] ??
+          normalized['label'] ??
+          normalized['name'] ??
+          normalized['item'] ??
+          normalized['question'],
+    );
+    final detail = _resultText(
+      normalized['detail'] ??
+          normalized['description'] ??
+          normalized['message'] ??
+          normalized['text'] ??
+          normalized['content'] ??
+          normalized['reason'] ??
+          normalized['action'] ??
+          normalized['answer'] ??
+          normalized['note'] ??
+          normalized['value'],
+    );
+    if (title.isNotEmpty && detail.isNotEmpty && title != detail) {
+      return _sanitizeResultText('$title：$detail');
+    }
+    return detail.isNotEmpty ? detail : title;
+  }
+  return '';
+}
+
+String _sanitizeResultText(String value) {
+  final text = value.trim().replaceAll(RegExp(r'\s+'), ' ');
+  if (text.isEmpty || text.toLowerCase() == '[object object]') return '';
+  return text
+      .replaceAll(
+        RegExp(
+          r'\s*[（(][^（）()]*(?:mainlandAvailability|requiresOverseasAddress|requiresOverseasPhone|chinaIpBlocked|kycLevel)[^（）()]*[）)]',
+          caseSensitive: false,
+        ),
+        '',
+      )
+      .replaceAll(
+        RegExp(
+          r'(?:mainlandAvailability|requiresOverseasAddress|requiresOverseasPhone|chinaIpBlocked|kycLevel)\s*[:=]\s*[a-z0-9_-]+\s*[,，;；]?',
+          caseSensitive: false,
+        ),
+        '',
+      )
+      .replaceAll(RegExp(r'\s+([，。；：,.!?])'), r'$1')
+      .replaceAll(RegExp(r'^[,，;；:：\s]+|[,，;；:：\s]+$'), '')
+      .trim();
+}
 
 List<Map<String, dynamic>> _objectList(Object? value) =>
     (value is List ? value : const <Object?>[])

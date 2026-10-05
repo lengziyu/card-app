@@ -12,12 +12,9 @@ class ReferralProgramConfiguration {
   factory ReferralProgramConfiguration.fromJson(Map<String, dynamic> json) {
     return ReferralProgramConfiguration(
       enabled: json['enabled'] == true,
-      standardInviteThreshold: _positiveInt(
-        json['standardInviteThreshold'],
-        10,
-      ),
-      referredFirstThreshold: _positiveInt(json['referredFirstThreshold'], 7),
-      maxRewardMonths: _positiveInt(json['maxRewardMonths'], 6),
+      standardInviteThreshold: _positiveInt(json['standardInviteThreshold'], 3),
+      referredFirstThreshold: _positiveInt(json['referredFirstThreshold'], 3),
+      maxRewardMonths: _positiveInt(json['maxRewardMonths'], 12),
     );
   }
 
@@ -39,6 +36,9 @@ class ReferralProfile {
     required this.maxRewardMonths,
     required this.firstRewardInviteCount,
     required this.standardRewardInviteCount,
+    required this.rewardTier,
+    required this.pendingInvites,
+    required this.activationStatus,
   });
 
   factory ReferralProfile.fromJson(Map<String, dynamic> json) {
@@ -50,12 +50,15 @@ class ReferralProfile {
       nextRewardAt: _nullableInt(json['nextRewardAt']),
       rewardedMonths: _positiveInt(json['rewardedMonths'], 0),
       pendingRewardMonths: _positiveInt(json['pendingRewardMonths'], 0),
-      maxRewardMonths: _positiveInt(json['maxRewardMonths'], 6),
-      firstRewardInviteCount: _positiveInt(json['firstRewardInviteCount'], 10),
+      maxRewardMonths: _positiveInt(json['maxRewardMonths'], 12),
+      firstRewardInviteCount: _positiveInt(json['firstRewardInviteCount'], 3),
       standardRewardInviteCount: _positiveInt(
         json['standardRewardInviteCount'],
         10,
       ),
+      rewardTier: json['rewardTier']?.toString() ?? 'none',
+      pendingInvites: _positiveInt(json['pendingInvites'], 0),
+      activationStatus: json['activationStatus']?.toString() ?? 'unbound',
     );
   }
 
@@ -69,6 +72,9 @@ class ReferralProfile {
   final int maxRewardMonths;
   final int firstRewardInviteCount;
   final int standardRewardInviteCount;
+  final String rewardTier;
+  final int pendingInvites;
+  final String activationStatus;
 }
 
 class ReferralRepository {

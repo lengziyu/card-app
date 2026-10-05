@@ -275,19 +275,6 @@ const _catalog = <String, List<String>>{
     'Pode envolver riscos de preço de ativos digitais, custódia, transferências on-chain e conformidade regional. Não é uma conta de depósito; confirme recursos e elegibilidade no processo oficial.',
     'Dijital varlık fiyatı, saklama, zincir üstü transfer ve bölgesel uyumluluk riskleri içerebilir. Bu bir mevduat hesabı değildir; özellikleri ve uygunluğu resmi süreçte doğrulayın.',
   ],
-  '账单识别每天最多 5 次，和以上额度独立计算。': [
-    '賬單識別每天最多 5 次，與以上額度獨立計算。',
-    'Bill recognition is limited to 5 times per day and uses a separate allowance.',
-    '請求書認識は1日最大5回で、上記の枠とは別に計算されます。',
-    '청구서 인식은 하루 최대 5회이며 위 한도와 별도로 계산됩니다.',
-    'Nhận diện hóa đơn tối đa 5 lần mỗi ngày và dùng hạn mức riêng.',
-    'Распознавание счетов доступно до 5 раз в день и учитывается отдельно.',
-    'El reconocimiento de facturas tiene un límite de 5 veces al día y usa un cupo independiente.',
-    'La reconnaissance de relevés est limitée à 5 fois par jour et utilise un quota distinct.',
-    'Die Belegerkennung ist auf 5 Vorgänge pro Tag begrenzt und nutzt ein separates Kontingent.',
-    'O reconhecimento de faturas é limitado a 5 vezes por dia e usa uma cota separada.',
-    'Fatura tanıma günde en fazla 5 kez kullanılabilir ve ayrı bir kotadan düşer.',
-  ],
   '邀请好友': [
     '邀請好友',
     'Invite friends',
@@ -300,6 +287,19 @@ const _catalog = <String, List<String>>{
     'Freunde einladen',
     'Convidar amigos',
     'Arkadaşlarını davet et',
+  ],
+  '邀请好友得会员': [
+    '邀請好友得會員',
+    'Invite friends, earn Pro',
+    '友だちを招待してPro特典を獲得',
+    '친구 초대하고 Pro 혜택 받기',
+    'Mời bạn bè, nhận Pro',
+    'Приглашайте друзей и получайте Pro',
+    'Invita amigos y consigue Pro',
+    'Invitez des amis et obtenez Pro',
+    'Freunde einladen und Pro erhalten',
+    'Convide amigos e ganhe Pro',
+    'Arkadaşlarını davet et, Pro kazan',
   ],
   '复制邀请链接': [
     '複製邀請連結',
@@ -352,6 +352,19 @@ const _catalog = <String, List<String>>{
     'Freunde zu CardFi einladen',
     'Convide amigos para o CardFi',
     'Arkadaşlarını CardFi’ye davet et',
+  ],
+  '浏览、整理与比较卡片公开信息': [
+    '瀏覽、整理與比較卡片公開資訊',
+    'Browse, organize, and compare public card information',
+    'カードの公開情報を閲覧・整理・比較',
+    '카드 공개 정보를 탐색·정리·비교',
+    'Khám phá, sắp xếp và so sánh thông tin thẻ công khai',
+    'Просматривайте, систематизируйте и сравнивайте открытую информацию о картах',
+    'Consulta, organiza y compara información pública sobre tarjetas',
+    'Consultez, organisez et comparez les informations publiques sur les cartes',
+    'Öffentliche Karteninformationen ansehen, ordnen und vergleichen',
+    'Explore, organize e compare informações públicas de cartões',
+    'Kartlarla ilgili herkese açık bilgileri inceleyin, düzenleyin ve karşılaştırın',
   ],
   '邀请你加入 CardFi': [
     '邀請你加入 CardFi',
@@ -586,32 +599,6 @@ const _catalog = <String, List<String>>{
     'Pro-Vorteile freigeschaltet',
     'Benefícios Pro desbloqueados',
     'Pro ayrıcalıkları açıldı',
-  ],
-  'AI 使用额度 · 每天 20 次': [
-    'AI 使用額度 · 每天 20 次',
-    'AI allowance · 20 per day',
-    'AI 利用枠・1日20回',
-    'AI 사용 한도 · 하루 20회',
-    'Hạn mức AI · 20 lần mỗi ngày',
-    'Лимит AI · 20 в день',
-    'Cupo de IA · 20 al día',
-    'Quota IA · 20 par jour',
-    'KI-Kontingent · 20 pro Tag',
-    'Limite de IA · 20 por dia',
-    'Yapay zeka kotası · Günde 20',
-  ],
-  'AI 选卡与 AI 开卡准备合计计算；每分钟最多 3 次。': [
-    'AI 選卡與 AI 開卡準備合計計算；每分鐘最多 3 次。',
-    'AI Card Match and Application Prep share this allowance; max 3 per minute.',
-    'AIカード選択と申請準備で共通利用。1分あたり最大3回。',
-    'AI 카드 선택과 신청 준비에서 함께 사용하며, 분당 최대 3회입니다.',
-    'AI chọn thẻ và chuẩn bị mở thẻ dùng chung hạn mức; tối đa 3 lần mỗi phút.',
-    'Подбор карт и подготовка заявки используют общий лимит: до 3 раз в минуту.',
-    'La selección de tarjetas y la preparación de solicitud comparten el cupo; máximo 3 por minuto.',
-    'La sélection de cartes et la préparation de demande partagent ce quota : 3 par minute au maximum.',
-    'Kartenauswahl und Antragsvorbereitung teilen dieses Kontingent; maximal 3 pro Minute.',
-    'A seleção de cartões e o preparo da solicitação compartilham a cota; máximo de 3 por minuto.',
-    'Kart seçimi ve başvuru hazırlığı kotayı paylaşır; dakikada en fazla 3 kez.',
   ],
   '动效调试': [
     '動效調試',
@@ -2459,6 +2446,45 @@ const _catalog = <String, List<String>>{
     'Senha',
     'Şifre',
   ],
+  '注册邮箱': [
+    '登記電郵',
+    'Registered email',
+    '登録メール',
+    '등록 이메일',
+    'Email đăng ký',
+    'Зарегистрированный email',
+    'Correo registrado',
+    'E-mail enregistré',
+    'Registrierte E-Mail-Adresse',
+    'E-mail cadastrado',
+    'Kayıtlı e-posta',
+  ],
+  '使用密码登录': [
+    '使用密碼登入',
+    'Sign in with password',
+    'パスワードでログイン',
+    '비밀번호로 로그인',
+    'Đăng nhập bằng mật khẩu',
+    'Войти с паролем',
+    'Iniciar sesión con contraseña',
+    'Se connecter avec un mot de passe',
+    'Mit Passwort anmelden',
+    'Entrar com senha',
+    'Şifreyle giriş yap',
+  ],
+  '使用邮箱验证码登录': [
+    '使用電郵驗證碼登入',
+    'Use email code',
+    'メールコードでログイン',
+    '이메일 코드로 로그인',
+    'Dùng mã email',
+    'Войти по коду из письма',
+    'Usar código de correo',
+    'Utiliser un code e-mail',
+    'E-Mail-Code verwenden',
+    'Usar código por e-mail',
+    'E-posta kodunu kullan',
+  ],
   '忘记密码': [
     '忘記密碼',
     'Forgot password',
@@ -2575,6 +2601,19 @@ const _catalog = <String, List<String>>{
     'Favoriten',
     'Favoritos',
     'Favoriler',
+  ],
+  '我的账单': [
+    '我的帳單',
+    'My bills',
+    '利用明細',
+    '내 결제 내역',
+    'Hóa đơn của tôi',
+    'Мои счета',
+    'Mis facturas',
+    'Mes factures',
+    'Meine Abrechnungen',
+    'Minhas faturas',
+    'Faturalarım',
   ],
   '收藏': [
     '收藏',
@@ -3011,6 +3050,32 @@ String _translatePattern(String source, Locale locale) {
     return source;
   }
 
+  final resendCountdown = RegExp(r'^(\d+) 秒后可重新发送$').firstMatch(source);
+  if (resendCountdown != null) {
+    return 'Resend in ${resendCountdown.group(1)} seconds';
+  }
+  final linkedIdentity = RegExp(r'^(Apple|Google) 账号已绑定。$').firstMatch(source);
+  if (linkedIdentity != null) {
+    return '${linkedIdentity.group(1)} account linked.';
+  }
+  final publicComments = RegExp(r'^(\d+) 条公开评论$').firstMatch(source);
+  if (publicComments != null) {
+    final count = int.parse(publicComments.group(1)!);
+    return '$count public ${count == 1 ? 'comment' : 'comments'}';
+  }
+  final publicCommentPreview = RegExp(r'^(\d+) 条公开$').firstMatch(source);
+  if (publicCommentPreview != null) {
+    return '${publicCommentPreview.group(1)} public';
+  }
+  final helpfulCount = RegExp(r'^有帮助 (\d+)$').firstMatch(source);
+  if (helpfulCount != null) return 'Helpful ${helpfulCount.group(1)}';
+  final minutesAgo = RegExp(r'^(\d+) 分钟前$').firstMatch(source);
+  if (minutesAgo != null) return '${minutesAgo.group(1)}m ago';
+  final hoursAgo = RegExp(r'^(\d+) 小时前$').firstMatch(source);
+  if (hoursAgo != null) return '${hoursAgo.group(1)}h ago';
+  final daysAgo = RegExp(r'^(\d+) 天前$').firstMatch(source);
+  if (daysAgo != null) return '${daysAgo.group(1)}d ago';
+
   final exactFallback = _englishFallbackPhrases[source];
   if (exactFallback != null) return exactFallback;
 
@@ -3044,6 +3109,74 @@ bool _containsChinese(String value) =>
 /// been promoted to a full multi-locale catalog entry. Keep this English-only:
 /// other locales must continue using their reviewed catalog translations.
 const _englishFallbackPhrases = <String, String>{
+  // Card-specific community. Comments remain scoped to one card detail;
+  // pre-publication moderation is controlled by the server-side global flag.
+  '卡友讨论': 'Community discussion',
+  '评论区暂未开放': 'Comments are not available yet',
+  '还没有公开评论，欢迎分享真实使用体验。': 'No public comments yet. Share your real experience.',
+  '查看全部评论  →': 'View all comments  →',
+  '写评论': 'Write a comment',
+  '最新': 'Latest',
+  '最有帮助': 'Most helpful',
+  '加载中…': 'Loading…',
+  '加载更多': 'Load more',
+  '说说你的真实使用体验': 'Share your real experience',
+  '登录后参与讨论': 'Sign in to join the discussion',
+  '删除评论？': 'Delete comment?',
+  '删除后无法恢复。': 'This cannot be undone.',
+  '取消': 'Cancel',
+  '删除': 'Delete',
+  '删除评论': 'Delete comment',
+  '举报评论': 'Report comment',
+  '屏蔽该用户': 'Block this user',
+  '屏蔽该用户？': 'Block this user?',
+  '屏蔽后将隐藏该用户的评论。你可以在评论安全中心取消屏蔽。':
+      'Comments from this user will be hidden. You can unblock them in Comment Safety.',
+  '屏蔽': 'Block',
+  '已屏蔽该用户': 'User blocked',
+  '评论安全与社区规则': 'Comment safety and community rules',
+  '内容经人工审核后公开 · 查看社区规则': 'Reviewed before publishing · View community rules',
+  '评论用于分享真实卡片体验。发布内容会经过基础安全检查和人工审核。':
+      'Comments are for sharing genuine card experiences. Posts undergo safety checks and human review.',
+  '保护隐私': 'Protect privacy',
+  '不要发布完整卡号、证件、订单号、联系方式、密码、验证码或钱包密钥。':
+      'Do not post full card numbers, identity documents, order numbers, contact details, passwords, verification codes, or wallet keys.',
+  '禁止推广和引流': 'No promotion or solicitation',
+  '不要发布邀请码、返佣、Affiliate、CPA、外链或隐藏跳转。':
+      'Do not post referral codes, commissions, affiliate or CPA promotions, external links, or hidden redirects.',
+  '友善且真实': 'Be respectful and genuine',
+  '禁止骚扰、仇恨、威胁、冒充、刷赞和虚假体验。违规内容可能被隐藏，账号可能被限制。':
+      'Harassment, hate, threats, impersonation, vote manipulation, and fabricated experiences are prohibited. Content may be removed and accounts restricted.',
+  '已屏蔽用户': 'Blocked users',
+  '屏蔽信息仅保存在本设备，CardFi 不会为此保存原始账号标识。':
+      'Block settings stay on this device. CardFi does not store raw account identifiers for this feature.',
+  '暂未屏蔽任何用户': 'No blocked users',
+  '取消屏蔽': 'Unblock',
+  '暂时无法打开支持邮箱': 'Could not open the support email app.',
+  '举报已提交，已隐藏这条评论': 'Report submitted. This comment is now hidden.',
+  '包含隐私或敏感信息': 'Contains private or sensitive information',
+  '推广、邀请码或外部引流': 'Promotion, referral code, or external solicitation',
+  '骚扰或不友善内容': 'Harassment or abusive content',
+  '与卡片无关': 'Not related to this card',
+  '审核中 · 仅自己可见': 'In review · Only visible to you',
+  '评论加载失败，请稍后重试': 'Could not load comments. Try again later.',
+  '评论需控制在 500 字以内': 'Keep your comment within 500 characters.',
+  '评论已提交，审核通过后公开展示': 'Comment submitted. It will appear after review.',
+  '评论已发布': 'Comment published.',
+  '操作失败，请稍后重试': 'Action failed. Try again later.',
+  '删除失败，请稍后重试': 'Could not delete the comment. Try again later.',
+  '举报已提交': 'Report submitted.',
+  '暂时无法加载评论': 'Comments could not be loaded',
+  '请检查网络后重试，卡片其他信息不受影响。':
+      'Check your connection and try again. Other card details are unaffected.',
+  '重新加载': 'Reload',
+  '还没有公开评论': 'No public comments yet',
+  '欢迎分享真实使用体验，评论审核通过后会公开展示。':
+      'Share your real experience. Comments appear after review.',
+  '欢迎分享真实使用体验，发布后会立即公开展示。':
+      'Share your real experience. It will appear immediately after publishing.',
+  '分享真实使用体验…': 'Share your real experience…',
+  '刚刚': 'Just now',
   // Settings and support destinations shown together on the profile settings
   // page. Keep this group complete so English never degrades into repeated
   // placeholder rows.
@@ -3053,6 +3186,41 @@ const _englishFallbackPhrases = <String, String>{
   '联系支持': 'Contact Support',
   '反馈': 'Feedback',
   '通知权限': 'Notification Permission',
+  '及时获取重要变化': 'Stay informed about important changes',
+  '开启通知后，CardFi 会在新卡上线和重要资讯更新时提醒你，不发送营销轰炸。':
+      'Turn on notifications for new cards and important content updates, without marketing spam.',
+  '新卡上线': 'New card releases',
+  '收录新卡时及时了解主要特点': 'See the key details when a new card is added',
+  '重要资讯': 'Important updates',
+  '已确认的内容更新才会发送': 'Only reviewed content updates are sent',
+  '随时管理': 'Stay in control',
+  '可在 App 或系统设置中随时关闭':
+      'Turn notifications off anytime in the app or system settings',
+  '开启通知': 'Turn On Notifications',
+  '暂时不要': 'Not Now',
+  '你可以随时在“我的 → 设置 → 提醒配置”中修改。':
+      'You can change this anytime in My → Settings → Reminder Settings.',
+  '通知权限已关闭': 'Notifications Are Off',
+  '请前往系统设置允许 CardFi 发送通知，返回 App 后状态会自动更新。':
+      'Allow CardFi notifications in system settings. The status updates when you return.',
+  '前往系统设置': 'Open System Settings',
+  '暂时无法打开系统设置，请手动前往通知设置。':
+      'System settings could not be opened. Please open notification settings manually.',
+  '系统已关闭': 'Off in System Settings',
+  '已关闭': 'Off',
+  '暂不可用': 'Unavailable',
+  '当前版本低于最低支持版本 ': 'This version is below the minimum supported release ',
+  '。请更新至 ': '. Update to ',
+  '新版本 ': 'Version ',
+  ' 已发布，你可以现在更新，也可以稍后在版本管理中处理。':
+      ' is available. Update now or manage it later in Version Management.',
+  '本次更新': 'What’s New',
+  '稍后': 'Later',
+  '更新配置暂不可用': 'Update Configuration Unavailable',
+  '服务端更新信息缺少有效的 HTTPS 商店链接，本次不会阻止使用。':
+      'The update configuration has no valid HTTPS store link, so this release will not block the app.',
+  '）。请前往应用商店安装最新版本。': '). Open the app store to install the latest version.',
+  '强制更新策略：最低支持 ': 'Required update policy: minimum supported ',
   '震动反馈': 'Haptic Feedback',
   '操作时提供轻微触觉反馈': 'Provide subtle haptic feedback for actions',
   '卡片滑动震动': 'Card Swipe Haptics',
@@ -3099,12 +3267,106 @@ const _englishFallbackPhrases = <String, String>{
       'Enter your registered email and password before checking verification.',
   '如果该邮箱已注册，密码重置邮件会发送到你的邮箱。':
       'If an account exists for this email, a password reset message will be sent.',
+  '如果该邮箱已注册，密码重置验证码会发送到你的邮箱。':
+      'If an account exists for this email, a password reset code will be sent.',
   '认证服务连接失败，请检查网络后重试':
       'Could not connect to sign-in. Check your internet connection and try again.',
   '登录服务暂时不可用，请稍后重试':
       'Sign-in is temporarily unavailable. Please try again later.',
   '登录服务未返回有效账号': 'Sign-in did not return a valid account. Please try again.',
+  '第三方登录暂不可用': 'Third-party sign-in is temporarily unavailable.',
+  '请先使用邮箱验证码登录，再绑定第三方账号。':
+      'Sign in with an email code before linking a third-party account.',
+  '账号绑定暂不可用': 'Account linking is temporarily unavailable.',
+  r'$label 账号已绑定。': r'$label account linked.',
+  r'$label 尚未绑定。': r'$label is not linked.',
+  r'请先绑定另一种登录方式，再解除 $label 绑定。':
+      r'Link another sign-in method before unlinking $label.',
+  '账号解绑暂不可用': 'Account unlinking is temporarily unavailable.',
+  r'$label 账号已解除绑定。': r'$label account unlinked.',
+  '请重新登录后再管理登录方式': 'Sign in again before managing sign-in methods.',
+  r'$label 尚未绑定到当前账号': r'$label is not linked to this account.',
+  '请先绑定另一种登录方式，再解除当前绑定':
+      'Link another sign-in method before unlinking this one.',
+  'Apple 授权撤销服务尚未配置': 'Apple authorization revocation is not configured.',
+  '邮箱验证码登录暂不可用': 'Email code sign-in is temporarily unavailable.',
+  '邮箱验证码登录暂未开放': 'Email code sign-in is not enabled yet.',
+  '密码重置暂时不可用': 'Password reset is temporarily unavailable.',
+  '新密码不能与当前密码相同，请更换一个新密码':
+      'Your new password must be different from your current password.',
+  '密码重置验证已失效，请重新获取验证码':
+      'Password reset verification expired. Request a new code.',
+  '新密码不符合当前密码规则，请更换后重试':
+      'The new password does not meet the current password requirements.',
+  '请求超时，请检查网络后重试':
+      'The request timed out. Check your connection and try again.',
+  '验证码已发送，请查看邮箱。': 'A verification code was sent to your email.',
+  '验证码无效或已过期，请重新获取': 'The code is invalid or expired. Request a new code.',
+  '邮箱验证未完成，请重新获取验证码':
+      'Email verification was not completed. Request a new code.',
+  '使用 Apple 继续': 'Continue with Apple',
+  '使用 Google 继续': 'Continue with Google',
+  '或使用邮箱验证码': 'Or use an email code',
+  '或使用以下方式登录': 'Or sign in with',
+  '邮箱验证码': 'Email code',
+  '邮箱地址': 'Email address',
+  '6 位邮箱验证码': '6-digit email code',
+  '6 位密码重置验证码': '6-digit password reset code',
+  '获取验证码': 'Get code',
+  '验证并登录': 'Verify and sign in',
+  '验证重置码': 'Verify reset code',
+  '重新发送验证码': 'Resend code',
+  r'$_resendSeconds 秒后可重新发送': r'Resend in $_resendSeconds seconds',
+  '更换': 'Change',
+  '请输入 6 位验证码': 'Enter the 6-digit code.',
+  '已有账号建议先用原邮箱验证码登录，再到设置中绑定 Apple 或 Google。':
+      'Existing users should sign in with their original email first, then link Apple or Google in Settings.',
+  '如果你已有 CardFi 邮箱账号，请先取消并使用邮箱验证码登录，再到设置中绑定 Apple，避免 Apple 隐藏邮箱生成独立账号。':
+      'If you already have a CardFi email account, cancel and sign in with an email code first. Then link Apple in Settings to avoid a separate account when Apple hides your email.',
+  '使用邮箱登录': 'Use email',
+  '继续使用 Apple': 'Continue with Apple',
+  '登录方式': 'Sign-in methods',
+  'Google 登录尚未配置': 'Google sign-in is not configured.',
+  'Google 登录未返回有效凭据': 'Google sign-in did not return valid credentials.',
+  '已取消 Google 登录': 'Google sign-in was canceled.',
+  'Google 登录失败，请稍后重试': 'Google sign-in failed. Please try again later.',
+  'Apple 登录尚未配置': 'Apple sign-in is not configured.',
+  'Apple 登录未返回有效凭据': 'Apple sign-in did not return valid credentials.',
+  '已取消 Apple 登录': 'Apple sign-in was canceled.',
+  'Apple 登录失败，请稍后重试': 'Apple sign-in failed. Please try again later.',
+  '这个登录方式已经绑定到其他账号':
+      'This sign-in method is already linked to another account.',
+  '账号绑定尚未在认证服务中启用':
+      'Account linking is not enabled in the authentication service.',
+  '这个登录方式暂未开放': 'This sign-in method is not enabled yet.',
+  '未绑定': 'Not linked',
+  '已绑定': 'Linked',
+  '绑定': 'Link',
+  '解绑': 'Unlink',
+  '解除绑定': 'Unlink',
+  r'解除 $label 绑定？': r'Unlink $label?',
+  r'解除后将不能再用 $label 登录当前账号，但账号和已同步数据不会删除。':
+      r'You will no longer be able to sign in to this account with $label. Your account and synced data will not be deleted.',
+  '请先绑定另一种登录方式，避免无法再次登录。':
+      'Link another sign-in method first so you can still sign in.',
+  '不能解除绑定': 'Cannot unlink',
+  '解绑成功': 'Unlinked',
+  r'$label 账号解绑失败，请稍后重试。':
+      r'Could not unlink the $label account. Please try again later.',
+  '解绑失败': 'Unlink failed',
   '密码强度不足，请至少使用 8 位字符': 'Your password is too weak. Use at least 8 characters.',
+  '设置新密码': 'Set a new password',
+  '请输入至少 8 位的新密码。更新后，账号和已同步数据不会改变。':
+      'Enter a new password with at least 8 characters. Your account and synced data will not change.',
+  '新密码': 'New password',
+  '确认新密码': 'Confirm new password',
+  '请再次输入新密码': 'Enter the new password again.',
+  '两次输入的密码不一致': 'The passwords do not match.',
+  '更新密码': 'Update password',
+  '取消并返回': 'Cancel and return',
+  '密码已更新。': 'Your password has been updated.',
+  '密码重置链接无效或已过期，请重新获取。':
+      'The password reset link is invalid or expired. Request a new one.',
   '请先输入需要验证的邮箱地址': 'Enter the email address you want to verify first.',
   '尝试次数过多，请稍后再试': 'Too many attempts. Please wait and try again.',
   '当前暂未开放邮箱注册': 'Email registration is currently unavailable.',
@@ -3127,6 +3389,17 @@ const _englishFallbackPhrases = <String, String>{
   '请输入 8 位邀请码': 'Enter an 8-character invite code.',
   '用户名 / 邮箱': 'Username / Email',
   '邀请码（可选）': 'Invite code (optional)',
+  '扫码注册\n完成邮箱验证并满足活跃要求后，计入有效邀请。':
+      'Scan to register\nThe referral counts after email verification and activity checks.',
+  '1 个月 Pro': '1 month of Pro',
+  '1 年 Pro': '1 year of Pro',
+  '下一档 Pro': 'the next Pro tier',
+  '已解锁永久 Pro。': 'Lifetime Pro unlocked.',
+  '再邀请 {count} 人，可获得 {reward}。': 'Invite {count} more to earn {reward}.',
+  '当前邀请奖励：{reward}': 'Current referral reward: {reward}',
+  '暂未获得奖励': 'No reward earned yet',
+  '{count} 位好友正在完成有效性核验。':
+      '{count} friends are still completing eligibility checks.',
   '注册并验证邮箱': 'Create account and verify email',
   '检查验证并登录': 'Check verification and log in',
   '重发验证邮件': 'Resend verification email',
@@ -3137,8 +3410,8 @@ const _englishFallbackPhrases = <String, String>{
   // Pro purchase, entitlement, feature, and store-status copy. Keep this set
   // complete because the review account may visit every purchase state.
   '让卡包更好用': 'Get more from your card wallet',
-  '将 AI 精选好卡、AI 协助开卡和账单识别的每月额度提升至 30、30、20 次，并解锁高级卡包布局、2–4 卡对比、费用测算、长周期数据、离线资料与工作区备份。':
-      'Increase monthly AI Card Match, AI Application Prep, and bill recognition allowances to 30, 30, and 20 uses, and unlock advanced wallet layouts, 2–4 card comparison, fee scenarios, long-range data, offline information, and workspace backup.',
+  '将 AI 精选好卡、AI 协助开卡和账单识别的每月额度提升至 20、20、30 次，并解锁高级卡包布局、2–4 卡对比、费用测算、长周期数据、离线资料与工作区备份。':
+      'Increase monthly AI Card Match, AI Application Prep, and bill recognition allowances to 20, 20, and 30 uses, and unlock advanced wallet layouts, 2–4 card comparison, fee scenarios, long-range data, offline information, and workspace backup.',
   '等待商店确认…': 'Waiting for store confirmation…',
   '高级展示模式与全部 Pro 权益已解锁。':
       'Advanced display modes and all Pro benefits are unlocked.',
@@ -3155,6 +3428,8 @@ const _englishFallbackPhrases = <String, String>{
   '当前设备暂时无法连接应用商店': 'This device cannot connect to the app store right now',
   '所选订阅商品暂未在当前商店生效':
       'The selected subscription is not available in this store yet',
+  '所选 Pro 商品暂未在当前商店生效':
+      'The selected Pro product is not available in this store yet',
   '点击后将由系统商店显示最终价格并确认购买':
       'The system store will show the final price and confirm your purchase',
   '价格待商店返回': 'Waiting for store price',
@@ -3168,14 +3443,27 @@ const _englishFallbackPhrases = <String, String>{
   '正在恢复…': 'Restoring…',
   '找回同一商店账号下的有效订阅':
       'Restore an active subscription from the same store account',
+  '找回同一商店账号下的有效订阅或买断权益':
+      'Restore an active subscription or lifetime purchase from the same store account',
   '刷新会员状态': 'Refresh membership status',
   '重新核对账号与商店权益': 'Check account and store benefits again',
   '管理或取消订阅': 'Manage or cancel subscription',
   '前往系统应用商店管理续费': 'Manage renewal in the system app store',
-  '普通版每月 5 次；Pro 每月 30 次。填写所在地区、可用证件、KYC 偏好和主要用途，从已收录的公开资料中筛出值得进一步了解的卡片。':
-      'Free includes 5 uses per month; Pro includes 30. Enter your location, available documents, KYC preference, and primary use to match cards from published information.',
-  '普通版每月 5 次；Pro 每月 30 次。选定一张卡后整理公开申请材料、步骤、费用与风险提醒；不代办、不提交申请，也不保证审核结果。':
-      'Free includes 5 uses per month; Pro includes 30. Select a card to organize public application materials, steps, fees, and risk reminders. CardFi does not apply on your behalf or guarantee approval.',
+  '普通版每月 6 次；Pro 每月 20 次。填写所在地区、可用证件、KYC 偏好和主要用途，从已收录的公开资料中筛出值得进一步了解的卡片。':
+      'Free includes 6 uses per month; Pro includes 20. Enter your location, available documents, KYC preference, and primary use to match cards from published information.',
+  '普通版每月 6 次；Pro 每月 20 次。选定一张卡后整理公开申请材料、步骤、费用与风险提醒；不代办、不提交申请，也不保证审核结果。':
+      'Free includes 6 uses per month; Pro includes 20. Select a card to organize public application materials, steps, fees, and risk reminders. CardFi does not apply on your behalf or guarantee approval.',
+  '普通版每月 8 次；Pro 每月 30 次。仅提取截图中明确显示的账单字段，金额、费率与损耗由固定公式计算。':
+      'Free includes 8 uses per month; Pro includes 30. AI only extracts fields visibly shown in the bill, while amounts, rates, and loss are calculated with deterministic formulas.',
+  'AI 识别账单': 'AI Bill Recognition',
+  '从市场页进入“AI精选好卡”，填写所在地区、可用证件类型、KYC 偏好和主要用途。普通版每月可用 6 次，Pro 每月可用 20 次；结果不构成申请、审批或金融建议。':
+      'Open AI Card Match from Market and enter your region, available document types, KYC preference, and primary use. Free includes 6 uses per month and Pro includes 20. Results are not application, approval, or financial advice.',
+  '在卡片详情点击“AI 协助开卡”，可查看公开材料清单、操作步骤、费用与风险提醒。普通版每月可用 6 次，Pro 每月可用 20 次；请以发卡方官方实时流程为准。':
+      'Tap AI Application Prep on a card detail page to organize public document checklists, steps, fees, and risk reminders. Free includes 6 uses per month and Pro includes 20. Follow the issuer’s current official process.',
+  '从底部快捷入口选择账单截图，普通版每月可用 8 次，Pro 每月可用 30 次；图片只用于当次字段提取，费用结果由固定公式计算。':
+      'Choose a bill screenshot from the bottom shortcut. Free includes 8 uses per month and Pro includes 30. The image is used only for this extraction, and fee results use deterministic formulas.',
+  '将 AI精选好卡、AI 协助开卡、账单识别分别提升至每月 20、20、30 次，并包含 2–4 卡对比、费用情景估算、长期数据与 Pro 工作区。':
+      'Increase AI Card Match, AI Application Prep, and bill recognition to 20, 20, and 30 monthly uses, plus 2–4 card comparison, fee scenarios, long-range data, and the Pro workspace.',
   '堆叠模式': 'Stacked layout',
   '用纵向层叠展示多张卡片，快速浏览整个卡包':
       'Stack cards vertically to browse your wallet quickly',
@@ -3202,12 +3490,14 @@ const _englishFallbackPhrases = <String, String>{
       'Sync watched items and saved comparison presets through your secure account',
   '月度 Pro': 'Monthly Pro',
   '年度 Pro': 'Yearly Pro',
+  '永久 Pro': 'Lifetime Pro',
   // App Store Connect previously used these display names. Translate them
   // explicitly as a second line of defense for restored or remote copy.
   'CardFi Pro 月度': 'CardFi Pro Monthly',
   'CardFi Pro 年度': 'CardFi Pro Yearly',
   '按月自动续费': 'Renews monthly',
   '按年自动续费': 'Renews yearly',
+  '一次购买，永久解锁': 'One-time purchase, lifetime access',
   '未开通': 'Not subscribed',
   '等待确认': 'Pending confirmation',
   '已生效': 'Active',
@@ -3223,25 +3513,35 @@ const _englishFallbackPhrases = <String, String>{
       'Unable to refresh Pro benefits right now. Try again later.',
   '请先配置 ENABLE_PRO_BILLING 与商店订阅商品。':
       'Pro billing and store subscription products are not configured.',
+  '请先配置 ENABLE_PRO_BILLING 与商店 Pro 商品。':
+      'Pro billing and store Pro products are not configured.',
   'Pro 服务端尚未开放，暂时不能购买。': 'The Pro service is not available for purchases yet.',
   '请先完成正式账号服务接入并登录。': 'Complete account setup and sign in first.',
   '当前账号尚未配置安全的购买关联 ID。':
       'Secure purchase linking is not configured for this account.',
   '商店还没有返回所选订阅商品。': 'The store has not returned the selected subscription yet.',
+  '商店还没有返回所选 Pro 商品。':
+      'The store has not returned the selected Pro product yet.',
   '没有启动购买流程，请稍后重试。': 'The purchase flow did not start. Try again later.',
   '购买流程启动失败，请稍后重试。': 'Unable to start the purchase flow. Try again later.',
   '请先配置商店订阅商品。': 'Store subscription products are not configured.',
+  '请先配置商店 Pro 商品。': 'Store Pro products are not configured.',
   'Pro 服务端尚未开放，暂时不能恢复购买。':
       'The Pro service is not available for purchase restoration yet.',
   '恢复请求已完成；如有有效订阅，权益会在商店返回后自动更新。':
       'The restore request is complete. Any active subscription will update when returned by the store.',
+  '恢复请求已完成；如有有效购买，权益会在商店返回后自动更新。':
+      'The restore request is complete. Any valid purchase will update when returned by the store.',
   '恢复购买失败，请稍后重试。': 'Unable to restore purchases. Try again later.',
   '请先登录后刷新 Pro 权益。': 'Sign in before refreshing Pro benefits.',
   'Pro 服务端尚未开放。': 'The Pro service is not available yet.',
   'Pro 权益刷新失败，请稍后重试。': 'Unable to refresh Pro benefits. Try again later.',
   '订阅商品读取失败：': 'Unable to load subscription products: ',
+  'Pro 商品读取失败：': 'Unable to load Pro products: ',
   '部分订阅商品尚未在当前商店环境生效。':
       'Some subscription products are not available in the current store environment yet.',
+  '部分 Pro 商品尚未在当前商店环境生效。':
+      'Some Pro products are not available in the current store environment yet.',
   '购买正在等待商店确认。': 'The purchase is waiting for store confirmation.',
   '购买已取消。': 'The purchase was cancelled.',
   '购买失败，请稍后重试。': 'The purchase failed. Try again later.',
@@ -3255,6 +3555,8 @@ const _englishFallbackPhrases = <String, String>{
   '商店交易未通过服务端校验。': 'The store transaction did not pass server verification.',
   '该商店订阅已绑定其他账号，请切换到原账号后恢复购买。':
       'This store subscription is linked to another account. Switch to the original account and restore purchases.',
+  '该商店购买已绑定其他账号，请切换到原账号后恢复购买。':
+      'This store purchase is linked to another account. Switch to the original account and restore purchases.',
   '交易已返回，服务端验单暂时失败；请稍后点击恢复购买。':
       'The transaction was returned, but server verification failed temporarily. Restore purchases later.',
   '客户端与服务端的 Pro 商品配置不一致。':
@@ -3264,7 +3566,7 @@ const _englishFallbackPhrases = <String, String>{
   '暂时无法确认 Pro 服务状态。': 'Unable to confirm the Pro service status right now.',
   '商店交易处理失败，请稍后重试或恢复购买。':
       'Unable to process the store transaction. Try again or restore purchases later.',
-  'Pro AI 使用额度 · 每月 80 次': 'Pro AI allowance · 80 uses per month',
+  'Pro AI 使用额度 · 每月共 70 次': 'Pro AI allowance · 70 total uses per month',
   // Published card facts can arrive from the public catalog before the
   // editorial API has promoted them to bilingual fields. Keep verified,
   // recurring labels explicit so English readers still receive the actual
@@ -3423,10 +3725,10 @@ const _englishFallbackPhrases = <String, String>{
       'Match listed cards based on region, documents, intended use, and KYC preferences.',
   '选定卡片后，优先检索项目文章，整理材料、步骤和风险提醒。':
       'Choose a card, then prioritize project articles to organize documents, steps, and risk reminders.',
-  'AI精选好卡、AI 协助开卡各每月 30 次；每分钟最多 3 次。':
-      'AI Card Match and AI Application Prep each include 30 uses per month, with up to 3 uses per minute.',
-  '账单识别每月 20 次，和以上额度独立计算；每月月初重置。':
-      'Bill recognition includes 20 uses per month, counted separately and reset at the start of each month.',
+  'AI精选好卡、AI 协助开卡各每月 20 次；每分钟最多 3 次。':
+      'AI Card Match and AI Application Prep each include 20 uses per month, with up to 3 uses per minute.',
+  '账单识别每月 30 次，和以上额度独立计算；每月月初重置。':
+      'Bill recognition includes 30 uses per month, counted separately and reset at the start of each month.',
   '重新开始 AI 协助开卡？': 'Restart AI Application Prep?',
   '对比、AI 与规则管理': 'Comparison, AI & rule management',
   'AI 协助开卡': 'AI Application Prep',
@@ -3477,6 +3779,9 @@ const _englishFallbackPhrases = <String, String>{
   '费用与支付': 'Fees & payments',
   '申请准备': 'Application prep',
   '数字钱包': 'Digital wallets',
+  '数字钱包支持怎么看': 'How to check digital wallet support',
+  '卡片无法绑定当前使用的数字钱包，但卡片介绍中提到支持数字钱包。':
+      'The card cannot be added to your current digital wallet even though its description mentions digital wallet support.',
   '安全提醒': 'Safety',
   '其他经验': 'Other experience',
   '技巧投稿': 'Tip submission',
@@ -3619,14 +3924,28 @@ const _englishFallbackPhrases = <String, String>{
       'Online details are temporarily unavailable. Showing bundled information.',
   '公开资料整理，具体信息以发卡方为准。':
       'Compiled from public information. Refer to the issuer for final details.',
-  '公开卡片资料、来源、风险提示和基础浏览不会设置付费墙。价格以 App Store 或 Google Play 显示为准。':
-      'Public card information, sources, risk notices and basic browsing remain free. Prices are shown by the App Store or Google Play.',
+  '登录令牌保存在系统安全存储中。账号数据保留至你删除账号或功能不再需要；提交内容按审核与争议处理需要保留，并支持依法提出删除请求。':
+      'Sign-in tokens are kept in secure system storage. Account data is retained until you delete the account or it is no longer needed. Submitted content is retained as needed for moderation and disputes, and you may request deletion where applicable.',
+  '删除 CardFi 账号不会自动取消已有的应用商店订阅。如未来开通订阅，需同时前往系统订阅管理页取消。':
+      'Deleting your CardFi account does not automatically cancel an existing store subscription. If subscriptions become available, cancel them separately in system subscription settings.',
+  '公开卡片资料、来源、风险提示和基础浏览不会设置付费墙。价格与订阅规则以商店确认页显示为准。':
+      'Public card information, sources, risk notices and basic browsing remain free. Pricing and subscription terms are shown on the store confirmation page.',
   '订阅会按所选周期自动续费；可随时前往系统订阅管理页取消。实际价格、扣款时间与续费规则以商店确认页为准。':
       'Subscriptions renew automatically for the selected period. Cancel anytime in system subscription settings. Store confirmation controls pricing and renewal.',
+  '永久 Pro 为一次性购买，不会自动续费；AI 功能继续按页面列明的每月额度使用并重置。实际价格与付款以商店确认页为准。':
+      'Lifetime Pro is a one-time purchase and does not renew. AI features remain subject to the monthly allowances shown in the app. Store confirmation controls pricing and payment.',
+  '永久 Pro 与全部当前 Pro 权益已解锁。':
+      'Lifetime Pro and all current Pro benefits are unlocked.',
   '集中管理高级对比、变更关注、离线资料和云备份。这里的评分只衡量卡包结构与资料完整度，不代表收益或申请成功率。':
       'Manage advanced comparisons, change tracking, offline information and cloud backup. Scores only measure wallet structure and data completeness.',
   'AI 只提取截图中明确显示的金额、币种、费率和手续费；损耗由固定公式计算，不让模型猜测。':
       'AI extracts only amounts, currencies, rates and fees clearly shown in the screenshot. Costs use fixed formulas, not model guesses.',
+  'Qwen 正在识别账单': 'Qwen is recognizing the bill',
+  '正在生成识别小票': 'Printing the recognition receipt',
+  '账单识别完成': 'Bill recognition complete',
+  '消费账单识别结果': 'Bill recognition result',
+  '未发现必须人工确认的字段': 'No fields require mandatory review',
+  'AI 识别结果，请核对后使用': 'AI-recognized result. Review before use.',
   '截图会发送到服务端和第三方 AI 进行一次性识别；App 不会把原图保存到账单记录。':
       'The screenshot is sent to the server and a third-party AI for one-time recognition. The original image is not saved to bill history.',
   '我已确认截图不包含完整卡号、姓名、订单号或其他不必要的敏感信息':
@@ -3637,10 +3956,16 @@ const _englishFallbackPhrases = <String, String>{
       'I agree that CardFi may send the selected card, applicant type, country or region of residence or registration, document types, current stage, and optional question shown above to Alibaba Cloud Model Studio (Bailian) solely to generate this checklist.',
   '我已移除完整卡号、姓名、订单号、地址和二维码，并同意将所选截图经 CardFi 服务器发送给 OpenAI，仅用于本次账单字段识别。':
       'I removed full card numbers, names, order numbers, addresses, and QR codes, and agree that CardFi may send the selected screenshot to OpenAI solely to recognize fields for this request.',
+  '我已移除完整卡号、姓名、订单号、地址和二维码，并同意将所选截图经 CardFi 服务器发送给阿里云百炼 Qwen，仅用于本次账单字段识别。':
+      'I removed full card numbers, names, order numbers, addresses, and QR codes, and agree that CardFi may send the selected screenshot to Alibaba Cloud Model Studio Qwen solely to recognize fields for this request.',
   'CardFi 不保存本次输入或模型结果；阿里云百炼不会将数据用于模型训练，但会依其服务条款和法律要求处理并保存调用数据。':
       'CardFi does not save this input or model result. Alibaba Cloud Model Studio does not use it for model training, but processes and retains call data under its service terms and legal requirements.',
   'CardFi 不把原图保存到账单记录；OpenAI API 默认不使用输入和输出训练模型，但可能保留滥用监测日志最多 30 天。':
       'CardFi does not save the original image to bill history. The OpenAI API does not train on inputs or outputs by default, but may retain abuse-monitoring logs for up to 30 days.',
+  'CardFi 不把原图保存到账单记录；阿里云百炼会依其服务条款和法律要求处理调用数据。':
+      'CardFi does not save the original image to bill history. Alibaba Cloud Model Studio processes call data under its service terms and legal requirements.',
+  '只有你主动选择并逐次同意时，App 才会把消费账单截图经 CardFi 服务器发送给阿里云百炼 Qwen。上传前必须移除完整卡号、姓名、订单号、地址和二维码；CardFi 不把原图写入账单记录。':
+      'Only after you actively select a screenshot and consent for that request will the app send it through CardFi servers to Alibaba Cloud Model Studio Qwen. Remove full card numbers, names, order numbers, addresses, and QR codes first. CardFi does not save the original image to bill history.',
   '请先同意将本次资料发送给阿里云百炼处理。':
       'Agree to send this request data to Alibaba Cloud Model Studio (Bailian) before continuing.',
   '可同时选择 2–4 张卡片，差异项会被轻量标记。申请前仍请以官方最新规则为准。':
@@ -3659,8 +3984,8 @@ const _englishFallbackPhrases = <String, String>{
       'After signing out, the app returns to read-only demo mode. Sign in again to restore account features.',
   '这会永久删除账号及已同步的卡包、收藏、历史、反馈和 Pro 工作区数据，无法恢复。已有应用商店订阅不会自动取消。':
       'This permanently deletes the account and synced wallet, favorites, history, feedback and Pro workspace data. Store subscriptions are not cancelled automatically.',
-  '公开发布后，新版本将通过 App Store 或 Google Play 安装。App 不会绕过应用商店静默更新。':
-      'After public release, updates are installed through the App Store or Google Play. The app does not silently bypass the stores.',
+  '公开发布后，新版本将通过系统应用商店安装。App 不会绕过应用商店静默更新。':
+      'After public release, updates are installed through the system app store. The app does not silently bypass the store.',
   '文章里提到的卡片可以直接点进去查看详情。':
       'Open cards mentioned in the article to view their details.',
   '本文仅整理公开信息，不构成金融建议。':

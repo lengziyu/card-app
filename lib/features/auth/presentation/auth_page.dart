@@ -9,24 +9,20 @@ import 'package:cardfi/core/localization/app_localizations.dart';
 import 'package:cardfi/core/localization/localized_text.dart';
 import 'package:flutter/material.dart' hide Text;
 
-enum AuthMode { login, register }
+enum AuthMode { login, passwordRecovery }
 
 class AuthPage extends StatefulWidget {
   const AuthPage({
     required this.controller,
-    required this.mode,
     required this.onBack,
-    required this.onModeChanged,
     required this.celebrationCards,
     this.referralEnabled = false,
     this.onReferralCodeAccepted,
     super.key,
   });
 
-  final AuthMode mode;
   final AuthController controller;
   final VoidCallback onBack;
-  final ValueChanged<AuthMode> onModeChanged;
   final List<CardSummary> celebrationCards;
   final bool referralEnabled;
   final Future<void> Function(String code)? onReferralCodeAccepted;
@@ -39,11 +35,16 @@ class _AuthPageState extends State<AuthPage> {
   final _formKey = GlobalKey<FormState>();
   final _accountController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _otpController = TextEditingController();
   final _referralCodeController = TextEditingController();
-  bool _passwordVisible = false;
+  bool _usePassword = false;
+  bool _obscurePassword = true;
+  bool _otpSent = false;
+  bool _passwordRecoveryOtpSent = false;
+  int _resendSeconds = 0;
+  Timer? _resendTimer;
   late int _registrationCelebrationVersion;
   bool _showRegistrationCelebration = false;
-  bool get _isLogin => widget.mode == AuthMode.login;
 
   @override
   void initState() {
@@ -66,7 +67,9 @@ class _AuthPageState extends State<AuthPage> {
     widget.controller.removeListener(_handleControllerChanged);
     _accountController.dispose();
     _passwordController.dispose();
+    _otpController.dispose();
     _referralCodeController.dispose();
+    _resendTimer?.cancel();
     super.dispose();
   }
 
@@ -84,48 +87,91 @@ class _AuthPageState extends State<AuthPage> {
 
     FocusScope.of(context).unfocus();
     final email = _accountController.text.trim();
-    final password = _passwordController.text;
-    final awaitingEmailVerification =
-        widget.controller.user?.emailVerified == false;
-    if (awaitingEmailVerification) {
-      await widget.controller.confirmEmailVerification(
+    if (_passwordRecoveryOtpSent) {
+      await widget.controller.verifyPasswordRecoveryOtp(
         email: email,
-        password: password,
+        token: _otpController.text,
       );
-    } else if (_isLogin) {
-      await widget.controller.signIn(email: email, password: password);
-    } else {
-      await widget.controller.register(email: email, password: password);
-      final code = _referralCodeController.text.trim();
-      if (code.isNotEmpty && widget.controller.user != null) {
-        await widget.onReferralCodeAccepted?.call(code);
-      }
+      return;
     }
-    if (widget.controller.isVerified) _passwordController.clear();
-    if (mounted) setState(() => _passwordVisible = false);
-  }
-
-  Future<void> _checkEmailVerification() async {
-    if (!(_formKey.currentState?.validate() ?? false)) return;
-    FocusScope.of(context).unfocus();
-    await widget.controller.confirmEmailVerification(
-      email: _accountController.text.trim(),
-      password: _passwordController.text,
+    if (_usePassword) {
+      final signedIn = await widget.controller.signIn(
+        email: email,
+        password: _passwordController.text,
+      );
+      if (signedIn) _passwordController.clear();
+      return;
+    }
+    if (!_otpSent) {
+      await _savePendingReferralCode();
+      final sent = await widget.controller.sendEmailOtp(email);
+      if (sent && mounted) {
+        setState(() => _otpSent = true);
+        _startResendTimer();
+      }
+      return;
+    }
+    await widget.controller.verifyEmailOtp(
+      email: email,
+      token: _otpController.text,
     );
-    if (widget.controller.isVerified) _passwordController.clear();
-    if (mounted) setState(() => _passwordVisible = false);
+    if (widget.controller.isVerified) _otpController.clear();
   }
 
-  void _switchMode() {
-    FocusScope.of(context).unfocus();
+  Future<void> _savePendingReferralCode() async {
+    final code = _referralCodeController.text.trim();
+    if (code.isNotEmpty) await widget.onReferralCodeAccepted?.call(code);
+  }
+
+  Future<void> _resendOtp() async {
+    if (_resendSeconds > 0 || widget.controller.loading) return;
+    final emailError = _validateAccount(_accountController.text);
+    if (emailError != null) {
+      AppNotice.info(context, emailError, title: '邮箱验证码');
+      return;
+    }
+    final sent = _passwordRecoveryOtpSent
+        ? await widget.controller.resetPassword(_accountController.text.trim())
+        : await widget.controller.sendEmailOtp(_accountController.text.trim());
+    if (sent) _startResendTimer();
+  }
+
+  void _startResendTimer() {
+    _resendTimer?.cancel();
+    if (mounted) setState(() => _resendSeconds = 60);
+    _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted || _resendSeconds <= 1) {
+        timer.cancel();
+        if (mounted) setState(() => _resendSeconds = 0);
+        return;
+      }
+      setState(() => _resendSeconds--);
+    });
+  }
+
+  void _changeEmail() {
+    _resendTimer?.cancel();
     widget.controller.resetAuthenticationFlow();
-    _formKey.currentState?.reset();
-    _accountController.clear();
+    _otpController.clear();
+    setState(() {
+      _otpSent = false;
+      _passwordRecoveryOtpSent = false;
+      _resendSeconds = 0;
+    });
+  }
+
+  void _switchEmailLoginMethod() {
+    _resendTimer?.cancel();
+    widget.controller.resetAuthenticationFlow();
+    _otpController.clear();
     _passwordController.clear();
-    _referralCodeController.clear();
-    if (!mounted) return;
-    setState(() => _passwordVisible = false);
-    widget.onModeChanged(_isLogin ? AuthMode.register : AuthMode.login);
+    setState(() {
+      _usePassword = !_usePassword;
+      _otpSent = false;
+      _passwordRecoveryOtpSent = false;
+      _resendSeconds = 0;
+      _obscurePassword = true;
+    });
   }
 
   Future<void> _resetPassword() async {
@@ -135,7 +181,44 @@ class _AuthPageState extends State<AuthPage> {
       return;
     }
     FocusScope.of(context).unfocus();
-    await widget.controller.resetPassword(_accountController.text.trim());
+    final sent = await widget.controller.resetPassword(
+      _accountController.text.trim(),
+    );
+    if (!sent || !mounted) return;
+    _passwordController.clear();
+    _otpController.clear();
+    setState(() => _passwordRecoveryOtpSent = true);
+    _startResendTimer();
+  }
+
+  Future<void> _signInWithGoogle() async {
+    await _savePendingReferralCode();
+    await widget.controller.signInWithGoogle();
+  }
+
+  Future<void> _signInWithApple() async {
+    final continueWithApple = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('使用 Apple 继续'),
+        content: const Text(
+          '如果你已有 CardFi 邮箱账号，请先取消并使用邮箱验证码登录，再到设置中绑定 Apple，避免 Apple 隐藏邮箱生成独立账号。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('使用邮箱登录'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('继续使用 Apple'),
+          ),
+        ],
+      ),
+    );
+    if (continueWithApple != true) return;
+    await _savePendingReferralCode();
+    await widget.controller.signInWithApple();
   }
 
   String? _validateAccount(String? value) {
@@ -146,10 +229,18 @@ class _AuthPageState extends State<AuthPage> {
     return null;
   }
 
+  String? _validateOtp(String? value) {
+    if (!_otpSent && !_passwordRecoveryOtpSent) return null;
+    final token = value?.trim() ?? '';
+    if (!RegExp(r'^\d{6}$').hasMatch(token)) return '请输入 6 位验证码';
+    return null;
+  }
+
   String? _validatePassword(String? value) {
-    final password = value ?? '';
-    if (password.isEmpty) return '请输入密码';
-    if (!_isLogin && password.length < 8) return '密码至少需要 8 位';
+    if (!_usePassword || _passwordRecoveryOtpSent) return null;
+    if (value == null || value.isEmpty) return '请输入密码';
+    // This is a compatibility login for existing accounts. Do not impose new
+    // password-strength rules that could reject a valid historical password.
     return null;
   }
 
@@ -191,12 +282,10 @@ class _AuthPageState extends State<AuthPage> {
     final compactLayout =
         MediaQuery.textScalerOf(context).scale(1) > 1.35 ||
         MediaQuery.sizeOf(context).width < 340;
-    final awaitingEmailVerification =
-        widget.controller.user?.emailVerified == false;
     return Stack(
       children: [
         CustomScrollView(
-          key: Key(_isLogin ? 'login-page' : 'register-page'),
+          key: const Key('login-page'),
           physics: const BouncingScrollPhysics(),
           slivers: [
             SliverPadding(
@@ -247,54 +336,91 @@ class _AuthPageState extends State<AuthPage> {
                               ),
                             const SizedBox(height: 28),
                             TextFormField(
-                              key: Key('auth-account-field'),
+                              key: const Key('auth-account-field'),
                               controller: _accountController,
+                              readOnly:
+                                  (!_usePassword && _otpSent) ||
+                                  _passwordRecoveryOtpSent,
                               keyboardType: TextInputType.emailAddress,
                               textInputAction: TextInputAction.next,
-                              autofillHints: [
-                                AutofillHints.username,
-                                AutofillHints.email,
-                              ],
+                              autofillHints: const [AutofillHints.email],
                               autocorrect: false,
                               enableSuggestions: false,
                               decoration: _decoration(
-                                hint: '用户名 / 邮箱',
-                                icon: Icons.person_outline_rounded,
+                                hint: '邮箱地址',
+                                icon: Icons.mail_outline_rounded,
+                                suffixIcon:
+                                    ((!_usePassword && _otpSent) ||
+                                        _passwordRecoveryOtpSent)
+                                    ? TextButton(
+                                        key: const Key('auth-change-email'),
+                                        onPressed: _changeEmail,
+                                        child: const Text('更换'),
+                                      )
+                                    : null,
                               ),
                               validator: _validateAccount,
                             ),
-                            const SizedBox(height: 14),
-                            TextFormField(
-                              key: Key('auth-password-field'),
-                              controller: _passwordController,
-                              textInputAction: _isLogin
-                                  ? TextInputAction.done
-                                  : TextInputAction.next,
-                              autofillHints: [
-                                _isLogin
-                                    ? AutofillHints.password
-                                    : AutofillHints.newPassword,
-                              ],
-                              autocorrect: false,
-                              enableSuggestions: false,
-                              obscureText: !_passwordVisible,
-                              onFieldSubmitted: _isLogin
-                                  ? (_) => unawaited(_submit())
-                                  : null,
-                              decoration: _decoration(
-                                hint: _isLogin ? '密码' : '至少 8 位',
-                                icon: Icons.lock_outline_rounded,
-                                suffixIcon: _VisibilityButton(
-                                  key: Key('password-visibility'),
-                                  visible: _passwordVisible,
-                                  onPressed: () => setState(
-                                    () => _passwordVisible = !_passwordVisible,
+                            if (_usePassword && !_passwordRecoveryOtpSent) ...[
+                              const SizedBox(height: 14),
+                              TextFormField(
+                                key: const Key('auth-password-field'),
+                                controller: _passwordController,
+                                obscureText: _obscurePassword,
+                                keyboardType: TextInputType.visiblePassword,
+                                textInputAction: TextInputAction.done,
+                                autofillHints: const [AutofillHints.password],
+                                autocorrect: false,
+                                enableSuggestions: false,
+                                onFieldSubmitted: (_) => unawaited(_submit()),
+                                decoration: _decoration(
+                                  hint: '密码',
+                                  icon: Icons.lock_outline_rounded,
+                                  suffixIcon: IconButton(
+                                    key: const Key('auth-toggle-password'),
+                                    tooltip: AppLocalizations.of(
+                                      context,
+                                    ).text(_obscurePassword ? '显示密码' : '隐藏密码'),
+                                    onPressed: () => setState(
+                                      () =>
+                                          _obscurePassword = !_obscurePassword,
+                                    ),
+                                    icon: Icon(
+                                      _obscurePassword
+                                          ? Icons.visibility_outlined
+                                          : Icons.visibility_off_outlined,
+                                    ),
                                   ),
                                 ),
+                                validator: _validatePassword,
                               ),
-                              validator: _validatePassword,
-                            ),
-                            if (!_isLogin && widget.referralEnabled) ...[
+                            ] else if (_otpSent ||
+                                _passwordRecoveryOtpSent) ...[
+                              const SizedBox(height: 14),
+                              TextFormField(
+                                key: const Key('auth-otp-field'),
+                                controller: _otpController,
+                                keyboardType: TextInputType.number,
+                                textInputAction: TextInputAction.done,
+                                autofillHints: const [
+                                  AutofillHints.oneTimeCode,
+                                ],
+                                autocorrect: false,
+                                enableSuggestions: false,
+                                maxLength: 6,
+                                onFieldSubmitted: (_) => unawaited(_submit()),
+                                decoration: _decoration(
+                                  hint: _passwordRecoveryOtpSent
+                                      ? '6 位密码重置验证码'
+                                      : '6 位邮箱验证码',
+                                  icon: Icons.password_rounded,
+                                ),
+                                validator: _validateOtp,
+                              ),
+                            ],
+                            if (widget.referralEnabled &&
+                                !_usePassword &&
+                                !_otpSent) ...[
                               const SizedBox(height: 14),
                               TextFormField(
                                 key: const Key('auth-referral-code-field'),
@@ -320,65 +446,123 @@ class _AuthPageState extends State<AuthPage> {
                                 },
                               ),
                             ],
-                            const SizedBox(height: 12),
-                            _AuthOptions(
-                              compact: compactLayout,
-                              isLogin: _isLogin,
-                              onForgotPassword: _resetPassword,
-                              onModeChanged: _switchMode,
-                            ),
                             if (widget.controller.message
                                 case final message?) ...[
-                              const SizedBox(height: 8),
+                              const SizedBox(height: 12),
                               _AuthStatusCard(message: message),
-                            ],
-                            if (widget.controller.user case final user?
-                                when !user.emailVerified) ...[
-                              const SizedBox(height: 10),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: _VerificationSecondaryButton(
-                                      key: const Key(
-                                        'auth-resend-verification',
-                                      ),
-                                      onPressed: widget.controller.loading
-                                          ? null
-                                          : widget
-                                                .controller
-                                                .resendVerification,
-                                      label: '重发验证邮件',
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: _VerificationPrimaryButton(
-                                      key: const Key(
-                                        'auth-refresh-verification',
-                                      ),
-                                      onPressed: widget.controller.loading
-                                          ? null
-                                          : _checkEmailVerification,
-                                      label: '我已完成验证',
-                                    ),
-                                  ),
-                                ],
-                              ),
                             ],
                             const SizedBox(height: 16),
                             _GradientSubmitButton(
-                              key: Key('auth-submit'),
+                              key: const Key('auth-submit'),
                               onPressed: widget.controller.loading
                                   ? null
                                   : _submit,
                               label: widget.controller.loading
                                   ? '请稍候…'
-                                  : awaitingEmailVerification
-                                  ? '检查验证并登录'
-                                  : _isLogin
+                                  : _passwordRecoveryOtpSent
+                                  ? '验证重置码'
+                                  : _usePassword
                                   ? '登录'
-                                  : '注册并验证邮箱',
+                                  : _otpSent
+                                  ? '验证并登录'
+                                  : '获取验证码',
                             ),
+                            if (_usePassword && !_passwordRecoveryOtpSent) ...[
+                              const SizedBox(height: 8),
+                              Row(
+                                key: const Key('auth-password-links'),
+                                children: [
+                                  TextButton(
+                                    key: const Key('auth-forgot-password'),
+                                    onPressed: widget.controller.loading
+                                        ? null
+                                        : _resetPassword,
+                                    style: TextButton.styleFrom(
+                                      minimumSize: const Size(0, 44),
+                                      padding: EdgeInsets.zero,
+                                      alignment: Alignment.centerLeft,
+                                    ),
+                                    child: const Text('忘记密码'),
+                                  ),
+                                  const Spacer(),
+                                  TextButton(
+                                    key: const Key('auth-use-email-otp'),
+                                    onPressed: widget.controller.loading
+                                        ? null
+                                        : _switchEmailLoginMethod,
+                                    style: TextButton.styleFrom(
+                                      minimumSize: const Size(0, 44),
+                                      padding: EdgeInsets.zero,
+                                      alignment: Alignment.centerRight,
+                                    ),
+                                    child: const Text('使用邮箱验证码登录'),
+                                  ),
+                                ],
+                              ),
+                            ] else if (!_otpSent &&
+                                !_passwordRecoveryOtpSent) ...[
+                              const SizedBox(height: 8),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: TextButton(
+                                  key: const Key('auth-use-password'),
+                                  onPressed: widget.controller.loading
+                                      ? null
+                                      : _switchEmailLoginMethod,
+                                  child: const Text('使用密码登录'),
+                                ),
+                              ),
+                            ],
+                            if (_otpSent || _passwordRecoveryOtpSent) ...[
+                              const SizedBox(height: 8),
+                              TextButton(
+                                key: const Key('auth-resend-otp'),
+                                onPressed:
+                                    _resendSeconds == 0 &&
+                                        !widget.controller.loading
+                                    ? _resendOtp
+                                    : null,
+                                child: Text(
+                                  _resendSeconds > 0
+                                      ? '$_resendSeconds 秒后可重新发送'
+                                      : '重新发送验证码',
+                                ),
+                              ),
+                            ],
+                            if (!_otpSent &&
+                                !_passwordRecoveryOtpSent &&
+                                (widget.controller.appleConfigured ||
+                                    widget.controller.googleConfigured)) ...[
+                              const SizedBox(height: 18),
+                              const _AuthDivider(label: '或使用以下方式登录'),
+                              const SizedBox(height: 14),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  if (widget.controller.appleConfigured)
+                                    _SocialAuthButton(
+                                      key: const Key('auth-apple'),
+                                      icon: Icons.apple,
+                                      label: '使用 Apple 登录',
+                                      onPressed: widget.controller.loading
+                                          ? null
+                                          : _signInWithApple,
+                                    ),
+                                  if (widget.controller.appleConfigured &&
+                                      widget.controller.googleConfigured)
+                                    const SizedBox(width: 14),
+                                  if (widget.controller.googleConfigured)
+                                    _SocialAuthButton(
+                                      key: const Key('auth-google'),
+                                      leading: const _GoogleMark(),
+                                      label: '使用 Google 登录',
+                                      onPressed: widget.controller.loading
+                                          ? null
+                                          : _signInWithGoogle,
+                                    ),
+                                ],
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -434,6 +618,280 @@ class _AuthPageState extends State<AuthPage> {
   );
 }
 
+class PasswordRecoveryPage extends StatefulWidget {
+  const PasswordRecoveryPage({
+    required this.controller,
+    required this.onBack,
+    super.key,
+  });
+
+  final AuthController controller;
+  final VoidCallback onBack;
+
+  @override
+  State<PasswordRecoveryPage> createState() => _PasswordRecoveryPageState();
+}
+
+class _PasswordRecoveryPageState extends State<PasswordRecoveryPage> {
+  final _formKey = GlobalKey<FormState>();
+  final _passwordController = TextEditingController();
+  final _confirmationController = TextEditingController();
+  bool _obscurePassword = true;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_handleControllerChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant PasswordRecoveryPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller == widget.controller) return;
+    oldWidget.controller.removeListener(_handleControllerChanged);
+    widget.controller.addListener(_handleControllerChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_handleControllerChanged);
+    _passwordController.dispose();
+    _confirmationController.dispose();
+    super.dispose();
+  }
+
+  void _handleControllerChanged() {
+    if (mounted) setState(() {});
+  }
+
+  String? _validatePassword(String? value) {
+    final password = value ?? '';
+    if (password.isEmpty) return '请输入密码';
+    if (password.length < 8) return '密码至少需要 8 位';
+    return null;
+  }
+
+  String? _validateConfirmation(String? value) {
+    if ((value ?? '').isEmpty) return '请再次输入新密码';
+    if (value != _passwordController.text) return '两次输入的密码不一致';
+    return null;
+  }
+
+  Future<void> _submit() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    FocusScope.of(context).unfocus();
+    final updated = await widget.controller.updateRecoveredPassword(
+      _passwordController.text,
+    );
+    if (updated) {
+      _passwordController.clear();
+      _confirmationController.clear();
+    }
+  }
+
+  Future<void> _cancel() async {
+    await widget.controller.cancelPasswordRecovery();
+    if (mounted) widget.onBack();
+  }
+
+  InputDecoration _decoration({required String hint, required IconData icon}) {
+    final border = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(18),
+      borderSide: BorderSide(color: AppColors.line),
+    );
+    return InputDecoration(
+      hintText: AppLocalizations.of(context).text(hint),
+      hintStyle: TextStyle(color: AppColors.textMuted),
+      prefixIcon: Icon(icon, color: AppColors.textMuted, size: 21),
+      suffixIcon: IconButton(
+        key: Key('password-recovery-visibility-$hint'),
+        tooltip: AppLocalizations.of(
+          context,
+        ).text(_obscurePassword ? '显示密码' : '隐藏密码'),
+        onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+        icon: Icon(
+          _obscurePassword
+              ? Icons.visibility_outlined
+              : Icons.visibility_off_outlined,
+        ),
+      ),
+      filled: true,
+      fillColor: AppColors.glassStrong,
+      border: border,
+      enabledBorder: border,
+      focusedBorder: border.copyWith(
+        borderSide: BorderSide(color: AppColors.cyan, width: 1.4),
+      ),
+      errorBorder: border.copyWith(
+        borderSide: const BorderSide(color: Color(0xFFFF8496)),
+      ),
+      focusedErrorBorder: border.copyWith(
+        borderSide: const BorderSide(color: Color(0xFFFF8496), width: 1.4),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+    );
+  }
+
+  BoxDecoration _panelDecoration() => BoxDecoration(
+    gradient: LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: AppColors.isDark
+          ? const [Color(0xE30A1238), Color(0xE30A102D), Color(0xE31B1758)]
+          : const [Color(0xF2FFFFFF), Color(0xE8F7F9FF), Color(0xE1F0ECFF)],
+    ),
+    borderRadius: BorderRadius.circular(28),
+    border: Border.all(
+      color: AppColors.isDark
+          ? const Color(0x6B6578DD)
+          : const Color(0xE8DFE6FF),
+    ),
+    boxShadow: [
+      BoxShadow(
+        color: AppColors.isDark
+            ? const Color(0x52040715)
+            : const Color(0x337787C9),
+        blurRadius: 54,
+        offset: const Offset(0, 22),
+      ),
+    ],
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final topInset = MediaQuery.paddingOf(context).top;
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
+    final compactLayout =
+        MediaQuery.textScalerOf(context).scale(1) > 1.35 ||
+        MediaQuery.sizeOf(context).width < 340;
+    return CustomScrollView(
+      key: const Key('password-recovery-page'),
+      physics: const BouncingScrollPhysics(),
+      slivers: [
+        SliverPadding(
+          padding: EdgeInsets.fromLTRB(20, topInset + 24, 20, 28 + bottomInset),
+          sliver: SliverFillRemaining(
+            hasScrollBody: false,
+            child: Align(
+              alignment: const Alignment(0, -0.12),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 460),
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(22, 22, 22, 20),
+                  decoration: _panelDecoration(),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (compactLayout)
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const _BrandMark(),
+                              const SizedBox(height: 14),
+                              _HomeButton(
+                                key: const Key('password-recovery-home'),
+                                onPressed: () => unawaited(_cancel()),
+                              ),
+                            ],
+                          )
+                        else
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Expanded(child: _BrandMark()),
+                              const SizedBox(width: 12),
+                              _HomeButton(
+                                key: const Key('password-recovery-home'),
+                                onPressed: () => unawaited(_cancel()),
+                              ),
+                            ],
+                          ),
+                        const SizedBox(height: 28),
+                        const Text(
+                          '设置新密码',
+                          key: Key('password-recovery-title'),
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '请输入至少 8 位的新密码。更新后，账号和已同步数据不会改变。',
+                          style: TextStyle(
+                            color: AppColors.textMuted,
+                            fontSize: 12.5,
+                            height: 1.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        TextFormField(
+                          key: const Key('password-recovery-password'),
+                          controller: _passwordController,
+                          obscureText: _obscurePassword,
+                          keyboardType: TextInputType.visiblePassword,
+                          textInputAction: TextInputAction.next,
+                          autofillHints: const [AutofillHints.newPassword],
+                          autocorrect: false,
+                          enableSuggestions: false,
+                          decoration: _decoration(
+                            hint: '新密码',
+                            icon: Icons.lock_outline_rounded,
+                          ),
+                          validator: _validatePassword,
+                        ),
+                        const SizedBox(height: 14),
+                        TextFormField(
+                          key: const Key('password-recovery-confirmation'),
+                          controller: _confirmationController,
+                          obscureText: _obscurePassword,
+                          keyboardType: TextInputType.visiblePassword,
+                          textInputAction: TextInputAction.done,
+                          autofillHints: const [AutofillHints.newPassword],
+                          autocorrect: false,
+                          enableSuggestions: false,
+                          onFieldSubmitted: (_) => unawaited(_submit()),
+                          decoration: _decoration(
+                            hint: '确认新密码',
+                            icon: Icons.verified_user_outlined,
+                          ),
+                          validator: _validateConfirmation,
+                        ),
+                        if (widget.controller.message case final message?) ...[
+                          const SizedBox(height: 12),
+                          _AuthStatusCard(message: message),
+                        ],
+                        const SizedBox(height: 16),
+                        _GradientSubmitButton(
+                          key: const Key('password-recovery-submit'),
+                          onPressed: widget.controller.loading ? null : _submit,
+                          label: widget.controller.loading ? '请稍候…' : '更新密码',
+                        ),
+                        const SizedBox(height: 8),
+                        TextButton(
+                          key: const Key('password-recovery-cancel'),
+                          onPressed: widget.controller.loading
+                              ? null
+                              : () => unawaited(_cancel()),
+                          child: const Text('取消并返回'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _BrandMark extends StatelessWidget {
   const _BrandMark();
 
@@ -443,21 +901,15 @@ class _BrandMark extends StatelessWidget {
       maxScaleFactor: 1.3,
       child: Row(
         children: [
-          Container(
-            width: 60,
-            height: 60,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(18),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [AppColors.violet, AppColors.cyan],
-              ),
-            ),
-            child: const Icon(
-              Icons.credit_card_rounded,
-              color: Colors.white,
-              size: 30,
+          ClipRRect(
+            key: const Key('auth-brand-logo'),
+            borderRadius: BorderRadius.circular(18),
+            child: Image.asset(
+              'assets/branding/cardfi-icon-master.png',
+              width: 60,
+              height: 60,
+              fit: BoxFit.cover,
+              filterQuality: FilterQuality.high,
             ),
           ),
           const SizedBox(width: 14),
@@ -524,60 +976,100 @@ class _HomeButton extends StatelessWidget {
   }
 }
 
-class _AuthOptions extends StatelessWidget {
-  const _AuthOptions({
-    required this.compact,
-    required this.isLogin,
-    required this.onModeChanged,
-    required this.onForgotPassword,
+class _SocialAuthButton extends StatelessWidget {
+  const _SocialAuthButton({
+    required this.label,
+    required this.onPressed,
+    this.icon,
+    this.leading,
+    super.key,
   });
 
-  final bool compact;
-  final bool isLogin;
-  final VoidCallback onModeChanged;
-  final VoidCallback onForgotPassword;
+  final String label;
+  final VoidCallback? onPressed;
+  final IconData? icon;
+  final Widget? leading;
 
   @override
   Widget build(BuildContext context) {
-    final leading = isLogin
-        ? TextButton(
-            key: const Key('auth-forgot-password'),
-            onPressed: onForgotPassword,
-            style: TextButton.styleFrom(
-              padding: EdgeInsets.zero,
-              foregroundColor: AppColors.textMuted,
-            ),
-            child: const Text('忘记密码'),
-          )
-        : TextButton(
-            onPressed: onModeChanged,
-            style: TextButton.styleFrom(
-              padding: EdgeInsets.zero,
-              foregroundColor: AppColors.textMuted,
-            ),
-            child: const Text('返回'),
-          );
-    final trailing = TextButton(
-      key: Key(isLogin ? 'switch-to-register' : 'switch-to-login'),
-      onPressed: onModeChanged,
-      style: TextButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 2),
-        foregroundColor: AppColors.cyan,
-        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900),
+    return Semantics(
+      button: true,
+      label: label,
+      child: SizedBox(
+        width: 56,
+        height: 56,
+        child: IconButton(
+          onPressed: onPressed,
+          tooltip: label,
+          icon: leading ?? Icon(icon, size: 28),
+          style: IconButton.styleFrom(
+            foregroundColor: AppColors.text,
+            backgroundColor: AppColors.isDark
+                ? const Color(0x7A111936)
+                : const Color(0xEFFFFFFF),
+            side: BorderSide(color: AppColors.line),
+            shape: const CircleBorder(),
+          ),
+        ),
       ),
-      child: Text(isLogin ? '创建账号' : '已有账号'),
     );
-    return MediaQuery.withClampedTextScaling(
-      maxScaleFactor: 1.3,
-      child: compact
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                leading,
-                Align(alignment: Alignment.centerRight, child: trailing),
-              ],
-            )
-          : Row(children: [leading, const Spacer(), trailing]),
+  }
+}
+
+class _GoogleMark extends StatelessWidget {
+  const _GoogleMark();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 22,
+      child: ShaderMask(
+        shaderCallback: (bounds) => const SweepGradient(
+          colors: [
+            Color(0xFF4285F4),
+            Color(0xFF34A853),
+            Color(0xFFFBBC05),
+            Color(0xFFEA4335),
+            Color(0xFF4285F4),
+          ],
+        ).createShader(bounds),
+        blendMode: BlendMode.srcIn,
+        child: const Text(
+          'G',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 25,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AuthDivider extends StatelessWidget {
+  const _AuthDivider({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(child: Divider(color: AppColors.line)),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: AppColors.textMuted,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        Expanded(child: Divider(color: AppColors.line)),
+      ],
     );
   }
 }
@@ -679,123 +1171,6 @@ class _GradientSubmitButton extends StatelessWidget {
   }
 }
 
-class _VerificationSecondaryButton extends StatelessWidget {
-  const _VerificationSecondaryButton({
-    required this.label,
-    required this.onPressed,
-    super.key,
-  });
-
-  final String label;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      onPressed: onPressed,
-      icon: const Icon(Icons.mark_email_read_outlined, size: 17),
-      label: Text(label),
-      style: OutlinedButton.styleFrom(
-        minimumSize: const Size.fromHeight(52),
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        foregroundColor: AppColors.isDark
-            ? const Color(0xFFE7E9FF)
-            : const Color(0xFF5667D4),
-        backgroundColor: AppColors.isDark
-            ? const Color(0x4D1D294F)
-            : const Color(0xCFFFFFFF),
-        side: BorderSide(
-          color: AppColors.isDark
-              ? const Color(0x806E7DF0)
-              : const Color(0xA08E96FF),
-          width: 1.25,
-        ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900),
-        elevation: 0,
-        shadowColor: const Color(0x305A68B8),
-      ),
-    );
-  }
-}
-
-class _VerificationPrimaryButton extends StatelessWidget {
-  const _VerificationPrimaryButton({
-    required this.label,
-    required this.onPressed,
-    super.key,
-  });
-
-  final String label;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final enabled = onPressed != null;
-    return Opacity(
-      opacity: enabled ? 1 : .5,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: AppColors.isDark
-                ? const [Color(0xFF777BFF), Color(0xFF515BB7)]
-                : const [Color(0xFF6E78F3), Color(0xFF535DB6)],
-          ),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withValues(alpha: .2)),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x42535DCD),
-              blurRadius: 18,
-              offset: Offset(0, 10),
-            ),
-          ],
-        ),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onPressed,
-            borderRadius: BorderRadius.circular(16),
-            child: SizedBox(
-              height: 52,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(
-                    Icons.verified_rounded,
-                    color: Colors.white,
-                    size: 17,
-                  ),
-                  const SizedBox(width: 6),
-                  Flexible(
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w900,
-                        shadows: [
-                          Shadow(
-                            color: Color(0x500D174F),
-                            blurRadius: 5,
-                            offset: Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _AuthStatusCard extends StatelessWidget {
   const _AuthStatusCard({required this.message});
 
@@ -846,29 +1221,6 @@ class _AuthStatusCard extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _VisibilityButton extends StatelessWidget {
-  const _VisibilityButton({
-    required this.visible,
-    required this.onPressed,
-    super.key,
-  });
-
-  final bool visible;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return IconButton(
-      onPressed: onPressed,
-      tooltip: visible ? '隐藏密码' : '显示密码',
-      icon: Icon(
-        visible ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-        color: AppColors.textMuted,
       ),
     );
   }

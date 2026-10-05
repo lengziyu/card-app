@@ -10,6 +10,7 @@ class CardArtwork extends StatelessWidget {
     this.fit = BoxFit.cover,
     this.alignment = Alignment.center,
     this.showGeneratedLabels = true,
+    this.memCacheWidth,
     super.key,
   });
 
@@ -17,6 +18,7 @@ class CardArtwork extends StatelessWidget {
   final BoxFit fit;
   final Alignment alignment;
   final bool showGeneratedLabels;
+  final int? memCacheWidth;
 
   @override
   Widget build(BuildContext context) {
@@ -25,9 +27,11 @@ class CardArtwork extends StatelessWidget {
       return LayoutBuilder(
         builder: (context, constraints) {
           final pixelRatio = MediaQuery.devicePixelRatioOf(context);
-          final width = constraints.maxWidth.isFinite
-              ? (constraints.maxWidth * pixelRatio).round().clamp(1, 1280)
-              : null;
+          final width =
+              memCacheWidth ??
+              (constraints.maxWidth.isFinite
+                  ? (constraints.maxWidth * pixelRatio).round().clamp(1, 1280)
+                  : null);
           return CachedNetworkImage(
             imageUrl: imageUrl,
             fit: fit,

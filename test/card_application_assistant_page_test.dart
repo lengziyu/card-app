@@ -153,8 +153,23 @@ void main() {
     );
     tester.widget<Checkbox>(consentCheckbox).onChanged!(true);
     await tester.pump();
+    await tester.enterText(
+      find.byKey(const Key('application-assistant-question')),
+      'changed after consent',
+    );
+    await tester.pump();
+    expect(tester.widget<Checkbox>(consentCheckbox).value, isFalse);
+    tester.widget<Checkbox>(consentCheckbox).onChanged!(true);
+    await tester.pump();
     await tester.tap(find.byKey(const Key('application-assistant-submit')));
     await tester.pumpAndSettle();
+
+    final resultTop = tester
+        .getTopLeft(find.byKey(const Key('application-assistant-result')))
+        .dy;
+    expect(resultTop, greaterThanOrEqualTo(80));
+    expect(resultTop, lessThanOrEqualTo(86));
+
     await tester.drag(find.byType(ListView), const Offset(0, -520));
     await tester.pumpAndSettle();
 

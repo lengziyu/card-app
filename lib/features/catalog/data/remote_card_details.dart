@@ -92,6 +92,9 @@ class RemoteCardDetailRepository {
     final chinaKyc = detail['chinaKyc'] is Map<String, dynamic>
         ? detail['chinaKyc'] as Map<String, dynamic>
         : const <String, dynamic>{};
+    final openingRequirement = detail['openingRequirement'] is Map
+        ? Map<String, dynamic>.from(detail['openingRequirement'] as Map)
+        : const <String, dynamic>{};
     final todeyFacts = detail['todeyFacts'] is Map<String, dynamic>
         ? detail['todeyFacts'] as Map<String, dynamic>
         : const <String, dynamic>{};
@@ -164,8 +167,43 @@ class RemoteCardDetailRepository {
       rating: _positiveDouble(detail['rating']),
       reviewCount: _positiveInt(detail['reviews']),
       chinaKyc: chinaKyc.isEmpty ? null : _chinaKycFromJson(chinaKyc, locale),
+      openingRequirements: openingRequirement.isEmpty
+          ? null
+          : _openingRequirementsFromJson(openingRequirement, locale),
       inviteCode: _nullableText(detail['inviteCode']),
       inviteUrl: _nullableText(detail['inviteUrl']),
+    );
+  }
+
+  CardOpeningRequirements _openingRequirementsFromJson(
+    Map<String, dynamic> value,
+    Locale? locale,
+  ) {
+    final requirements = value['requirements'] is Map
+        ? Map<String, dynamic>.from(value['requirements'] as Map)
+        : const <String, dynamic>{};
+    OpeningRequirementState state(String key) {
+      return switch (requirements[key]?.toString()) {
+        'required' => OpeningRequirementState.required,
+        'notRequired' => OpeningRequirementState.notRequired,
+        _ => OpeningRequirementState.unknown,
+      };
+    }
+
+    return CardOpeningRequirements(
+      states: {
+        OpeningRequirementKind.inviteCode: state('inviteCode'),
+        OpeningRequirementKind.idCard: state('idCard'),
+        OpeningRequirementKind.passport: state('passport'),
+        OpeningRequirementKind.overseasAddressProof: state(
+          'overseasAddressProof',
+        ),
+        OpeningRequirementKind.overseasPhone: state('overseasPhone'),
+      },
+      summary: _localizedText(value, 'summary', locale),
+      note: _localizedText(value, 'note', locale),
+      sourceName: _nullableText(value['sourceName']) ?? '',
+      checkedAt: DateTime.tryParse(value['checkedAt']?.toString() ?? ''),
     );
   }
 
@@ -430,7 +468,10 @@ class RemoteCardDetailRepository {
   }
 
   String _displayPublicText(String raw, Locale? locale) {
-    final text = raw.trim();
+    // Escaped line breaks can arrive in any localized API field. Normalize
+    // transport artifacts before choosing whether language conversion is
+    // needed so English and other locales never render a literal "\\n".
+    final text = raw.replaceAll(r'\n', '\n').replaceAll('\ufeff', '').trim();
     // The device locale is already represented by a server translation when
     // available. The small built-in converter only exists to keep the Chinese
     // experience readable for legacy English-only records; applying it to
@@ -441,17 +482,17 @@ class RemoteCardDetailRepository {
   }
 
   String _translatePublicText(String raw) {
-    var text = raw
-        .replaceAll(r'\n', '\n')
-        .replaceAll('﻿', '')
-        .replaceAll('Ranked+ 可用性：', '可用性：')
-        .trim();
+    var text = raw.replaceAll('Ranked+ 可用性：', '可用性：').trim();
     const exact = <String, String>{
       r'One time $10 activation fee for virtual card, and $100 for physical card.':
           r'虚拟卡一次性激活费 $10；实体卡一次性激活费 $100。',
       'Refers to the crypto conversion rate.': '适用于加密资产兑换汇率。',
       r'Monthly ATM Withdrawal Limits ≤ 10,000 USD : 2%\nMonthly ATM Withdrawal Limits > 10,000 USD : 3%':
           r'每月 ATM 取现不超过 10,000 USD：2%；超过 10,000 USD：3%。',
+      'Core: 0-0.5%\nLuxe: 0-0.25%\nPinnacle: 0%\nVIP: 0%':
+          'Core：0–0.5%\nLuxe：0–0.25%\nPinnacle：0%\nVIP：0%',
+      r'All ATM withdrawals incur 2% fee; daily limit $250 USD, max 3 attempts per 24h':
+          r'每日 ATM 取现限额 $250 USD，24 小时最多 3 次。',
       'Excludes: ATM withdrawals, P2P transfers, FX transactions, tax payments, gift cards, money orders, gambling, crypto transactions, wire transfers, balance transfers, cash advances':
           '不计入返现：ATM 取现、P2P 转账、外汇交易、税款、礼品卡、汇票、博彩、加密资产交易、电汇、余额转移及现金预借。',
       '• Lite: 2% cashback (max \$250 per month)\n  • Core: 3% base cashback + 5% AI cashback\n  • Platinum: 4% cashback + 10% AI cashback (max \$1,000 per month)':

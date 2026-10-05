@@ -56,7 +56,7 @@ void main() {
     expect(_navigationIcons('市场'), findsOneWidget);
   });
 
-  testWidgets('bill shortcut carries its Pro crown', (tester) async {
+  testWidgets('bill shortcut is available without a Pro crown', (tester) async {
     await tester.pumpWidget(_testApp(selectedIndex: 0));
     await tester.tap(find.byKey(const Key('nav-add')));
     await tester.pumpAndSettle();
@@ -66,7 +66,7 @@ void main() {
         of: find.byKey(const Key('nav-quick-bill')),
         matching: find.byKey(const Key('pro-crown-badge')),
       ),
-      findsOneWidget,
+      findsNothing,
     );
   });
 

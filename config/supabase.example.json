@@ -3,5 +3,11 @@
   "SUPABASE_URL": "https://YOUR_PROJECT_REF.supabase.co",
   "SUPABASE_PUBLISHABLE_KEY": "",
   "SUPABASE_EMAIL_REDIRECT_URL": "cn.lengziyu.cardapp://auth-callback",
-  "AUTH_ACCOUNT_PATH": "/api/auth/account"
+  "SUPABASE_PASSWORD_RECOVERY_OTP_REDIRECT_URL": "cn.lengziyu.cardapp://auth-callback?mode=password-recovery-otp",
+  "ENABLE_GOOGLE_AUTH": false,
+  "GOOGLE_WEB_CLIENT_ID": "",
+  "GOOGLE_IOS_CLIENT_ID": "",
+  "ENABLE_APPLE_AUTH": false,
+  "AUTH_ACCOUNT_PATH": "/api/auth/account",
+  "AUTH_APPLE_CREDENTIAL_PATH": "/api/auth/apple-credential"
 }

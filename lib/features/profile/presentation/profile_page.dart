@@ -15,6 +15,7 @@ enum ProfileSection {
   pro('Pro 会员', Icons.workspace_premium_outlined),
   services('订阅与服务', Icons.auto_awesome_outlined),
   favorites('我的收藏', Icons.star_border_rounded),
+  bills('我的账单', Icons.receipt_long_outlined),
   history('浏览记录', Icons.history_rounded),
   settings('设置', Icons.settings_outlined),
   language('显示语言', Icons.language_rounded),
@@ -30,7 +31,7 @@ enum ProfileSection {
   notifications('消息与反馈', Icons.notifications_none_rounded),
   reminders('提醒配置', Icons.notifications_active_outlined),
   feedback('反馈', Icons.feedback_outlined),
-  referral('邀请好友', Icons.card_giftcard_outlined),
+  referral('邀请好友得会员', Icons.card_giftcard_outlined),
   motionLab('动效调试', Icons.auto_awesome_motion_rounded);
 
   const ProfileSection(this.title, this.icon);
@@ -49,7 +50,7 @@ class ProfilePage extends StatelessWidget {
     this.authUser,
     this.cardCount = 0,
     this.favoriteCount = 0,
-    this.referralEnabled = false,
+    this.billHistoryEnabled = false,
     super.key,
   });
 
@@ -61,7 +62,7 @@ class ProfilePage extends StatelessWidget {
   final AuthUser? authUser;
   final int cardCount;
   final int favoriteCount;
-  final bool referralEnabled;
+  final bool billHistoryEnabled;
 
   @override
   Widget build(BuildContext context) {
@@ -73,6 +74,7 @@ class ProfilePage extends StatelessWidget {
     void openSection(ProfileSection section) {
       const accountSections = {
         ProfileSection.favorites,
+        ProfileSection.bills,
         ProfileSection.history,
         ProfileSection.notifications,
         ProfileSection.referral,
@@ -112,10 +114,10 @@ class ProfilePage extends StatelessWidget {
                 sections: [
                   ProfileSection.pro,
                   ProfileSection.favorites,
+                  if (billHistoryEnabled) ProfileSection.bills,
                   ProfileSection.history,
                   if (authUser?.emailVerified == true)
                     ProfileSection.notifications,
-                  if (referralEnabled) ProfileSection.referral,
                 ],
                 onOpenSection: openSection,
                 proActive: hasProMembership,

@@ -43,6 +43,42 @@ import UserNotifications
       }
     }
     pushChannel = channel
+
+    let notificationSettingsChannel = FlutterMethodChannel(
+      name: "cardfi/notifications",
+      binaryMessenger: engineBridge.applicationRegistrar.messenger()
+    )
+    notificationSettingsChannel.setMethodCallHandler { call, result in
+      switch call.method {
+      case "authorizationStatus":
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+          let value: String
+          switch settings.authorizationStatus {
+          case .notDetermined:
+            value = "notDetermined"
+          case .authorized:
+            value = "authorized"
+          case .denied:
+            value = "denied"
+          case .provisional, .ephemeral:
+            value = "provisional"
+          @unknown default:
+            value = "unavailable"
+          }
+          DispatchQueue.main.async { result(value) }
+        }
+      case "openSettings":
+        guard let url = URL(string: UIApplication.openSettingsURLString) else {
+          result(false)
+          return
+        }
+        UIApplication.shared.open(url, options: [:]) { opened in
+          result(opened)
+        }
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
   }
 
   override func application(

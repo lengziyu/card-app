@@ -70,13 +70,13 @@ class AiDataConsentTile extends StatelessWidget {
     AiDataConsentKind.applicationPrep =>
       '我同意将上述目标卡片、申请主体、居住或注册国家和地区、材料类型、当前阶段和可选问题，经 CardFi 服务器发送给阿里云百炼，仅用于生成本次准备清单。',
     AiDataConsentKind.billVision =>
-      '我已移除完整卡号、姓名、订单号、地址和二维码，并同意将所选截图经 CardFi 服务器发送给 OpenAI，仅用于本次账单字段识别。',
+      '我已移除完整卡号、姓名、订单号、地址和二维码，并同意将所选截图经 CardFi 服务器发送给阿里云百炼 Qwen，仅用于本次账单字段识别。',
   };
 
   String get _details => switch (kind) {
     AiDataConsentKind.cardMatch || AiDataConsentKind.applicationPrep =>
       'CardFi 不保存本次输入或模型结果；阿里云百炼不会将数据用于模型训练，但会依其服务条款和法律要求处理并保存调用数据。',
     AiDataConsentKind.billVision =>
-      'CardFi 不把原图保存到账单记录；OpenAI API 默认不使用输入和输出训练模型，但可能保留滥用监测日志最多 30 天。',
+      'CardFi 不把原图保存到账单记录；阿里云百炼会依其服务条款和法律要求处理调用数据。',
   };
 }

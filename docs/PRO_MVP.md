@@ -1,11 +1,11 @@
-# Pro 订阅与权益实现
+# Pro 购买与权益实现
 
 更新时间：2026-07-21
 
 ## 客户端已完成
 
 - 个人中心 Pro 入口、统一金色皇冠标识与会员状态页；
-- 月度、年度方案选择，并从 App Store / Google Play 读取本地化标题和价格；
+- 月度、年度与可选永久方案选择，并从 App Store / Google Play 读取本地化价格；
 - 商店购买、恢复购买、管理/取消订阅入口；
 - 交易只在服务端校验后发放权益，不使用本地布尔值伪造正式会员；
 - 支持未开通、等待确认、生效、宽限期、扣款重试、到期、撤销和异常状态；
@@ -39,19 +39,28 @@ flutter run --dart-define-from-file=config/pro.local.json
 | 参数 | 用途 |
 | --- | --- |
 | `ENABLE_PRO_BILLING` | 是否连接系统应用内购买 |
-| `ENABLE_PRO_REFERRALS` | 是否展示邀请奖励入口；App Store 审核包默认保持 `false` |
+| `ENABLE_PRO_REFERRALS` | 邀请功能的客户端总开关；关闭后不请求邀请配置，设置页入口和注册邀请码输入均不展示。新构建默认开启，服务端开关仍为最终依据 |
 | `PRO_MONTHLY_PRODUCT_ID` | 月度订阅商品 ID |
 | `PRO_YEARLY_PRODUCT_ID` | 年度订阅商品 ID |
+| `ENABLE_PRO_LIFETIME` | 永久 Pro 客户端灰度开关，默认 `false` |
+| `PRO_LIFETIME_PRODUCT_ID` | 永久 Pro 非消耗型/一次性商品 ID |
 | `PRO_CONFIG_PATH` | 服务端公开 Pro 配置与可用性路径 |
 | `PRO_VERIFY_PATH` | 服务端交易校验路径 |
 | `PRO_ENTITLEMENT_PATH` | 当前账号权益查询路径 |
 | `PRO_WORKSPACE_PATH` | Pro 工作区同步路径 |
 | `PRO_BILL_ANALYSIS_PATH` | Pro 消费账单分析路径 |
+| `PRO_BILL_ANALYSIS_V2_PATH` | 历史账单版本使用的隔离分析路径；默认 `/api/pro/bill-analysis-v2` |
+| `ENABLE_BILL_HISTORY` | 历史账单客户端开关；新构建默认 `true`，发布配置仍可显式关闭 |
+| `ENABLE_BILL_RECEIPT_PRINTER` | 原生小票打印结果灰度开关；默认 `false`，不改变当前线上识别结果页 |
+| `ENABLE_EDGE_SWIPE_BACK` | 二级页面左边缘滑动返回灰度开关；默认 `false`，完成双端手势冲突回归后再开启 |
+| `PRO_BILL_RECORDS_PATH` | 历史账单 CRUD 路径 |
 | `PRO_APPLICATION_ASSISTANT_PATH` | Pro AI 开卡准备路径 |
 | `PRO_MANAGE_SUBSCRIPTION_URL` | 可选的订阅管理链接；为空时使用 Apple / Google 官方入口 |
 | `PRO_TERMS_URL` | 上线前必须配置的会员服务条款 HTTPS 地址 |
 | `PRO_PRIVACY_URL` | 上线前必须配置的隐私政策 HTTPS 地址 |
 | `SHOW_PRO_DIAGNOSTICS` | 仅内测排障时显示接入状态，正式包保持 `false` |
+
+开启 `ENABLE_PRO_LIFETIME=true` 后，购买页同时展示月付、年付和永久 Pro；年付不会被永久 Pro 替换或隐藏。关闭该开关时仍保持当前线上月付与年付界面。
 
 这些值都不是密钥。App Store Connect API 私钥、Google Play 服务账号 JSON、Webhook 验签密钥和数据库凭据只能保存在服务端密钥管理系统中，禁止放入 Dart、`dart-define`、资源文件或 Git。
 
@@ -66,7 +75,7 @@ Flutter 已接入 Supabase 邮箱认证：配置完成且邮箱验证通过后�
 
 ## 已实现的服务端
 
-`card.lengziyu.cn` 已新增隔离的 `/server/pro` 模块与以下接口，未修改 Vue H5 页面或现有 H5 登录行为。除验单与权益接口外，已实现仅限有效 Pro 访问的 `GET/PUT /api/pro/workspace` 与 `POST /api/pro/bill-analysis`。账单 AI 的产品范围、计算口径和隐私边界见 [`PRO_BILL_ANALYSIS.md`](PRO_BILL_ANALYSIS.md)；部署参数、账号 introspection 契约、Apple/Google/OpenAI 密钥配置与单实例存储限制见相邻项目的 `docs/PRO_SUBSCRIPTIONS.md`。
+`card.lengziyu.cn` 已新增隔离的 `/server/pro` 模块与以下接口，未修改 Vue H5 页面或现有 H5 登录行为。除验单与权益接口外，已实现仅限有效 Pro 访问的 `GET/PUT /api/pro/workspace` 与 `POST /api/pro/bill-analysis`。账单 AI 的产品范围、计算口径和隐私边界见 [`PRO_BILL_ANALYSIS.md`](PRO_BILL_ANALYSIS.md)；部署参数、账号 introspection 契约、Apple/Google/百炼密钥配置与单实例存储限制见相邻项目的 `docs/PRO_SUBSCRIPTIONS.md`。
 
 服务端缺少账号、加密密钥或对应商店凭据时，`/api/pro/config` 会安全返回不可用，客户端不会发起购买。旧 H5 会话令牌不能访问 Pro 权益接口。
 
@@ -139,7 +148,7 @@ AI 开卡准备的 Flutter 客户端与接口契约已完成，但 `/api/pro/app
 
 ## 正式收费前仍需外部完成
 
-1. 在 App Store Connect 和 Google Play Console 创建订阅组、月度/年度商品、价格、审核截图与本地化文案；
+1. 在 App Store Connect 和 Google Play Console 保留现有月度/年度订阅；永久 Pro 灰度时另建 Apple Non-Consumable 与 Google one-time product，补齐价格、审核截图与本地化文案；
 2. 完成安全账号服务，并把上述两个 Provider 接到安全存储与账号会话；
 3. 部署已实现的验单和权益接口，并安全注入 App Store Server API 与 Google Play Developer API 凭据；
 4. 接入 App Store Server Notifications V2 与 Google Play RTDN，处理续费、退款、撤销、宽限期和扣款重试；

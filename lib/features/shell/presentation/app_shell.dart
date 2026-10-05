@@ -1,11 +1,13 @@
 import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:cardfi/core/config/app_feature_config.dart';
 import 'package:cardfi/core/localization/app_language.dart';
 import 'package:cardfi/core/localization/app_localizations.dart';
 import 'package:cardfi/core/motion/app_bottom_sheet.dart';
 import 'package:cardfi/core/motion/app_haptics.dart';
 import 'package:cardfi/core/motion/celebration_effects.dart';
+import 'package:cardfi/core/motion/edge_swipe_back.dart';
 import 'package:cardfi/core/motion/motion_tokens.dart';
 import 'package:cardfi/core/motion/motion_widgets.dart';
 import 'package:cardfi/core/network/api_client.dart';
@@ -17,10 +19,12 @@ import 'package:cardfi/features/profile/data/avatar_repository.dart';
 import 'package:cardfi/features/auth/data/auth_account_repository.dart';
 import 'package:cardfi/features/auth/data/auth_repository.dart';
 import 'package:cardfi/features/auth/data/supabase_auth_repository.dart';
+import 'package:cardfi/features/auth/domain/auth_user.dart';
 import 'package:cardfi/features/auth/presentation/auth_page.dart';
 import 'package:cardfi/features/debug/presentation/motion_lab_page.dart';
 import 'package:cardfi/features/add/presentation/add_card_page.dart';
 import 'package:cardfi/features/catalog/data/local_card_catalog.dart';
+import 'package:cardfi/features/catalog/data/card_comment_repository.dart';
 import 'package:cardfi/features/catalog/data/local_card_details.dart';
 import 'package:cardfi/features/catalog/data/remote_card_catalog.dart';
 import 'package:cardfi/features/catalog/data/remote_card_details.dart';
@@ -45,8 +49,10 @@ import 'package:cardfi/features/market/data/card_application_assistant_repositor
 import 'package:cardfi/features/market/widgets/market_card_transition.dart';
 import 'package:cardfi/features/notifications/data/notification_repository.dart';
 import 'package:cardfi/features/notifications/data/notification_service.dart';
+import 'package:cardfi/features/notifications/presentation/notification_permission_sheet.dart';
 import 'package:cardfi/features/profile/presentation/profile_page.dart';
 import 'package:cardfi/features/profile/presentation/profile_subpage.dart';
+import 'package:cardfi/features/profile/presentation/app_update_dialog.dart';
 import 'package:cardfi/features/profile/data/app_version_repository.dart';
 import 'package:cardfi/features/profile/data/local_guest_state.dart';
 import 'package:cardfi/features/profile/data/remote_user_data_repository.dart';
@@ -55,10 +61,13 @@ import 'package:cardfi/features/referrals/data/referral_repository.dart';
 import 'package:cardfi/features/referrals/presentation/referral_page.dart';
 import 'package:cardfi/features/pro/data/pro_config.dart';
 import 'package:cardfi/features/pro/data/bill_analysis_repository.dart';
+import 'package:cardfi/features/pro/data/bill_benchmark_repository.dart';
+import 'package:cardfi/features/pro/data/bill_history_repository.dart';
 import 'package:cardfi/features/pro/data/pro_controller.dart';
 import 'package:cardfi/features/pro/data/pro_workspace_controller.dart';
 import 'package:cardfi/features/pro/presentation/pro_page.dart';
 import 'package:cardfi/features/pro/presentation/bill_analysis_page.dart';
+import 'package:cardfi/features/pro/presentation/bill_history_page.dart';
 import 'package:cardfi/features/pro/presentation/pro_workspace_page.dart';
 import 'package:cardfi/features/ranking/domain/local_article.dart';
 import 'package:cardfi/features/ranking/data/remote_ranking_repository.dart';
@@ -80,10 +89,12 @@ class AppShell extends StatefulWidget {
     this.proAccessTokenProvider,
     this.proApplicationUserNameProvider,
     this.authRepository,
+    this.catalogRepository,
     required this.isDarkMode,
     required this.onToggleTheme,
     required this.selectedLanguage,
     required this.onLanguageChanged,
+    this.edgeSwipeBackEnabled = AppFeatureConfig.edgeSwipeBackEnabled,
     super.key,
   });
 
@@ -92,10 +103,12 @@ class AppShell extends StatefulWidget {
   final ProAccessTokenProvider? proAccessTokenProvider;
   final ProApplicationUserNameProvider? proApplicationUserNameProvider;
   final AuthRepository? authRepository;
+  final CardCatalogRepository? catalogRepository;
   final bool isDarkMode;
   final VoidCallback onToggleTheme;
   final AppLanguage selectedLanguage;
   final ValueChanged<AppLanguage> onLanguageChanged;
+  final bool edgeSwipeBackEnabled;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -108,6 +121,10 @@ class _AppShellState extends State<AppShell>
   static const _hapticsEnabledKey = 'card-app-haptics-enabled-v1';
   static const _cardSwipeHapticsKey = 'card-app-card-swipe-haptics-v1';
   static const _hapticStrengthKey = 'card-app-card-swipe-strength-v1';
+  static const _notificationPromptShownKey =
+      'notification-permission-explainer-shown-v1';
+  static const _optionalUpdateDismissedPrefix =
+      'optional-app-update-dismissed-v1';
   static const _homeCardDisplayModeOverride = String.fromEnvironment(
     'HOME_CARD_DISPLAY_MODE',
   );
@@ -126,6 +143,7 @@ class _AppShellState extends State<AppShell>
   bool _proPageOpen = false;
   bool _proWorkspaceOpen = false;
   bool _billAnalysisOpen = false;
+  bool _billAnalysisReturnToWorkspace = false;
   bool _tipSubmissionOpen = false;
   bool _comparisonOpen = false;
   CardSummary? _comparisonInitialCard;
@@ -140,6 +158,7 @@ class _AppShellState extends State<AppShell>
   CatalogCardSourceGeometry? _marketCardSourceGeometry;
   CardSummary? _marketTransitionCard;
   bool _transitionIncludesSourceTitle = true;
+  bool _reconstructPreviewOnEntrance = false;
   bool _marketCardClosing = false;
   bool _preserveNavigationAfterMarketClose = false;
   ProfileSection? _profileSection;
@@ -157,6 +176,9 @@ class _AppShellState extends State<AppShell>
   final List<LocalSubmission> _submissions = [];
   List<AppMessage> _appMessages = const [];
   bool _pushEnabled = false;
+  bool _versionDialogVisible = false;
+  NotificationPermissionStatus _notificationPermissionStatus =
+      NotificationPermissionStatus.unavailable;
   bool _hapticsEnabled = true;
   bool _cardSwipeHapticsEnabled = true;
   AppHapticStrength _hapticStrength = AppHapticStrength.medium;
@@ -176,6 +198,7 @@ class _AppShellState extends State<AppShell>
   late final CardCatalogRepository _catalogRepository;
   late final RemoteRankingRepository _rankingRepository;
   late final RemoteCardDetailRepository _remoteDetailRepository;
+  late final CardCommentRepository _cardCommentRepository;
   late final RemoteCatalogSettingsRepository _catalogSettingsRepository;
   late final AppVersionRepository _appVersionRepository;
   late final NotificationRepository _notificationRepository;
@@ -185,6 +208,8 @@ class _AppShellState extends State<AppShell>
   late final ProController _proController;
   late final ProWorkspaceController _proWorkspaceController;
   late final BillAnalysisRepository _billAnalysisRepository;
+  late final BillBenchmarkRepository _billBenchmarkRepository;
+  late final BillHistoryRepository _billHistoryRepository;
   late final CardAdvisorRepository _cardAdvisorRepository;
   late final CardApplicationAssistantRepository _applicationAssistantRepository;
   late final RemoteUserDataRepository _remoteUserDataRepository;
@@ -201,6 +226,9 @@ class _AppShellState extends State<AppShell>
   int? _remotePersonalDataLoadingGeneration;
   int _personalStateGeneration = 0;
   bool _accountStateInitialized = false;
+  String? _reportedAuthClientContextKey;
+  String? _reportingAuthClientContextKey;
+  Future<PackageInfo>? _packageInfo;
   static const _detailRepository = LocalCardDetailRepository();
 
   @override
@@ -217,7 +245,16 @@ class _AppShellState extends State<AppShell>
         : HomeCardDisplayMode.wallet;
     _apiClient = ApiClient();
     _authController = AuthController(
-      widget.authRepository ?? SupabaseAuthRepository(),
+      widget.authRepository ??
+          SupabaseAuthRepository(
+            registerAppleAuthorizationCode: (authorizationCode, accessToken) =>
+                _authAccountRepository.registerAppleAuthorizationCode(
+                  authorizationCode,
+                  accessToken,
+                ),
+            revokeAppleCredential: () =>
+                _authAccountRepository.revokeAppleCredential(),
+          ),
       avatarRepository: widget.enableRemoteData
           ? AvatarRepository(
               _apiClient,
@@ -249,6 +286,14 @@ class _AppShellState extends State<AppShell>
     _billAnalysisRepository = BillAnalysisRepository(
       _apiClient,
       accessTokenProvider: proAccessTokenProvider,
+      path: ProConfig.billHistoryEnabled
+          ? ProConfig.billAnalysisV2Path
+          : ProConfig.billAnalysisPath,
+    );
+    _billBenchmarkRepository = BillBenchmarkRepository(_apiClient);
+    _billHistoryRepository = BillHistoryRepository(
+      _apiClient,
+      accessTokenProvider: proAccessTokenProvider,
     );
     _cardAdvisorRepository = CardAdvisorRepository(
       _apiClient,
@@ -266,14 +311,22 @@ class _AppShellState extends State<AppShell>
       _apiClient,
       accessTokenProvider: proAccessTokenProvider,
     );
-    _catalogRepository = !widget.enableRemoteData
-        ? const _TestCatalogRepository()
-        : RemoteMarketCatalogRepository(
-            cards: RemoteCardCatalogRepository(_apiClient),
-            globalAccounts: RemoteGlobalAccountCatalogRepository(_apiClient),
-          );
+    _catalogRepository =
+        widget.catalogRepository ??
+        (!widget.enableRemoteData
+            ? const _TestCatalogRepository()
+            : RemoteMarketCatalogRepository(
+                cards: RemoteCardCatalogRepository(_apiClient),
+                globalAccounts: RemoteGlobalAccountCatalogRepository(
+                  _apiClient,
+                ),
+              ));
     _rankingRepository = RemoteRankingRepository(_apiClient);
     _remoteDetailRepository = RemoteCardDetailRepository(_apiClient);
+    _cardCommentRepository = CardCommentRepository(
+      _apiClient,
+      accessTokenProvider: proAccessTokenProvider,
+    );
     _catalogSettingsRepository = RemoteCatalogSettingsRepository(_apiClient);
     _appVersionRepository = AppVersionRepository(_apiClient);
     _notificationRepository = NotificationRepository(_apiClient);
@@ -284,15 +337,25 @@ class _AppShellState extends State<AppShell>
     unawaited(_localStateRepository.clearLegacyState());
     unawaited(_loadHomeCardHeightScale());
     unawaited(_loadHomeCardDisplayMode());
-    unawaited(_restorePushPreference());
     unawaited(_restoreHapticPreferences());
     unawaited(_initializeAccountState());
-    if (ProConfig.referralProgramEnabled) {
+    if (widget.enableRemoteData && ProConfig.referralProgramEnabled) {
       unawaited(_loadReferralConfiguration());
     }
     if (widget.enableRemoteData) {
       _loadRemoteCatalog();
-      unawaited(_checkAppVersionOnLaunch());
+      unawaited(_initializeStartupPrompts());
+    } else {
+      unawaited(_initializeNotifications());
+    }
+  }
+
+  Future<void> _initializeStartupPrompts() async {
+    final updatePromptScheduled = await _checkAppVersionOnLaunch();
+    if (updatePromptScheduled) {
+      await _restorePushPreference();
+    } else {
+      await _initializeNotifications();
     }
   }
 
@@ -301,6 +364,7 @@ class _AppShellState extends State<AppShell>
     // secure session before any consumer asks for a bearer token.
     await _authController.initialize();
     if (!mounted) return;
+    unawaited(_reportAuthClientContext());
     await Future.wait([
       _proController.initialize(),
       _proWorkspaceController.initialize(),
@@ -314,47 +378,78 @@ class _AppShellState extends State<AppShell>
     }
   }
 
-  Future<void> _checkAppVersionOnLaunch() async {
+  Future<bool> _checkAppVersionOnLaunch() async {
     try {
       final packageInfo = await PackageInfo.fromPlatform();
       final update = await _appVersionRepository.checkInstalledVersion(
         packageInfo,
       );
-      if (!mounted || !update.requiresUpdate) return;
+      if (!mounted || !update.needsUpdate || _versionDialogVisible) {
+        return false;
+      }
+      if (update.status == AppUpdateStatus.optional) {
+        final preferences = await SharedPreferences.getInstance();
+        if (preferences.getBool(_optionalUpdateDismissalKey(update)) ?? false) {
+          return false;
+        }
+      }
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) unawaited(_showRequiredAppUpdate(update));
+        if (!mounted || _versionDialogVisible) return;
+        _versionDialogVisible = true;
+        final dialog = update.requiresUpdate
+            ? _showRequiredAppUpdate(update)
+            : _showOptionalAppUpdate(update);
+        unawaited(
+          dialog.whenComplete(() {
+            _versionDialogVisible = false;
+          }),
+        );
       });
+      return true;
     } on ApiException {
       // 无网络或服务端未配置版本时，不能阻止用户使用已安装的 App。
+      return false;
     } catch (_) {
       // 版本检查是发布后的增强能力，读取失败不影响主流程。
+      return false;
     }
   }
+
+  String _optionalUpdateDismissalKey(AppVersionUpdate update) =>
+      '$_optionalUpdateDismissedPrefix-'
+      '${defaultTargetPlatform.name}-${update.latestVersion}-'
+      '${update.latestBuildNumber}';
 
   Future<void> _showRequiredAppUpdate(AppVersionUpdate update) {
     return showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (context) {
-        final localizations = AppLocalizations.of(context);
-        final updateMessage =
-            '${localizations.text('当前版本已不再受支持。请更新至 ')}${update.latestVersion}${localizations.text('（构建 ')}${update.latestBuildNumber}${localizations.text('）')}${localizations.text('后继续使用。')}';
-        return PopScope(
-          canPop: false,
-          child: AlertDialog(
-            title: Text(localizations.text('需要更新')),
-            content: Text(
-              '$updateMessage${update.releaseNotes.isEmpty ? '' : '\n\n${update.releaseNotes}'}',
-            ),
-            actions: [
-              FilledButton(
-                onPressed: () => _openRequiredUpdateUrl(update.updateUrl),
-                child: Text(localizations.text('立即更新')),
-              ),
-            ],
-          ),
-        );
-      },
+      builder: (_) => AppUpdateDialog(
+        update: update,
+        blocking: true,
+        onUpdate: () => _openRequiredUpdateUrl(update.updateUrl),
+      ),
+    );
+  }
+
+  Future<void> _showOptionalAppUpdate(AppVersionUpdate update) async {
+    final shouldUpdate = await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) => AppUpdateDialog(
+        update: update,
+        blocking: false,
+        onLater: () => Navigator.pop(dialogContext, false),
+        onUpdate: () => Navigator.pop(dialogContext, true),
+      ),
+    );
+    if (shouldUpdate == true) {
+      _openRequiredUpdateUrl(update.updateUrl);
+      return;
+    }
+    await (await SharedPreferences.getInstance()).setBool(
+      _optionalUpdateDismissalKey(update),
+      true,
     );
   }
 
@@ -413,7 +508,11 @@ class _AppShellState extends State<AppShell>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && widget.enableRemoteData) {
+      unawaited(_restorePushPreference());
+    }
     if (state == AppLifecycleState.resumed && _accountStateInitialized) {
+      unawaited(_reportAuthClientContext());
       unawaited(_proController.refreshEntitlement());
       final userId = _activePersonalStateUserId;
       if (userId != null && widget.enableRemoteData) {
@@ -443,10 +542,6 @@ class _AppShellState extends State<AppShell>
         _proWorkspaceOpen = false;
         _proPageOpen = true;
       }
-      if (_billAnalysisOpen) {
-        _billAnalysisOpen = false;
-        _proPageOpen = true;
-      }
     } else if (_canUseHomeCardDisplayModes && !_proModeRestored) {
       unawaited(_loadHomeCardDisplayMode());
     }
@@ -459,11 +554,21 @@ class _AppShellState extends State<AppShell>
 
   void _handleAuthChanged() {
     if (!mounted) return;
-    if (_authController.isVerified && _authMode != null) {
+    if (_authController.passwordRecoveryPending) {
+      _authMode = AuthMode.passwordRecovery;
+    } else if (_authController.isVerified && _authMode != null) {
+      final completedPasswordRecovery = _authMode == AuthMode.passwordRecovery;
       _authMode = null;
-      _authCelebrationVersion++;
+      if (completedPasswordRecovery) {
+        _index = 3;
+        _profileSection = null;
+        _profileSectionHistory.clear();
+      } else {
+        _authCelebrationVersion++;
+      }
     }
     if (_accountStateInitialized && !_authController.loading) {
+      unawaited(_reportAuthClientContext());
       unawaited(_proController.refreshEntitlement());
     }
     if (_authController.isVerified && _referralEnabled) {
@@ -474,6 +579,61 @@ class _AppShellState extends State<AppShell>
       _switchPersonalStateUser(userId);
     }
     setState(() {});
+  }
+
+  String? get _clientPlatform => switch (defaultTargetPlatform) {
+    TargetPlatform.iOS => 'ios',
+    TargetPlatform.android => 'android',
+    _ => null,
+  };
+
+  Future<void> _reportAuthClientContext() async {
+    final user = _authController.user;
+    final platform = _clientPlatform;
+    if (!_authController.isVerified ||
+        _authController.loading ||
+        user == null ||
+        platform == null) {
+      return;
+    }
+    final authMethod =
+        _authController.lastSuccessfulAuthMethod ?? 'session_restore';
+    final isRegistration =
+        authMethod != 'session_restore' && user.appearsRecentlyRegistered();
+    try {
+      final packageInfo = await (_packageInfo ??= PackageInfo.fromPlatform());
+      if (!mounted || _authController.user?.id != user.id) return;
+      final key = [
+        user.id,
+        platform,
+        authMethod,
+        isRegistration,
+        packageInfo.version,
+        packageInfo.buildNumber,
+      ].join(':');
+      if (_reportedAuthClientContextKey == key ||
+          _reportingAuthClientContextKey == key) {
+        return;
+      }
+      _reportingAuthClientContextKey = key;
+      await _authAccountRepository.reportClientContext(
+        platform: platform,
+        authMethod: authMethod,
+        isRegistration: isRegistration,
+        appVersion: packageInfo.version,
+        appBuildNumber: packageInfo.buildNumber,
+      );
+      if (mounted && _authController.user?.id == user.id) {
+        _reportedAuthClientContextKey = key;
+      }
+      if (_reportingAuthClientContextKey == key) {
+        _reportingAuthClientContextKey = null;
+      }
+    } catch (_) {
+      // This metadata is best effort. An old server or a temporary network
+      // failure must never block session restore or a successful login.
+      _reportingAuthClientContextKey = null;
+    }
   }
 
   Future<void> _loadReferralConfiguration() async {
@@ -499,8 +659,10 @@ class _AppShellState extends State<AppShell>
     if (code == null || !_authController.isVerified) return;
     try {
       await _referralRepository.bind(code);
-      await _referralRepository.activate();
-      await _pendingReferralStore.clear();
+      final profile = await _referralRepository.activate();
+      // Keep retrying on later verified sign-ins until the server confirms the
+      // account has met the activity and anti-abuse requirements.
+      if (profile.activated) await _pendingReferralStore.clear();
     } on ApiException catch (error) {
       if (error.code == 'REFERRAL_CODE_ALREADY_BOUND' ||
           error.code == 'REFERRAL_PROGRAM_DISABLED') {
@@ -771,13 +933,47 @@ class _AppShellState extends State<AppShell>
     return HomeCardDisplayMode.wallet;
   }
 
+  Future<void> _initializeNotifications() async {
+    await _restorePushPreference();
+    await _maybeShowNotificationPermissionPrompt();
+  }
+
   Future<void> _restorePushPreference() async {
-    final enabled = await _notificationService.isEnabled();
+    final status = await _notificationService.status();
     if (!mounted) return;
-    setState(() => _pushEnabled = enabled);
-    if (enabled && widget.enableRemoteData) {
+    setState(() {
+      _pushEnabled = status.canDeliver;
+      _notificationPermissionStatus = status.permission;
+    });
+    if (status.canDeliver && widget.enableRemoteData) {
       unawaited(_notificationService.start(locale: _notificationLocale));
     }
+  }
+
+  Future<void> _maybeShowNotificationPermissionPrompt() async {
+    if (!widget.enableRemoteData ||
+        kIsWeb ||
+        (defaultTargetPlatform != TargetPlatform.android &&
+            defaultTargetPlatform != TargetPlatform.iOS)) {
+      return;
+    }
+    final preferences = await SharedPreferences.getInstance();
+    if (preferences.getBool(_notificationPromptShownKey) ?? false) return;
+    final status = await _notificationService.status();
+    if (status.permission == NotificationPermissionStatus.unavailable) return;
+    if (status.permission != NotificationPermissionStatus.notDetermined) {
+      await preferences.setBool(_notificationPromptShownKey, true);
+      return;
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 900));
+    if (!mounted || Navigator.of(context).canPop()) return;
+    await preferences.setBool(_notificationPromptShownKey, true);
+    if (!mounted) return;
+    final accepted = await showAppBottomSheet<bool>(
+      context: context,
+      builder: (_) => const NotificationPermissionSheet(),
+    );
+    if (accepted == true && mounted) await _changePushEnabled(true);
   }
 
   Future<void> _restoreHapticPreferences() async {
@@ -909,7 +1105,13 @@ class _AppShellState extends State<AppShell>
     }
     if (!enabled) {
       await _notificationService.disable();
-      if (mounted) setState(() => _pushEnabled = false);
+      if (mounted) await _restorePushPreference();
+      return;
+    }
+    final currentStatus = await _notificationService.status();
+    if (!mounted) return;
+    if (currentStatus.permission == NotificationPermissionStatus.denied) {
+      await _showOpenNotificationSettingsDialog();
       return;
     }
     final result = await _notificationService.enable(
@@ -918,12 +1120,47 @@ class _AppShellState extends State<AppShell>
     if (!mounted) return;
     switch (result) {
       case NotificationEnableResult.enabled:
-        setState(() => _pushEnabled = true);
+        await _restorePushPreference();
+        if (!mounted) return;
         AppNotice.success(context, '资讯和新卡上线时会提醒你。', title: '通知已开启');
       case NotificationEnableResult.denied:
+        await _restorePushPreference();
+        if (!mounted) return;
         AppNotice.info(context, '你可以在系统设置中允许“CardFi”发送通知。', title: '通知权限未开启');
       case NotificationEnableResult.unavailable:
+        await _restorePushPreference();
+        if (!mounted) return;
         AppNotice.warning(context, '通知服务尚未配置或当前网络不可用。', title: '暂时无法开启');
+    }
+  }
+
+  Future<void> _showOpenNotificationSettingsDialog() async {
+    final localizations = AppLocalizations.of(context);
+    final open = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(localizations.text('通知权限已关闭')),
+        content: Text(
+          localizations.text('请前往系统设置允许 CardFi 发送通知，返回 App 后状态会自动更新。'),
+        ),
+        actions: [
+          TextButton(
+            key: const Key('notification-settings-cancel'),
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(localizations.text('取消')),
+          ),
+          FilledButton(
+            key: const Key('notification-settings-open'),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(localizations.text('前往系统设置')),
+          ),
+        ],
+      ),
+    );
+    if (open != true || !mounted) return;
+    final opened = await _notificationService.openSystemSettings();
+    if (!opened && mounted) {
+      AppNotice.warning(context, '暂时无法打开系统设置，请手动前往通知设置。', title: '打开失败');
     }
   }
 
@@ -1048,10 +1285,41 @@ class _AppShellState extends State<AppShell>
     }
     AppHaptics.selection();
     setState(() {
+      _billAnalysisReturnToWorkspace = _proWorkspaceOpen;
       _billAnalysisOpen = true;
       _proWorkspaceOpen = false;
       _proPageOpen = false;
     });
+  }
+
+  void _openBillHistory() {
+    if (!_canManagePersonalData) {
+      _openAuth();
+      return;
+    }
+    AppHaptics.selection();
+    Navigator.of(context).push(
+      PageRouteBuilder<void>(
+        opaque: false,
+        transitionDuration: MotionTokens.page,
+        reverseTransitionDuration: MotionTokens.pageReverse,
+        pageBuilder: (routeContext, _, _) => EdgeSwipeBack(
+          enabled: widget.edgeSwipeBackEnabled,
+          onBack: () => Navigator.of(routeContext).pop(),
+          child: Scaffold(
+            backgroundColor: AppColors.canvas,
+            body: BillHistoryPage(
+              repository: _billHistoryRepository,
+              benchmarkRepository: _billBenchmarkRepository,
+              cards: _catalogCards,
+              onBack: () => Navigator.of(routeContext).pop(),
+            ),
+          ),
+        ),
+        transitionsBuilder: (context, animation, _, child) =>
+            buildMotionPageTransition(context, animation, child),
+      ),
+    );
   }
 
   void _previewProPurchase() {
@@ -1221,6 +1489,7 @@ class _AppShellState extends State<AppShell>
       ..removeListener(_handleProWorkspaceChanged)
       ..dispose();
     _marketCardTransitionController.dispose();
+    _billBenchmarkRepository.dispose();
     _apiClient.close();
     super.dispose();
   }
@@ -1231,9 +1500,20 @@ class _AppShellState extends State<AppShell>
 
   void _openAuth([AuthMode mode = AuthMode.login]) {
     AppHaptics.selection();
+    _authController.clearMessage();
     setState(() {
       _authMode = mode;
     });
+  }
+
+  Future<void> _logoutFromSettings() async {
+    await _authController.signOut();
+    if (!mounted) return;
+    setState(() {
+      _profileSectionHistory.clear();
+      _profileSection = null;
+    });
+    AppNotice.success(context, '已退出账号。', title: '退出登录');
   }
 
   void _openTipSubmission() {
@@ -1368,20 +1648,30 @@ class _AppShellState extends State<AppShell>
     if (_previewCard != null || _marketCardTransitionController.isAnimating) {
       return;
     }
-    _showCard(card, marketSourceGeometry: geometry);
+    _showCard(
+      card,
+      marketSourceGeometry: geometry,
+      reconstructOnEntrance: true,
+    );
   }
 
   void _openHomeCard(CardSummary card, CatalogCardSourceGeometry geometry) {
     if (_previewCard != null || _marketCardTransitionController.isAnimating) {
       return;
     }
-    _showCard(card, marketSourceGeometry: geometry, includeSourceTitle: false);
+    _showCard(
+      card,
+      marketSourceGeometry: geometry,
+      includeSourceTitle: false,
+      reconstructOnEntrance: true,
+    );
   }
 
   void _showCard(
     CardSummary card, {
     CatalogCardSourceGeometry? marketSourceGeometry,
     bool includeSourceTitle = true,
+    bool reconstructOnEntrance = false,
   }) {
     _marketCardTransitionController
       ..stop()
@@ -1392,6 +1682,7 @@ class _AppShellState extends State<AppShell>
       _marketCardSourceGeometry = marketSourceGeometry;
       _marketTransitionCard = marketSourceGeometry == null ? null : card;
       _transitionIncludesSourceTitle = includeSourceTitle;
+      _reconstructPreviewOnEntrance = reconstructOnEntrance;
       _marketCardClosing = false;
       if (_canManagePersonalData) {
         _recentCardIds
@@ -1436,6 +1727,7 @@ class _AppShellState extends State<AppShell>
     _marketCardSourceGeometry = null;
     _marketTransitionCard = null;
     _transitionIncludesSourceTitle = true;
+    _reconstructPreviewOnEntrance = false;
     _marketCardClosing = false;
   }
 
@@ -1593,6 +1885,10 @@ class _AppShellState extends State<AppShell>
       _openPro();
       return;
     }
+    if (section == ProfileSection.bills) {
+      _openBillHistory();
+      return;
+    }
     setState(() {
       _profileSectionHistory.clear();
       _profileSection = section;
@@ -1649,6 +1945,10 @@ class _AppShellState extends State<AppShell>
   }
 
   void _closeOverlay() {
+    if (_authMode == AuthMode.passwordRecovery) {
+      unawaited(_cancelPasswordRecoveryAndClose());
+      return;
+    }
     if (_marketPreviewActive &&
         !_proPageOpen &&
         !_proWorkspaceOpen &&
@@ -1664,6 +1964,22 @@ class _AppShellState extends State<AppShell>
     _closeOverlayImmediately();
   }
 
+  void _clearPasswordRecoveryOverlay() {
+    if (!mounted || _authMode != AuthMode.passwordRecovery) return;
+    _authController.clearMessage();
+    setState(() {
+      _authMode = null;
+      _index = 3;
+      _profileSection = null;
+      _profileSectionHistory.clear();
+    });
+  }
+
+  Future<void> _cancelPasswordRecoveryAndClose() async {
+    await _authController.cancelPasswordRecovery();
+    _clearPasswordRecoveryOverlay();
+  }
+
   Future<void> _closeMarketPreview() async {
     if (_marketCardClosing) return;
     setState(() => _marketCardClosing = true);
@@ -1675,6 +1991,7 @@ class _AppShellState extends State<AppShell>
       _marketCardSourceGeometry = null;
       _marketTransitionCard = null;
       _transitionIncludesSourceTitle = true;
+      _reconstructPreviewOnEntrance = false;
       _marketCardClosing = false;
       _preserveNavigationAfterMarketClose = true;
     });
@@ -1684,6 +2001,8 @@ class _AppShellState extends State<AppShell>
   }
 
   void _closeOverlayImmediately() {
+    final closingAuth = _authMode != null;
+    if (closingAuth) _authController.clearMessage();
     setState(() {
       if (_authMode != null) {
         _authMode = null;
@@ -1691,7 +2010,8 @@ class _AppShellState extends State<AppShell>
         _proPageOpen = false;
       } else if (_billAnalysisOpen) {
         _billAnalysisOpen = false;
-        _proWorkspaceOpen = _isPro;
+        _proWorkspaceOpen = _billAnalysisReturnToWorkspace && _isPro;
+        _billAnalysisReturnToWorkspace = false;
       } else if (_tipSubmissionOpen) {
         _tipSubmissionOpen = false;
       } else if (_previewCard != null) {
@@ -1752,6 +2072,7 @@ class _AppShellState extends State<AppShell>
       _proPageOpen = false;
       _proWorkspaceOpen = false;
       _billAnalysisOpen = false;
+      _billAnalysisReturnToWorkspace = false;
       _tipSubmissionOpen = false;
       _comparisonOpen = false;
       _comparisonInitialCard = null;
@@ -1913,8 +2234,15 @@ class _AppShellState extends State<AppShell>
                     layoutBuilder: (currentChild, previousChildren) =>
                         currentChild ?? const SizedBox.shrink(),
                     child: hasOverlay
-                        ? _EdgeSwipeBack(
+                        ? EdgeSwipeBack(
                             key: ValueKey(_overlayIdentity),
+                            enabled:
+                                widget.edgeSwipeBackEnabled &&
+                                !_cardCanvasOpen &&
+                                !_marketCardClosing,
+                            followGesture:
+                                !marketPreviewActive &&
+                                _authMode != AuthMode.passwordRecovery,
                             onBack: _closeOverlay,
                             child: marketPreviewActive
                                 ? AnimatedBuilder(
@@ -2007,6 +2335,7 @@ class _AppShellState extends State<AppShell>
                       sourceTitleRect: sourceGeometry.titleRect,
                       targetTitleRect: _marketDetailTitleRect(context),
                       animateTitle: _transitionIncludesSourceTitle,
+                      hideArtworkOnForward: _reconstructPreviewOnEntrance,
                     ),
               ],
             ),
@@ -2067,23 +2396,34 @@ class _AppShellState extends State<AppShell>
     _showCard(card);
   }
 
-  Widget _buildCardAdvisorOverlay() => Stack(
-    fit: StackFit.expand,
-    children: [
-      CardAdvisorPage(
-        repository: _cardAdvisorRepository,
-        cards: _catalogCards,
-        onBack: _closeOverlay,
-        onOpenCard: _openAdvisorRecommendation,
-        onLoginRequired: () => setState(() {
-          _cardAdvisorOpen = false;
-          _authMode = AuthMode.login;
-        }),
-      ),
-      if (_previewCard case final card?)
-        Positioned.fill(child: _buildCardPreview(card)),
-    ],
-  );
+  Widget _buildCardAdvisorOverlay() {
+    final previewCard = _previewCard;
+    final previewOpen = previewCard != null;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        TickerMode(
+          enabled: !previewOpen,
+          child: Offstage(
+            key: const Key('card-advisor-retained-layer'),
+            offstage: previewOpen,
+            child: CardAdvisorPage(
+              repository: _cardAdvisorRepository,
+              cards: _catalogCards,
+              onBack: _closeOverlay,
+              onOpenCard: _openAdvisorRecommendation,
+              onLoginRequired: () => setState(() {
+                _cardAdvisorOpen = false;
+                _authMode = AuthMode.login;
+              }),
+            ),
+          ),
+        ),
+        if (previewCard != null)
+          Positioned.fill(child: _buildCardPreview(previewCard)),
+      ],
+    );
+  }
 
   Widget _buildCardPreview(CardSummary previewCard) {
     final entranceAnimation = _marketPreviewActive
@@ -2108,6 +2448,8 @@ class _AppShellState extends State<AppShell>
         onViewSimilar: _viewSimilarCards,
         isPro: _isPro,
         entranceAnimation: entranceAnimation,
+        reconstructOnEntrance:
+            _marketPreviewActive && _reconstructPreviewOnEntrance,
       );
     }
     return FutureBuilder(
@@ -2116,13 +2458,6 @@ class _AppShellState extends State<AppShell>
         locale: Localizations.localeOf(context),
       ),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return CardPreviewSkeleton(
-            onBack: _closeOverlay,
-            globalAccount: previewCard.isGlobalAccount,
-            entranceAnimation: entranceAnimation,
-          );
-        }
         final cachedDetail = _isPro
             ? _proWorkspaceController.cachedDetailFor(previewCard.id)
             : null;
@@ -2147,8 +2482,17 @@ class _AppShellState extends State<AppShell>
           onWatchChanged: (watched) => _changeCardWatch(previewCard, watched),
           onViewSimilar: _viewSimilarCards,
           isPro: _isPro,
+          commentRepository: widget.enableRemoteData
+              ? _cardCommentRepository
+              : null,
+          signedIn: _authController.isVerified,
+          onCommentLoginRequired: () => setState(() {
+            _authMode = AuthMode.login;
+          }),
           usingOfflineFallback: snapshot.hasError,
           entranceAnimation: entranceAnimation,
+          reconstructOnEntrance:
+              _marketPreviewActive && _reconstructPreviewOnEntrance,
           onRetry: snapshot.hasError
               ? () {
                   _remoteDetailRepository.detailFor(
@@ -2176,8 +2520,14 @@ class _AppShellState extends State<AppShell>
     if (_billAnalysisOpen) {
       return BillAnalysisPage(
         repository: _billAnalysisRepository,
+        benchmarkRepository: _billBenchmarkRepository,
         enableRemoteData: widget.enableRemoteData,
         onBack: _closeOverlay,
+        cards: _catalogCards,
+        historyRepository: ProConfig.billHistoryEnabled
+            ? _billHistoryRepository
+            : null,
+        onOpenHistory: ProConfig.billHistoryEnabled ? _openBillHistory : null,
       );
     }
     if (_cardAdvisorOpen) {
@@ -2237,11 +2587,15 @@ class _AppShellState extends State<AppShell>
     }
     final authMode = _authMode;
     if (authMode != null) {
+      if (authMode == AuthMode.passwordRecovery) {
+        return PasswordRecoveryPage(
+          controller: _authController,
+          onBack: _clearPasswordRecoveryOverlay,
+        );
+      }
       return AuthPage(
         controller: _authController,
-        mode: authMode,
         onBack: _closeOverlay,
-        onModeChanged: (mode) => setState(() => _authMode = mode),
         celebrationCards: _uCardsForCelebration,
         referralEnabled: _referralEnabled,
         onReferralCodeAccepted: _savePendingReferralCode,
@@ -2322,11 +2676,13 @@ class _AppShellState extends State<AppShell>
         selectedLanguage: widget.selectedLanguage,
         onLanguageChanged: widget.onLanguageChanged,
         pushEnabled: _pushEnabled,
+        notificationPermissionStatus: _notificationPermissionStatus,
         onPushEnabledChanged: _changePushEnabled,
         hapticsEnabled: _hapticsEnabled,
         cardSwipeHapticsEnabled: _cardSwipeHapticsEnabled,
         hapticStrength: _hapticStrength,
         hasVerifiedAccount: _authController.isVerified,
+        referralEnabled: _referralEnabled,
         onHapticsEnabledChanged: _changeHapticsEnabled,
         onCardSwipeHapticsEnabledChanged: _changeCardSwipeHapticsEnabled,
         onHapticStrengthChanged: _changeHapticStrength,
@@ -2335,6 +2691,7 @@ class _AppShellState extends State<AppShell>
             : null,
         profileName: _authController.user?.profileName,
         profileUserId: _authController.user?.id,
+        profileEmail: _authController.user?.email,
         avatarUrl: _authController.user?.avatarUrl,
         onProfileNameChanged: _authController.user == null
             ? null
@@ -2342,9 +2699,25 @@ class _AppShellState extends State<AppShell>
         onAvatarChanged: _authController.user == null
             ? null
             : _authController.updateAvatar,
-        onLogout: _authController.user == null ? null : _authController.signOut,
+        onLogout: _authController.user == null ? null : _logoutFromSettings,
         onDeleteAccount: _authController.isVerified
             ? _deleteCurrentAccount
+            : null,
+        loginProviders:
+            _authController.user?.loginProviders ?? const <AuthLoginProvider>{},
+        googleAuthAvailable: _authController.googleConfigured,
+        appleAuthAvailable: _authController.appleConfigured,
+        onLinkGoogle: _authController.googleConfigured
+            ? _authController.linkGoogleIdentity
+            : null,
+        onLinkApple: _authController.appleConfigured
+            ? _authController.linkAppleIdentity
+            : null,
+        onUnlinkGoogle: _authController.googleConfigured
+            ? _authController.unlinkGoogleIdentity
+            : null,
+        onUnlinkApple: _authController.appleConfigured
+            ? _authController.unlinkAppleIdentity
             : null,
       );
     }
@@ -2433,7 +2806,7 @@ class _AppShellState extends State<AppShell>
           favoriteCount: _canManagePersonalData
               ? _favoriteCardIds.length + _favoriteArticleIds.length
               : 0,
-          referralEnabled: _referralEnabled,
+          billHistoryEnabled: ProConfig.billHistoryEnabled,
         ),
         AddCardPage(
           cards: _catalogCards,
@@ -2455,47 +2828,6 @@ class _AnimatedTabStage extends StatefulWidget {
 
   @override
   State<_AnimatedTabStage> createState() => _AnimatedTabStageState();
-}
-
-/// H5 页面在触屏设备上支持从左边缘右滑返回；所有二级页面共用这一层。
-class _EdgeSwipeBack extends StatefulWidget {
-  const _EdgeSwipeBack({required this.child, required this.onBack, super.key});
-
-  final Widget child;
-  final VoidCallback onBack;
-
-  @override
-  State<_EdgeSwipeBack> createState() => _EdgeSwipeBackState();
-}
-
-class _EdgeSwipeBackState extends State<_EdgeSwipeBack> {
-  bool _tracking = false;
-  double _distance = 0;
-
-  @override
-  Widget build(BuildContext context) => GestureDetector(
-    behavior: HitTestBehavior.translucent,
-    onHorizontalDragStart: (details) {
-      _tracking = details.globalPosition.dx <= 28;
-      _distance = 0;
-    },
-    onHorizontalDragUpdate: (details) {
-      if (_tracking && details.primaryDelta != null) {
-        _distance += details.primaryDelta!;
-      }
-    },
-    onHorizontalDragEnd: (details) {
-      final velocity = details.primaryVelocity ?? 0;
-      if (_tracking && (_distance > 72 || velocity > 680)) widget.onBack();
-      _tracking = false;
-      _distance = 0;
-    },
-    onHorizontalDragCancel: () {
-      _tracking = false;
-      _distance = 0;
-    },
-    child: widget.child,
-  );
 }
 
 class _AnimatedTabStageState extends State<_AnimatedTabStage>

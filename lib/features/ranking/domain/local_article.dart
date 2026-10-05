@@ -54,13 +54,13 @@ const localArticles = <LocalArticle>[
   LocalArticle(
     id: 'wallet-payment-support',
     category: '权益指南',
-    title: 'Apple Pay 与 Google Pay 支持怎么看',
+    title: '数字钱包支持怎么看',
     summary: '卡片支持数字钱包，通常还取决于发行地区、卡组织和具体卡产品。',
     body: [
-      '“支持 Apple Pay”并不总是意味着所有地区、所有卡等级都可以绑定。应优先查看发卡方针对具体产品发布的说明。',
+      '“支持数字钱包”并不总是意味着所有地区、所有卡等级都可以绑定。应优先查看发卡方针对具体产品发布的说明。',
       '如果资料只写了卡组织能力，而没有明确产品支持，CardFi 会将状态标记为待确认，避免把推测当成事实。',
     ],
-    tags: ['Apple Pay', 'Google Pay', '支付'],
+    tags: ['数字钱包', '支付'],
     publishedLabel: '2026-07-08',
     relatedCardIds: ['bybit-card', 'metamask-card'],
   ),
@@ -122,7 +122,7 @@ const localCommunityTipArticles = <LocalArticle>[
     markdown: '''
 ## 使用场景
 
-卡片无法绑定 Apple Pay 或 Google Pay，但卡片介绍中提到支持数字钱包。
+卡片无法绑定当前使用的数字钱包，但卡片介绍中提到支持数字钱包。
 
 ## 操作步骤
 
@@ -139,7 +139,7 @@ const localCommunityTipArticles = <LocalArticle>[
 
 支持范围可能因地区、卡等级、设备和发行实体变化。任何时候都不要向非官方人员提供验证码、密码或完整卡片资料。
 ''',
-    tags: ['Apple Pay', 'Google Pay', '安全'],
+    tags: ['数字钱包', '安全'],
     publishedLabel: '2026-07-24',
     relatedCardIds: ['bybit-card', 'metamask-card'],
     author: '卡片观察员',

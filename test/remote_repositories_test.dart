@@ -387,8 +387,26 @@ void main() {
                 'value':
                     r'$0.00；One time $10 activation fee for virtual card, and $100 for physical card.',
               },
+              {
+                'label': 'Ranked+ ATM 取现费',
+                'value':
+                    r'2%；All ATM withdrawals incur 2% fee; daily limit $250 USD, max 3 attempts per 24h',
+              },
             ],
             'kycFact': {'detailZh': '需要护照'},
+            'openingRequirement': {
+              'requirements': {
+                'inviteCode': 'notRequired',
+                'idCard': 'notRequired',
+                'passport': 'required',
+                'overseasAddressProof': 'required',
+                'overseasPhone': 'unknown',
+              },
+              'summaryZh': '护照 + 海外证明',
+              'summaryEn': 'Passport + overseas proof',
+              'sourceName': '官方帮助中心',
+              'checkedAt': '2026-08-10',
+            },
             'paymentSupport': {
               'applePay': {'status': 'supported'},
               'googlePay': {'status': 'conditional'},
@@ -441,12 +459,27 @@ void main() {
       detail.fees.singleWhere((fee) => fee.label == '月费').note,
       r'虚拟卡一次性激活费 $10；实体卡一次性激活费 $100。',
     );
+    expect(
+      detail.fees.singleWhere((fee) => fee.label == '取现手续费').note,
+      r'每日 ATM 取现限额 $250 USD，24 小时最多 3 次。',
+    );
     expect(detail.note, isNot(contains('A sourced card overview.')));
     expect(detail.sourceLabel, isNot(contains('TODEY')));
     expect(detail.paymentChannels, contains(PaymentChannel.applePay));
     expect(detail.paymentChannels, isNot(contains(PaymentChannel.googlePay)));
     expect(detail.chinaKyc?.status, ChinaKycStatus.restricted);
     expect(detail.chinaKyc?.checkedAt, DateTime.utc(2026, 7, 22));
+    expect(detail.openingRequirements?.summary, '护照 + 海外证明');
+    expect(
+      detail.openingRequirements?.stateFor(OpeningRequirementKind.passport),
+      OpeningRequirementState.required,
+    );
+    expect(
+      detail.openingRequirements?.stateFor(
+        OpeningRequirementKind.overseasPhone,
+      ),
+      OpeningRequirementState.unknown,
+    );
     expect(requestedUri?.queryParameters['platform'], 'android');
     client.close();
   });
@@ -504,7 +537,7 @@ void main() {
               'tags': ['返现'],
               'tagsEn': ['Cashback'],
               'region': '全球',
-              'regionEn': 'Worldwide',
+              'regionEn': r'Worldwide\nAvailability varies by region.',
               'funding': '加密资产',
               'fundingEn': 'Crypto assets',
               'speed': '开放申请',
@@ -570,7 +603,7 @@ void main() {
       client,
     ).loadArticles(locale: locale)).single.article;
 
-    expect(detail.region, 'Worldwide');
+    expect(detail.region, 'Worldwide\nAvailability varies by region.');
     expect(detail.funding, 'Crypto assets');
     expect(detail.availability, 'Applications open');
     expect(detail.tags, ['Cashback']);

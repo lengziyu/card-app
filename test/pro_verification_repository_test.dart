@@ -21,6 +21,7 @@ void main() {
           'products': {
             'monthly': 'cn.lengziyu.cardapp.pro.monthly',
             'yearly': 'cn.lengziyu.cardapp.pro.yearly',
+            'lifetime': 'cn.lengziyu.cardapp.pro.lifetime',
           },
         });
       }),
@@ -33,6 +34,7 @@ void main() {
     expect(configuration.enabled, isTrue);
     expect(configuration.appStoreEnabled, isTrue);
     expect(configuration.googlePlayEnabled, isFalse);
+    expect(configuration.lifetimeProductId, 'cn.lengziyu.cardapp.pro.lifetime');
     expect(
       configuration.canLoadEntitlements(
         monthly: 'cn.lengziyu.cardapp.pro.monthly',
@@ -124,6 +126,33 @@ void main() {
     expect(entitlement.status, ProEntitlementStatus.revoked);
     expect(entitlement.isActive, isFalse);
     expect(entitlement.plan, ProPlan.monthly);
+    client.close();
+  });
+
+  test('loads a non-expiring lifetime entitlement', () async {
+    final client = ApiClient(
+      baseUrl: 'https://example.test',
+      client: MockClient(
+        (_) async => _jsonResponse({
+          'entitlement': {
+            'status': 'active',
+            'plan': 'lifetime',
+            'expiresAt': null,
+            'autoRenewing': false,
+            'accessGranted': true,
+          },
+        }),
+      ),
+    );
+
+    final entitlement = await ProVerificationRepository(
+      client,
+    ).loadEntitlement(accessToken: 'account-token');
+
+    expect(entitlement.plan, ProPlan.lifetime);
+    expect(entitlement.expiresAt, isNull);
+    expect(entitlement.autoRenewing, isFalse);
+    expect(entitlement.isActive, isTrue);
     client.close();
   });
 

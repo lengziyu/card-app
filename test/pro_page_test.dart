@@ -49,6 +49,9 @@ void main() {
     expect(find.text('Get more from your card wallet'), findsOneWidget);
     expect(find.text('Monthly Pro'), findsOneWidget);
     expect(find.text('Yearly Pro'), findsOneWidget);
+    if (controller.offers.any((offer) => offer.plan == ProPlan.lifetime)) {
+      expect(find.text('Lifetime Pro'), findsOneWidget);
+    }
     expect(
       find.text('Details are not available in English yet.'),
       findsNothing,
@@ -61,6 +64,10 @@ void main() {
     );
     await tester.pump();
     expect(find.text('Pro Benefits'), findsOneWidget);
+    expect(
+      find.text('Pro AI allowance · 70 total uses per month'),
+      findsOneWidget,
+    );
     expect(
       find.text('Details are not available in English yet.'),
       findsNothing,
@@ -126,6 +133,10 @@ void main() {
 
       expect(find.byKey(const Key('pro-page')), findsOneWidget);
       expect(find.text('月度 Pro'), findsOneWidget);
+      expect(find.text('年度 Pro'), findsOneWidget);
+      if (controller.offers.any((offer) => offer.plan == ProPlan.lifetime)) {
+        expect(find.text('永久 Pro'), findsOneWidget);
+      }
       await tester.tap(find.byKey(const Key('pro-plan-monthly')));
       expect(controller.selectedPlan, ProPlan.monthly);
 

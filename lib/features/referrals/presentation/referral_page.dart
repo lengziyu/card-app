@@ -288,6 +288,8 @@ class _InvitePoster extends StatelessWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        const _InviteBrandMark(),
+        const SizedBox(height: 14),
         Row(
           children: [
             _InviteAvatar(name: profileName, avatarUrl: avatarUrl),
@@ -357,7 +359,7 @@ class _InvitePoster extends StatelessWidget {
             const SizedBox(width: 16),
             Expanded(
               child: Text(
-                context.tr('扫码注册\n完成邮箱验证并首次登录后，即可计入有效邀请。'),
+                context.tr('扫码注册\n完成邮箱验证并满足活跃要求后，计入有效邀请。'),
                 style: TextStyle(color: Colors.white, height: 1.55),
               ),
             ),
@@ -365,6 +367,58 @@ class _InvitePoster extends StatelessWidget {
         ),
       ],
     ),
+  );
+}
+
+class _InviteBrandMark extends StatelessWidget {
+  const _InviteBrandMark();
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      ClipRRect(
+        key: const Key('invite-brand-logo'),
+        borderRadius: BorderRadius.circular(12),
+        child: Image.asset(
+          'assets/branding/cardfi-icon-master.png',
+          width: 44,
+          height: 44,
+          cacheWidth: 132,
+          fit: BoxFit.cover,
+          filterQuality: FilterQuality.high,
+        ),
+      ),
+      const SizedBox(width: 11),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'CardFi',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+                letterSpacing: -.3,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              context.tr('浏览、整理与比较卡片公开信息'),
+              key: const Key('invite-brand-description'),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                height: 1.25,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ],
   );
 }
 
@@ -418,6 +472,18 @@ class _ProgressCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final next = profile.nextRewardAt;
+    final nextReward = switch (next) {
+      3 => context.tr('1 个月 Pro'),
+      10 => context.tr('1 年 Pro'),
+      20 => context.tr('永久 Pro'),
+      _ => context.tr('下一档 Pro'),
+    };
+    final earnedReward = switch (profile.rewardTier) {
+      'month' => context.tr('1 个月 Pro'),
+      'year' => context.tr('1 年 Pro'),
+      'lifetime' => context.tr('永久 Pro'),
+      _ => context.tr('暂未获得奖励'),
+    };
     final progress = next == null
         ? 1.0
         : (profile.effectiveInvites / next).clamp(0.0, 1.0);
@@ -461,26 +527,33 @@ class _ProgressCard extends StatelessWidget {
           const SizedBox(height: 11),
           Text(
             next == null
-                ? '已达到邀请奖励上限。'
+                ? context.tr('已解锁永久 Pro。')
                 : context
-                      .tr('再邀请 {count} 人，可获得 1 个月 Pro。')
+                      .tr('再邀请 {count} 人，可获得 {reward}。')
                       .replaceAll(
                         '{count}',
                         '${next - profile.effectiveInvites}',
-                      ),
+                      )
+                      .replaceAll('{reward}', nextReward),
             style: TextStyle(color: AppColors.textMuted, height: 1.4),
           ),
           const Divider(height: 30),
           Text(
-            context
-                .tr('已获得 {earned}/{max} 个月 Pro')
-                .replaceAll('{earned}', '${profile.rewardedMonths}')
-                .replaceAll('{max}', '${profile.maxRewardMonths}'),
+            context.tr('当前邀请奖励：{reward}').replaceAll('{reward}', earnedReward),
             style: TextStyle(
               color: AppColors.text,
               fontWeight: FontWeight.w800,
             ),
           ),
+          if (profile.pendingInvites > 0) ...[
+            const SizedBox(height: 6),
+            Text(
+              context
+                  .tr('{count} 位好友正在完成有效性核验。')
+                  .replaceAll('{count}', '${profile.pendingInvites}'),
+              style: TextStyle(color: AppColors.textMuted),
+            ),
+          ],
           if (profile.pendingRewardMonths > 0) ...[
             const SizedBox(height: 6),
             Text(
@@ -514,9 +587,10 @@ class _RulesCard extends StatelessWidget {
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
         ),
         SizedBox(height: 10),
-        Text('''• 普通账号每 10 位有效邀请获得 1 个月 Pro。
-• 使用邀请码注册的账号，首次只需邀请 7 位；之后每增加 10 位获得 1 个月。
-• 邀请奖励最多累计 6 个月；不可自邀、不可重复绑定。
+        Text('''• 3 位有效邀请获得 1 个月 Pro，10 位升级为 1 年，20 位升级为永久 Pro。
+• 有效邀请需完成邮箱验证，并满足账号存续时间、跨日活跃和真实使用行为要求。
+• 系统会综合网络来源与异常模式核验；单纯注册、批量养号不计入。
+• 不可自邀、不可重复绑定；异常邀请会进入核验或不计入奖励。
 • 不提供返现、佣金或外链推广奖励。''', style: TextStyle(height: 1.72)),
       ],
     ),

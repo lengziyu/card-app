@@ -2,11 +2,12 @@
 
 更新时间：2026-07-21  
 状态：2026-07-22 起不再作为生产主认证；本文仅保留历史迁移背景，不能作为新的
-Flutter 或生产认证配置指南。当前唯一的生产认证方案、上线节奏和关闭 Firebase 的条件以
-[`SUPABASE_AUTH.md`](SUPABASE_AUTH.md) 为准；旧用户迁移安排在正式上线前 1–2 天。
+Flutter 或生产认证配置指南。当前生产主认证方案、兼容节奏和未来关闭 Firebase 的条件以
+[`SUPABASE_AUTH.md`](SUPABASE_AUTH.md) 为准；审核期与首个正式版本不关闭旧认证。
 
-> 禁止依据本文重新启用 `FIREBASE_AUTH_ENABLED`、Firebase 邮箱登录或旧
-> `LEGACY_PASSWORD_AUTH_ENABLED`。FCM 推送与 Firebase Authentication 是独立能力，
+> 2026-08-26 项目所有者确认：审核期与首个公开无密码版本继续保留
+> `FIREBASE_AUTH_ENABLED` 和 `LEGACY_PASSWORD_AUTH_ENABLED`，且不提高最低支持版本。
+> FCM 推送与 Firebase Authentication 是独立能力，
 > 推送所需凭据的保留或轮换遵循 `PUSH_NOTIFICATIONS_SETUP.md`。
 
 ## 1. 已实现范围

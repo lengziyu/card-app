@@ -22,7 +22,7 @@ abstract final class AppIcons {
   static const bill = PhosphorIconsRegular.receipt;
 
   static const homeStack = PhosphorIconsRegular.stack;
-  static const homeFocus = PhosphorIconsRegular.crosshairSimple;
+  static const homeFocus = PhosphorIconsRegular.frameCorners;
   static const homeWallet = PhosphorIconsRegular.wallet;
 
   static const compare = PhosphorIconsRegular.arrowsLeftRight;

@@ -319,6 +319,8 @@ void main() {
 
   test('English fully translates authentication runtime messages', () {
     const localizations = AppLocalizations(Locale('en', 'US'));
+    expect(localizations.text('60 秒后可重新发送'), 'Resend in 60 seconds');
+    expect(localizations.text('Google 账号已绑定。'), 'Google account linked.');
     final files = [
       File('lib/features/auth/data/auth_controller.dart'),
       File('lib/features/auth/data/supabase_auth_repository.dart'),
@@ -404,5 +406,21 @@ void main() {
         reason: source,
       );
     }
+  });
+
+  test('English Pro quota copy matches the current monthly allowances', () {
+    const localizations = AppLocalizations(Locale('en', 'US'));
+    expect(
+      localizations.text('Pro AI 使用额度 · 每月共 70 次'),
+      'Pro AI allowance · 70 total uses per month',
+    );
+    expect(
+      localizations.text('AI精选好卡、AI 协助开卡各每月 20 次；每分钟最多 3 次。'),
+      contains('20 uses per month'),
+    );
+    expect(
+      localizations.text('账单识别每月 30 次，和以上额度独立计算；每月月初重置。'),
+      contains('30 uses per month'),
+    );
   });
 }

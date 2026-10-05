@@ -104,6 +104,60 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'profile places bills below favorites and leaves referrals in settings',
+    (tester) async {
+      AppColors.configure(Brightness.light);
+      ProfileSection? openedSection;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(disableAnimations: true),
+            child: Scaffold(
+              body: ProfilePage(
+                onOpenSection: (section) => openedSection = section,
+                onLogin: () {},
+                isDarkMode: false,
+                onToggleTheme: () {},
+                authUser: const AuthUser(
+                  id: 'member-1',
+                  email: 'member@example.com',
+                  displayName: '会员用户',
+                  emailVerified: true,
+                ),
+                billHistoryEnabled: true,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final favorites = find.byKey(const Key('profile-menu-favorites'));
+      final bills = find.byKey(const Key('profile-menu-bills'));
+      final history = find.byKey(const Key('profile-menu-history'));
+      final referral = find.byKey(const Key('profile-menu-referral'));
+      expect(favorites, findsOneWidget);
+      expect(bills, findsOneWidget);
+      expect(referral, findsNothing);
+      expect(
+        tester.getTopLeft(favorites).dy,
+        lessThan(tester.getTopLeft(bills).dy),
+      );
+      expect(
+        tester.getTopLeft(bills).dy,
+        lessThan(tester.getTopLeft(history).dy),
+      );
+      expect(find.text('我的账单'), findsOneWidget);
+      expect(find.text('邀请好友得会员'), findsNothing);
+
+      await tester.tap(bills);
+      expect(openedSection, ProfileSection.bills);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('light profile avatar and level card match the H5 treatment', (
     tester,
   ) async {

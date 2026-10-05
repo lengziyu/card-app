@@ -104,6 +104,8 @@ class InteractiveCardArtwork extends StatefulWidget {
     this.effect = CardVisualEffect.particle,
     this.artwork,
     this.borderRadius = const BorderRadius.all(Radius.circular(22)),
+    this.animateInitialEffect = true,
+    this.animateEffectChanges = true,
     super.key,
   });
 
@@ -111,6 +113,8 @@ class InteractiveCardArtwork extends StatefulWidget {
   final CardVisualEffect effect;
   final Widget? artwork;
   final BorderRadius borderRadius;
+  final bool animateInitialEffect;
+  final bool animateEffectChanges;
 
   @override
   State<InteractiveCardArtwork> createState() => _InteractiveCardArtworkState();
@@ -139,6 +143,7 @@ class _InteractiveCardArtworkState extends State<InteractiveCardArtwork>
   bool _waitingForPixels = false;
   int? _activeReconstructionParticleBudget;
   bool _reconstructionBudgetReduced = false;
+  bool _didStartEffect = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -181,7 +186,9 @@ class _InteractiveCardArtworkState extends State<InteractiveCardArtwork>
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
     if (_lastReduceMotion != reduceMotion) {
       _lastReduceMotion = reduceMotion;
-      _startEffect();
+      final animate = _didStartEffect || widget.animateInitialEffect;
+      _didStartEffect = true;
+      _startEffect(animate: animate);
       _configureGlassSweep();
     }
   }
@@ -196,14 +203,20 @@ class _InteractiveCardArtworkState extends State<InteractiveCardArtwork>
       _pixels.clear();
       _loadCardPixels();
     }
-    if (oldWidget.effect != widget.effect) _startEffect();
+    if (oldWidget.effect != widget.effect) {
+      _startEffect(animate: widget.animateEffectChanges);
+    } else if (!oldWidget.animateInitialEffect && widget.animateInitialEffect) {
+      // 非重建入口的共享卡片转场先完成主要位移，再由详情卡接力播放用户
+      // 选择的效果。重建入口从首帧直接启动，不走这里。
+      _startEffect();
+    }
   }
 
   bool get _isWidgetTest => WidgetsBinding.instance.runtimeType
       .toString()
       .contains('TestWidgetsFlutterBinding');
 
-  void _startEffect() {
+  void _startEffect({bool animate = true}) {
     final reduceMotion = _lastReduceMotion ?? false;
     _configureEffectDurations();
     _activeReconstructionParticleBudget = _isReconstructionEffect(widget.effect)
@@ -215,6 +228,16 @@ class _InteractiveCardArtworkState extends State<InteractiveCardArtwork>
     if (widget.effect == CardVisualEffect.none) {
       _entranceController.value = 1;
       _idleController.value = 0;
+      return;
+    }
+    // A shared-card flight already expresses the entrance. Starting another
+    // reconstruction here leaves the final card transparent after the flight
+    // has disappeared. Settle directly on the fully rendered card instead;
+    // tapping it or selecting another effect can still replay the animation.
+    if (!animate) {
+      _waitingForPixels = false;
+      _entranceController.value = 1;
+      _idleController.value = .18;
       return;
     }
     // The reconstruction effects need the actual card colours before the

@@ -24,8 +24,8 @@ abstract final class CardLayoutCalculator {
   /// 三种模式从同一顶部基线开始。
   static const double _stackTopInset = _contentInset;
 
-  /// 聚焦模式非选中卡的每层缩小量，同时也是视图推导模糊/蒙层深度的基准。
-  static const double focusDepthScaleStep = .085;
+  /// 参照效果中，焦点卡最宽；每离开焦点一层约收窄 7.5%。
+  static const double focusDepthScaleStep = .075;
 
   static List<CardTransformState> calculate({
     required CardStackMode mode,
@@ -91,16 +91,14 @@ abstract final class CardLayoutCalculator {
 
   /// 一次完整卡片切换所需的手指位移。
   ///
-  /// 与展开距离一致（卡高 + 间隙 − 条带高），保证拖拽时正在展开/收起的
-  /// 卡片 1:1 跟随手指。
+  /// 聚焦模式用下一张卡从场外进入焦点的完整行程，保证主卡 1:1 跟手；
+  /// 堆叠模式继续按展开区的高度换算。
   static double dragStep({
     required CardStackMode mode,
     required Size cardSize,
     double revealScale = 1,
   }) {
     if (mode == CardStackMode.focus) {
-      // 聚焦里正在交接的卡片行程是"卡高 − 条带高"（下方卡与选中卡
-      // 重叠一条带的距离）。
       return math.max(72, cardSize.height - _focusReveal(revealScale));
     }
     return math.max(72, cardSize.height + _fanGap - _stackReveal(revealScale));
@@ -182,8 +180,11 @@ abstract final class CardLayoutCalculator {
     });
   }
 
-  /// 聚焦：选中卡固定在视觉焦点，上方卡露"卡头"（被更近的卡压住下半），
-  /// 下方卡露"卡底"（被更近的卡压住上半），离焦点越远越小、越深。
+  /// 聚焦：复刻参照卡包的连续卡列。
+  ///
+  /// 焦点卡最宽且层级最高，向上下逐层收窄并后退。焦点上方只露卡头，
+  /// 焦点下方的每张卡都从上一张背后伸出，只露卡底。拖拽期间展开区、
+  /// 宽度和层级在相邻卡之间连续交接。
   static List<CardTransformState> _focusFan({
     required int selectedIndex,
     required double dragOffset,
@@ -203,47 +204,30 @@ abstract final class CardLayoutCalculator {
         .clamp(-.45, maxPosition + .45)
         .toDouble();
     final left = (screenSize.width - cardSize.width) / 2;
-    // 当前卡固定在可用场景的垂直中心；上下的卡片从这一张向外展开，
-    // 既保留景深层级，也不会让首次进入聚焦模式显得贴近页头。
-    final focusTop = (screenSize.height - cardSize.height) / 2;
+    final focusTop = (screenSize.height - cardSize.height) / 2 - 8;
+    // offset == 1 时，下一张卡的 top = 焦点卡底边 - reveal；即它的
+    // 顶部有完整一段 reveal 被焦点卡遮住。更下方的卡同样逐层相压。
+    final expand = cardSize.height - reveal * 2;
     final nearest = position.round().clamp(0, itemCount - 1).toInt();
     return List.generate(itemCount, (index) {
       final offset = index - position;
-      final distance = offset.abs();
-      // 上方按条带高度排布；正在交接的卡走"卡高 − 条带高"的行程滑到
-      // 选中卡之下；更下方的卡从选中卡底边上方一条带处继续，只露卡底。
-      final top = offset <= 0
-          ? focusTop + offset * reveal
-          : offset >= 1
-          ? focusTop + cardSize.height + (offset - 2) * reveal
-          : focusTop + offset * (cardSize.height - reveal);
-      final depth = math.min(3.5, distance);
+      final depth = offset.abs().clamp(0.0, 3.2).toDouble();
+      final layerDepth = (index - nearest).abs();
+      // offset <= 0 的卡按条带向上排列；offset >= 1 的卡整体让出一张
+      // 完整卡。0...1 之间的 expansion 让“完整展开区”连续交给下一张。
+      final expansion = offset.clamp(0.0, 1.0).toDouble();
       return CardTransformState(
-        top: top,
+        top: focusTop + offset * reveal + expand * expansion,
         left: left,
-        scale: 1 - depth * focusDepthScaleStep,
+        scale: (1 - depth * focusDepthScaleStep).clamp(.76, 1.0).toDouble(),
         opacity: 1,
         rotation: 0,
-        elevation:
-            (30 - 13 * math.min(1.0, distance) - math.max(0, distance - 1) * 4)
-                .clamp(4.0, 30.0)
-                .toDouble(),
-        zIndex: _proximityZIndex(
-          index: index,
-          selectedIndex: nearest,
-          itemCount: itemCount,
-        ),
+        elevation: (24 - depth * 3).clamp(10.0, 24.0).toDouble(),
+        // 焦点卡位于最上层；向上下两侧逐层降低。这样焦点以下的卡会
+        // 从上一张背后伸出，而不是反过来盖住上一张卡的底部。
+        zIndex: itemCount - layerDepth,
       );
     });
-  }
-
-  static int _proximityZIndex({
-    required int index,
-    required int selectedIndex,
-    required int itemCount,
-  }) {
-    if (index == selectedIndex) return itemCount * 4;
-    return itemCount * 4 - (index - selectedIndex).abs();
   }
 
   static List<CardTransformState> _wallet({

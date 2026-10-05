@@ -97,40 +97,46 @@ void main() {
       itemCount: 6,
     );
 
-    // 选中卡最大最亮，离焦点越远逐层缩小（视图据此推导模糊/蒙层深度）。
+    // 焦点卡最宽，向上下两侧按距离对称递减；素材仍保持清晰。
     expect(resting[2].scale, 1);
     expect(resting[1].scale, lessThan(resting[2].scale));
     expect(resting[0].scale, lessThan(resting[1].scale));
-    expect(resting[3].scale, lessThan(resting[2].scale));
+    expect(resting[3].scale, resting[1].scale);
+    expect(resting[4].scale, resting[0].scale);
     expect(resting.every((state) => state.opacity == 1), isTrue);
     expect(resting.every((state) => state.rotation == 0), isTrue);
-    // z 序按离选中卡的距离递减：上方卡被更近的卡压住下半（露卡头），
-    // 下方卡被更近的卡压住上半（露卡底）。
+    // 焦点卡层级最高，向上下两侧递减；所以下方卡片不会反盖住上一张。
     expect(resting[2].zIndex, greaterThan(resting[1].zIndex));
-    expect(resting[1].zIndex, greaterThan(resting[0].zIndex));
     expect(resting[2].zIndex, greaterThan(resting[3].zIndex));
+    expect(resting[1].zIndex, greaterThan(resting[0].zIndex));
     expect(resting[3].zIndex, greaterThan(resting[4].zIndex));
     expect(resting[4].zIndex, greaterThan(resting[5].zIndex));
     // 当前卡固定在可用卡片场景的垂直中心。
     expect(
       resting[2].top,
-      closeTo((screenSize.height - cardSize.height) / 2, .001),
+      closeTo((screenSize.height - cardSize.height) / 2 - 8, .001),
     );
     // 上方最远卡可以越过场景顶边，由渐隐遮罩溶解。
     expect(resting[0].top, lessThan(resting[1].top));
-    expect(
-      resting[1].scale,
-      closeTo(1 - CardLayoutCalculator.focusDepthScaleStep, .001),
-    );
     expect(resting[1].top - resting[0].top, inInclusiveRange(84, 128));
     expect(resting[2].top - resting[1].top, inInclusiveRange(84, 128));
-    // 下一张卡的顶边压在选中卡底边之上一条带处，只露出卡底。
+    // 下一张从选中卡背后伸出，顶部固定有一段被焦点卡遮住。
+    final focusReveal = resting[2].top - resting[1].top;
     expect(
       resting[2].top + cardSize.height - resting[3].top,
-      inInclusiveRange(84, 128),
+      closeTo(focusReveal, .001),
     );
+    for (var index = 3; index < resting.length; index++) {
+      final previousVisualBottom =
+          resting[index - 1].top + cardSize.height * resting[index - 1].scale;
+      expect(
+        resting[index].top,
+        lessThan(previousVisualBottom),
+        reason: 'each lower card starts behind the card immediately above it',
+      );
+    }
     expect(resting[4].top - resting[3].top, inInclusiveRange(84, 128));
-    // 向上拖拽：整副卡列连续跟手，选中卡上移、下一张卡向焦点靠近。
+    // 向上拖拽：展开区连续交给下一张，所有卡都沿同一队列运动。
     expect(dragging[2].top, lessThan(resting[2].top));
     expect(dragging[3].top, lessThan(resting[3].top));
     expect(dragging[0].top, lessThan(resting[0].top));

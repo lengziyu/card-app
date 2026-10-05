@@ -172,4 +172,75 @@ void main() {
       ),
     );
   });
+
+  test(
+    'normalizes structured result items and hides internal KYC fields',
+    () async {
+      final client = ApiClient(
+        baseUrl: 'https://example.test',
+        client: MockClient(
+          (_) async => http.Response(
+            jsonEncode({
+              'assistant': {
+                'summary': '已整理 Ether.fi 的公开申请要求。',
+                'sourceMode': 'official_web',
+                'checklist': [
+                  {
+                    'title': '确认地区',
+                    'detail':
+                        '请查看官方说明（mainlandAvailability: unavailable, requiresOverseasAddress: required）。',
+                    'sourceIds': ['official:etherfi-core'],
+                  },
+                ],
+                'warnings': [
+                  {'title': '地区限制', 'detail': '中国大陆不在支持地区内。'},
+                  {'unexpected': 'never render a Dart map'},
+                  '[object Object]',
+                ],
+                'unknowns': [
+                  {'question': '审核时间', 'answer': '请向发行方确认。'},
+                ],
+                'nextSteps': [
+                  {'action': '打开发行方官方页面。'},
+                ],
+                'sources': [
+                  {
+                    'id': 'official:etherfi-core',
+                    'type': 'official_web',
+                    'title': 'Ether.fi Cash',
+                    'url': 'https://www.ether.fi/cash',
+                  },
+                ],
+                'disclaimer': '仅供参考。',
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          ),
+        ),
+      );
+      addTearDown(client.close);
+      final repository = CardApplicationAssistantRepository(
+        client,
+        accessTokenProvider: () async => 'session-token',
+      );
+
+      final result = await repository.prepare(profile);
+
+      expect(result.checklist.single.detail, '请查看官方说明。');
+      expect(result.warnings, ['地区限制：中国大陆不在支持地区内。']);
+      expect(result.unknowns, ['审核时间：请向发行方确认。']);
+      expect(result.nextSteps, ['打开发行方官方页面。']);
+      expect(
+        [
+          result.summary,
+          ...result.checklist.map((item) => item.detail),
+          ...result.warnings,
+          ...result.unknowns,
+          ...result.nextSteps,
+        ].join(' '),
+        isNot(contains('[object Object]')),
+      );
+    },
+  );
 }

@@ -28,6 +28,9 @@ void main() {
               'status': 'required',
               'latestVersion': '0.2.0',
               'latestBuildNumber': '3',
+              'forceUpdateEnabled': true,
+              'minimumVersion': '0.1.5',
+              'minimumBuildNumber': '2',
               'updateUrl':
                   'https://play.google.com/store/apps/details?id=cn.lengziyu.cardapp',
               'releaseNotes': '修复稳定性问题。',
@@ -46,7 +49,42 @@ void main() {
     expect(update.status, AppUpdateStatus.required);
     expect(update.requiresUpdate, isTrue);
     expect(update.latestVersion, '0.2.0');
+    expect(update.forceUpdateEnabled, isTrue);
+    expect(update.minimumVersion, '0.1.5');
     expect(update.releaseNotes, '修复稳定性问题。');
+    client.close();
+  });
+
+  test('fails open when an update has no safe HTTPS store link', () async {
+    final client = ApiClient(
+      baseUrl: 'https://example.test',
+      client: MockClient(
+        (_) async => http.Response(
+          jsonEncode({
+            'update': {
+              'status': 'required',
+              'latestVersion': '0.2.0',
+              'latestBuildNumber': '3',
+              'forceUpdateEnabled': true,
+              'minimumVersion': '0.1.5',
+              'minimumBuildNumber': '2',
+              'updateUrl': 'http://unsafe.example/update',
+            },
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        ),
+      ),
+    );
+
+    final update = await AppVersionRepository(
+      client,
+    ).checkInstalledVersion(packageInfo);
+
+    expect(update.status, AppUpdateStatus.unavailable);
+    expect(update.configurationInvalid, isTrue);
+    expect(update.updateUrl, isEmpty);
+    expect(update.requiresUpdate, isFalse);
     client.close();
   });
 

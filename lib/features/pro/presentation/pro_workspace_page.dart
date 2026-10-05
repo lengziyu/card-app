@@ -120,13 +120,17 @@ class ProWorkspacePage extends StatelessWidget {
                 const SizedBox(height: 14),
                 _WorkspaceSection(
                   title: '消费账单分析',
-                  subtitle: '从截图提取金额、币种、手续费和费率，并计算可验证的内部损耗',
-                  child: _WorkspaceAction(
-                    key: const Key('pro-open-bill-analysis'),
-                    icon: Icons.document_scanner_outlined,
-                    title: '上传消费截图',
-                    description: '原图不写入账单记录；识别后先由你确认，再用于后续多账单对比。',
-                    onTap: onOpenBillAnalysis,
+                  subtitle: '上传新账单，或回看已经保存的结构化账单记录',
+                  child: Column(
+                    children: [
+                      _WorkspaceAction(
+                        key: const Key('pro-open-bill-analysis'),
+                        icon: Icons.document_scanner_outlined,
+                        title: '上传消费截图',
+                        description: '提取金额、币种、手续费和费率，并计算可验证的内部损耗。',
+                        onTap: onOpenBillAnalysis,
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 14),

@@ -4,6 +4,62 @@ import 'package:cardfi/core/theme/app_colors.dart';
 import 'package:cardfi/core/localization/app_localizations.dart';
 import 'package:country_picker/country_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+
+/// Reveals an AI result below the overlaid page header instead of aligning it
+/// with the raw viewport edge, where its title would be covered.
+void revealAiAssistantResultAfterLayout({
+  required BuildContext pageContext,
+  required GlobalKey resultKey,
+  required ScrollController scrollController,
+  double stickyHeaderHeight = 72,
+  double topGap = 10,
+}) {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (!pageContext.mounted || !scrollController.hasClients) return;
+    final targetContext = resultKey.currentContext;
+    final renderObject = targetContext?.findRenderObject();
+    if (renderObject == null || !renderObject.attached) return;
+    final viewport = RenderAbstractViewport.maybeOf(renderObject);
+    if (viewport == null) return;
+
+    final safeTop =
+        MediaQuery.paddingOf(pageContext).top + stickyHeaderHeight + topGap;
+    final revealedOffset = viewport.getOffsetToReveal(renderObject, 0).offset;
+    final position = scrollController.position;
+    final targetOffset = (revealedOffset - safeTop)
+        .clamp(position.minScrollExtent, position.maxScrollExtent)
+        .toDouble();
+    if ((position.pixels - targetOffset).abs() < .5) return;
+
+    if (MediaQuery.disableAnimationsOf(pageContext)) {
+      scrollController.jumpTo(targetOffset);
+      return;
+    }
+    scrollController.animateTo(
+      targetOffset,
+      duration: const Duration(milliseconds: 480),
+      curve: Curves.easeOutCubic,
+    );
+  });
+}
+
+/// Keeps enough scroll extent after a short result to place its heading below
+/// the sticky header. The page's existing bottom padding still protects it
+/// from the overlaid action bar.
+double aiAssistantResultTrailingSpace(
+  BuildContext context, {
+  required double footerHeight,
+  double stickyHeaderHeight = 72,
+  double topGap = 10,
+}) {
+  final viewportHeight = MediaQuery.sizeOf(context).height;
+  final safeTop =
+      MediaQuery.paddingOf(context).top + stickyHeaderHeight + topGap;
+  return (viewportHeight - safeTop - footerHeight)
+      .clamp(0, double.infinity)
+      .toDouble();
+}
 
 @immutable
 class AiResidenceSelection {

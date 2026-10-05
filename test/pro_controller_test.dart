@@ -3,13 +3,28 @@ import 'dart:convert';
 import 'package:cardfi/core/network/api_client.dart';
 import 'package:cardfi/features/pro/data/pro_config.dart';
 import 'package:cardfi/features/pro/data/pro_controller.dart';
+import 'package:cardfi/features/pro/domain/pro_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 void main() {
-  test('referral rewards stay disabled unless explicitly enabled', () {
-    expect(ProConfig.referralProgramEnabled, isFalse);
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('referral rewards are enabled in new builds', () {
+    expect(ProConfig.referralProgramEnabled, isTrue);
+  });
+
+  test('monthly and yearly remain available when lifetime is enabled', () {
+    expect(ProConfig.offers.map((offer) => offer.plan), [
+      ProPlan.monthly,
+      ProPlan.yearly,
+      if (ProConfig.lifetimeEnabled) ProPlan.lifetime,
+    ]);
+  });
+
+  test('receipt-printer result stays disabled in the default build', () {
+    expect(ProConfig.billReceiptPrinterEnabled, isFalse);
   });
 
   test(
@@ -41,7 +56,10 @@ void main() {
       await controller.initialize();
       expect(controller.accountConnected, isFalse);
       expect(controller.isActive, isFalse);
-      expect(requests, isEmpty);
+      expect(
+        requests.map((request) => request.url.path),
+        ProConfig.billingEnabled ? ['/api/pro/config'] : <String>[],
+      );
 
       accessToken = 'restored-token';
       await controller.refreshEntitlement();
@@ -49,6 +67,7 @@ void main() {
       expect(controller.accountConnected, isTrue);
       expect(controller.isActive, isTrue);
       expect(requests.map((request) => request.url.path), [
+        if (ProConfig.billingEnabled) '/api/pro/config',
         '/api/pro/config',
         '/api/pro/entitlement',
       ]);

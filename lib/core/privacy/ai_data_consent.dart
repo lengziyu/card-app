@@ -11,7 +11,7 @@ abstract final class AiDataConsent {
     'provider': switch (kind) {
       AiDataConsentKind.cardMatch ||
       AiDataConsentKind.applicationPrep => bailianProviderId,
-      AiDataConsentKind.billVision => openAiProviderId,
+      AiDataConsentKind.billVision => bailianProviderId,
     },
   };
 }

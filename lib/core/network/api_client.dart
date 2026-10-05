@@ -49,6 +49,12 @@ class ApiClient {
     Map<String, String>? headers,
   }) => _send('PUT', path, body: body, headers: headers);
 
+  Future<Object?> patch(
+    String path, {
+    Object? body,
+    Map<String, String>? headers,
+  }) => _send('PATCH', path, body: body, headers: headers);
+
   Future<Object?> delete(
     String path, {
     Object? body,

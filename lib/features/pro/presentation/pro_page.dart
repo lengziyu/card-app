@@ -89,7 +89,7 @@ class ProPage extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               Text(
-                '公开卡片资料、来源、风险提示和基础浏览不会设置付费墙。价格以 App Store 或 Google Play 显示为准。',
+                '公开卡片资料、来源、风险提示和基础浏览不会设置付费墙。价格与订阅规则以商店确认页显示为准。',
                 style: TextStyle(
                   color: AppColors.textMuted,
                   fontSize: 12,
@@ -227,7 +227,7 @@ class _ProHero extends StatelessWidget {
             Text(
               controller.isActive
                   ? _activeCopy(controller.entitlement)
-                  : '将 AI 精选好卡、AI 协助开卡和账单识别的每月额度提升至 30、30、20 次，并解锁高级卡包布局、2–4 卡对比、费用测算、长周期数据、离线资料与工作区备份。',
+                  : '将 AI 精选好卡、AI 协助开卡和账单识别的每月额度提升至 20、20、30 次，并解锁高级卡包布局、2–4 卡对比、费用测算、长周期数据、离线资料与工作区备份。',
               style: TextStyle(
                 color: AppColors.textMuted,
                 fontSize: 13,
@@ -237,20 +237,10 @@ class _ProHero extends StatelessWidget {
             ),
             if (!controller.isActive) ...[
               const SizedBox(height: 18),
-              Row(
-                children: [
-                  for (final offer in controller.offers) ...[
-                    Expanded(
-                      child: _PlanCard(
-                        offer: offer,
-                        selected: controller.selectedPlan == offer.plan,
-                        onTap: () => controller.selectPlan(offer.plan),
-                      ),
-                    ),
-                    if (offer != controller.offers.last)
-                      const SizedBox(width: 10),
-                  ],
-                ],
+              _PlanSelector(
+                offers: controller.offers,
+                selectedPlan: controller.selectedPlan,
+                onSelected: controller.selectPlan,
               ),
               AnimatedSize(
                 duration: MediaQuery.disableAnimationsOf(context)
@@ -303,7 +293,9 @@ class _ProHero extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               Text(
-                '订阅会按所选周期自动续费；可随时前往系统订阅管理页取消。实际价格、扣款时间与续费规则以商店确认页为准。',
+                controller.selectedPlan == ProPlan.lifetime
+                    ? '永久 Pro 为一次性购买，不会自动续费；AI 功能继续按页面列明的每月额度使用并重置。实际价格与付款以商店确认页为准。'
+                    : '订阅会按所选周期自动续费；可随时前往系统订阅管理页取消。实际价格、扣款时间与续费规则以商店确认页为准。',
                 style: TextStyle(
                   color: AppColors.textMuted,
                   fontSize: 10.5,
@@ -324,6 +316,9 @@ class _ProHero extends StatelessWidget {
   String _activeCopy(ProEntitlement entitlement) {
     final expiresAt = entitlement.expiresAt?.toLocal();
     final status = entitlement.status.label;
+    if (entitlement.plan == ProPlan.lifetime && entitlement.isActive) {
+      return '$status · 永久 Pro 与全部当前 Pro 权益已解锁。';
+    }
     if (expiresAt == null) return '$status · 高级展示模式与全部 Pro 权益已解锁。';
     return '$status · 有效期至 ${expiresAt.year}-${expiresAt.month.toString().padLeft(2, '0')}-${expiresAt.day.toString().padLeft(2, '0')}';
   }
@@ -343,10 +338,58 @@ class _ProHero extends StatelessWidget {
     if (!controller.accountPurchaseLinked) return '账号购买关联尚未安全配置';
     if (!controller.storeAvailable) return '当前设备暂时无法连接应用商店';
     if (!controller.offerFor(controller.selectedPlan).available) {
-      return '所选订阅商品暂未在当前商店生效';
+      return '所选 Pro 商品暂未在当前商店生效';
     }
     return '点击后将由系统商店显示最终价格并确认购买';
   }
+}
+
+class _PlanSelector extends StatelessWidget {
+  const _PlanSelector({
+    required this.offers,
+    required this.selectedPlan,
+    required this.onSelected,
+  });
+
+  final List<ProOffer> offers;
+  final ProPlan selectedPlan;
+  final ValueChanged<ProPlan> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final subscriptions = offers
+        .where((offer) => offer.plan != ProPlan.lifetime)
+        .toList(growable: false);
+    final lifetimeOffers = offers
+        .where((offer) => offer.plan == ProPlan.lifetime)
+        .toList(growable: false);
+    final lifetime = lifetimeOffers.isEmpty ? null : lifetimeOffers.first;
+
+    return Column(
+      children: [
+        if (subscriptions.isNotEmpty)
+          Row(
+            children: [
+              for (var index = 0; index < subscriptions.length; index++) ...[
+                Expanded(child: _buildCard(subscriptions[index])),
+                if (index != subscriptions.length - 1)
+                  const SizedBox(width: 10),
+              ],
+            ],
+          ),
+        if (lifetime != null) ...[
+          if (subscriptions.isNotEmpty) const SizedBox(height: 10),
+          SizedBox(width: double.infinity, child: _buildCard(lifetime)),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildCard(ProOffer offer) => _PlanCard(
+    offer: offer,
+    selected: selectedPlan == offer.plan,
+    onTap: () => onSelected(offer.plan),
+  );
 }
 
 class _PlanCard extends StatelessWidget {
@@ -594,7 +637,7 @@ class _MembershipActions extends StatelessWidget {
             key: const Key('pro-restore-purchase'),
             icon: Icons.restore_rounded,
             title: controller.restoring ? '正在恢复…' : '恢复购买',
-            subtitle: '找回同一商店账号下的有效订阅',
+            subtitle: '找回同一商店账号下的有效订阅或买断权益',
             onTap: canRestore ? onRestore : null,
           ),
           Divider(height: 1, indent: 54, color: AppColors.line),
@@ -849,12 +892,17 @@ class _FeatureCard extends StatelessWidget {
     (
       Icons.manage_search_rounded,
       'AI精选好卡',
-      '普通版每月 5 次；Pro 每月 30 次。填写所在地区、可用证件、KYC 偏好和主要用途，从已收录的公开资料中筛出值得进一步了解的卡片。',
+      '普通版每月 6 次；Pro 每月 20 次。填写所在地区、可用证件、KYC 偏好和主要用途，从已收录的公开资料中筛出值得进一步了解的卡片。',
     ),
     (
       Icons.fact_check_outlined,
       'AI 协助开卡',
-      '普通版每月 5 次；Pro 每月 30 次。选定一张卡后整理公开申请材料、步骤、费用与风险提醒；不代办、不提交申请，也不保证审核结果。',
+      '普通版每月 6 次；Pro 每月 20 次。选定一张卡后整理公开申请材料、步骤、费用与风险提醒；不代办、不提交申请，也不保证审核结果。',
+    ),
+    (
+      Icons.receipt_long_outlined,
+      'AI 识别账单',
+      '普通版每月 8 次；Pro 每月 30 次。仅提取截图中明确显示的账单字段，金额、费率与损耗由固定公式计算。',
     ),
     (Icons.layers_outlined, '堆叠模式', '用纵向层叠展示多张卡片，快速浏览整个卡包'),
     (Icons.view_day_outlined, '聚焦模式', '突出当前卡片，获得更强的层次与浏览体验'),
@@ -953,12 +1001,12 @@ class _AiQuotaNotice extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Pro AI 使用额度 · 每月 80 次',
+                'Pro AI 使用额度 · 每月共 70 次',
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900),
               ),
               SizedBox(height: 2),
               Text(
-                'AI精选好卡、AI 协助开卡各每月 30 次；每分钟最多 3 次。',
+                'AI精选好卡、AI 协助开卡各每月 20 次；每分钟最多 3 次。',
                 style: TextStyle(
                   fontSize: 10.5,
                   height: 1.35,
@@ -967,7 +1015,7 @@ class _AiQuotaNotice extends StatelessWidget {
               ),
               SizedBox(height: 5),
               Text(
-                '账单识别每月 20 次，和以上额度独立计算；每月月初重置。',
+                '账单识别每月 30 次，和以上额度独立计算；每月月初重置。',
                 style: TextStyle(
                   fontSize: 10.5,
                   height: 1.35,

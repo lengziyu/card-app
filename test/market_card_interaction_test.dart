@@ -661,6 +661,17 @@ void main() {
         ),
       ),
     );
+    controller.value = .84;
+    await tester.pump();
+    expect(
+      tester
+          .widget<Opacity>(find.byKey(const Key('market-card-flight-opacity')))
+          .opacity,
+      1,
+      reason:
+          'the source artwork must remain visible until the detail artwork starts its handoff',
+    );
+
     controller.value = 1;
     await tester.pump();
 

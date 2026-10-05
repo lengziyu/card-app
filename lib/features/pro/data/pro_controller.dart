@@ -39,7 +39,9 @@ class ProController extends ChangeNotifier {
   bool _initializing = false;
   bool _disposed = false;
 
-  ProPlan selectedPlan = ProPlan.yearly;
+  ProPlan selectedPlan = ProConfig.lifetimeEnabled
+      ? ProPlan.lifetime
+      : ProPlan.yearly;
   ProEntitlement entitlement = const ProEntitlement.free();
   List<ProOffer> offers = ProConfig.offers;
   bool loading = true;
@@ -99,7 +101,7 @@ class ProController extends ChangeNotifier {
         _setEntitlement(
           ProEntitlement(
             status: ProEntitlementStatus.active,
-            plan: ProPlan.yearly,
+            plan: ProConfig.lifetimeEnabled ? ProPlan.lifetime : ProPlan.yearly,
             expiresAt: DateTime.now().add(const Duration(days: 365)),
             autoRenewing: true,
             accessGranted: true,
@@ -110,7 +112,11 @@ class ProController extends ChangeNotifier {
       // Entitlements are authoritative server state even when this build does
       // not expose store billing (for example, internal admin-granted access).
       await _refreshAccountContext();
-      if (accountConnected) {
+      // A release build with billing enabled must load this public endpoint
+      // before sign-in too. A reviewer may see StoreKit prices before signing
+      // in; without this call the UI would incorrectly report that the service
+      // is still preparing. Preview builds keep their local-only behavior.
+      if (ProConfig.billingEnabled || accountConnected) {
         await _loadServiceConfiguration();
       }
       if (entitlementServiceAvailable && accountConnected) {
@@ -164,14 +170,14 @@ class ProController extends ChangeNotifier {
     await _refreshAccountContext();
     await _loadServiceConfiguration();
     if (!ProConfig.billingEnabled) {
-      return '请先配置 ENABLE_PRO_BILLING 与商店订阅商品。';
+      return '请先配置 ENABLE_PRO_BILLING 与商店 Pro 商品。';
     }
     if (!serviceAvailable) return 'Pro 服务端尚未开放，暂时不能购买。';
     if (!accountConnected) return '请先完成正式账号服务接入并登录。';
     if (!accountPurchaseLinked) return '当前账号尚未配置安全的购买关联 ID。';
     if (!storeAvailable) return '当前设备暂时无法连接应用商店。';
     final product = _products[offerFor(selectedPlan).productId];
-    if (product == null) return '商店还没有返回所选订阅商品。';
+    if (product == null) return '商店还没有返回所选 Pro 商品。';
 
     purchasePending = true;
     message = null;
@@ -199,7 +205,7 @@ class ProController extends ChangeNotifier {
   Future<String?> restore() async {
     await _refreshAccountContext();
     await _loadServiceConfiguration();
-    if (!ProConfig.billingEnabled) return '请先配置商店订阅商品。';
+    if (!ProConfig.billingEnabled) return '请先配置商店 Pro 商品。';
     if (!serviceAvailable) return 'Pro 服务端尚未开放，暂时不能恢复购买。';
     if (!accountConnected) return '请先完成正式账号服务接入并登录。';
     if (!accountPurchaseLinked) return '当前账号尚未配置安全的购买关联 ID。';
@@ -213,7 +219,7 @@ class ProController extends ChangeNotifier {
       );
       if (restoring) {
         restoring = false;
-        message = '恢复请求已完成；如有有效订阅，权益会在商店返回后自动更新。';
+        message = '恢复请求已完成；如有有效购买，权益会在商店返回后自动更新。';
         notifyListeners();
       }
       return null;
@@ -260,9 +266,9 @@ class ProController extends ChangeNotifier {
       ProConfig.offers.map((offer) => offer.productId).toSet(),
     );
     if (response.error != null) {
-      message = '订阅商品读取失败：${response.error!.message}';
+      message = 'Pro 商品读取失败：${response.error!.message}';
     } else if (response.notFoundIDs.isNotEmpty) {
-      message = '部分订阅商品尚未在当前商店环境生效。';
+      message = '部分 Pro 商品尚未在当前商店环境生效。';
     }
     _products
       ..clear()
@@ -352,7 +358,7 @@ class ProController extends ChangeNotifier {
       purchasePending = false;
       restoring = false;
       if (error.code == 'PRO_TRANSACTION_ALREADY_BOUND') {
-        message = '该商店订阅已绑定其他账号，请切换到原账号后恢复购买。';
+        message = '该商店购买已绑定其他账号，请切换到原账号后恢复购买。';
         if (purchase.pendingCompletePurchase) {
           await _billing!.completePurchase(purchase);
         }
@@ -427,6 +433,9 @@ class ProController extends ChangeNotifier {
       final productsMatch = configuration.matchesProducts(
         monthly: ProConfig.monthlyProductId,
         yearly: ProConfig.yearlyProductId,
+        lifetime: ProConfig.lifetimeEnabled
+            ? ProConfig.lifetimeProductId
+            : null,
       );
       entitlementServiceAvailable = configuration.canLoadEntitlements(
         monthly: ProConfig.monthlyProductId,

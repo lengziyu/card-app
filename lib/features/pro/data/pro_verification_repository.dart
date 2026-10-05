@@ -23,6 +23,9 @@ class ProVerificationRepository {
       yearlyProductId: products is Map<String, dynamic>
           ? products['yearly']?.toString()
           : null,
+      lifetimeProductId: products is Map<String, dynamic>
+          ? products['lifetime']?.toString()
+          : null,
       appStoreEnabled:
           stores is Map<String, dynamic> && stores['appStore'] == true,
       googlePlayEnabled:
@@ -83,6 +86,7 @@ class ProVerificationRepository {
     final plan = switch (source['plan']?.toString()) {
       'monthly' => ProPlan.monthly,
       'yearly' => ProPlan.yearly,
+      'lifetime' => ProPlan.lifetime,
       _ => null,
     };
     final expiresAt = DateTime.tryParse(source['expiresAt']?.toString() ?? '');

@@ -5,7 +5,6 @@ import 'package:cardfi/core/localization/app_localizations.dart';
 import 'package:cardfi/core/motion/motion_tokens.dart';
 import 'package:cardfi/core/motion/motion_widgets.dart';
 import 'package:cardfi/core/theme/app_colors.dart';
-import 'package:cardfi/features/pro/widgets/pro_crown_badge.dart';
 import 'package:flutter/material.dart';
 
 class BottomNavigation extends StatefulWidget {
@@ -226,7 +225,6 @@ class _QuickActionMenu extends StatelessWidget {
                 closedOffset: const Offset(1.21, .85),
                 tooltip: context.tr('拍照识别账单'),
                 icon: AppIcons.bill,
-                showProBadge: true,
                 onTap: onAnalyzeBill,
               ),
             ),
@@ -259,7 +257,6 @@ class _QuickMenuButton extends StatelessWidget {
     required this.tooltip,
     required this.icon,
     required this.onTap,
-    this.showProBadge = false,
   });
 
   final Key actionKey;
@@ -269,7 +266,6 @@ class _QuickMenuButton extends StatelessWidget {
   final String tooltip;
   final IconData icon;
   final VoidCallback onTap;
-  final bool showProBadge;
 
   @override
   Widget build(BuildContext context) {
@@ -302,24 +298,12 @@ class _QuickMenuButton extends StatelessWidget {
                     width: 58,
                     height: 58,
                     decoration: _quickMenuDecoration(),
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      alignment: Alignment.center,
-                      children: [
-                        Icon(
-                          icon,
-                          size: 23,
-                          color: AppColors.isDark
-                              ? Colors.white
-                              : const Color(0xFF4F67FF),
-                        ),
-                        if (showProBadge)
-                          const Positioned(
-                            right: -4,
-                            top: -5,
-                            child: ProCrownBadge(),
-                          ),
-                      ],
+                    child: Icon(
+                      icon,
+                      size: 23,
+                      color: AppColors.isDark
+                          ? Colors.white
+                          : const Color(0xFF4F67FF),
                     ),
                   ),
                 ),

@@ -1,3 +1,5 @@
+enum AuthLoginProvider { email, google, apple }
+
 class AuthUser {
   const AuthUser({
     required this.id,
@@ -5,6 +7,8 @@ class AuthUser {
     required this.displayName,
     required this.emailVerified,
     this.avatarUrl,
+    this.loginProviders = const <AuthLoginProvider>{},
+    this.createdAt,
   });
 
   final String id;
@@ -12,14 +16,33 @@ class AuthUser {
   final String? displayName;
   final bool emailVerified;
   final String? avatarUrl;
+  final Set<AuthLoginProvider> loginProviders;
+  final String? createdAt;
 
-  AuthUser copyWith({String? displayName, String? avatarUrl}) => AuthUser(
+  AuthUser copyWith({
+    String? displayName,
+    String? avatarUrl,
+    Set<AuthLoginProvider>? loginProviders,
+  }) => AuthUser(
     id: id,
     email: email,
     displayName: displayName ?? this.displayName,
     emailVerified: emailVerified,
     avatarUrl: avatarUrl ?? this.avatarUrl,
+    loginProviders: loginProviders ?? this.loginProviders,
+    createdAt: createdAt,
   );
+
+  bool appearsRecentlyRegistered({DateTime? now}) {
+    final created = DateTime.tryParse(createdAt ?? '')?.toUtc();
+    if (created == null) return false;
+    final age = (now ?? DateTime.now()).toUtc().difference(created);
+    return age >= const Duration(minutes: -5) &&
+        age <= const Duration(hours: 2);
+  }
+
+  bool hasProvider(AuthLoginProvider provider) =>
+      loginProviders.contains(provider);
 
   String get profileName {
     final name = displayName?.trim();

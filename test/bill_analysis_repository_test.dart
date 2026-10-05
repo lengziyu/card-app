@@ -101,13 +101,43 @@ void main() {
     expect(body['aiDataConsent'], {
       'granted': true,
       'version': '2026-08-18',
-      'provider': 'openai',
+      'provider': 'alibaba-cloud-bailian',
     });
     expect(analysis.extraction.provider, 'MEXC');
     expect(analysis.extraction.original.label, '25 CNY');
     expect(analysis.extraction.exchangeRates, hasLength(2));
     expect(analysis.metrics.internalRoundingDifference, '-0.000346');
     expect(analysis.metrics.benchmarkStatus, 'not_available');
+    client.close();
+  });
+
+  test('can opt into the isolated v2 endpoint', () async {
+    late http.Request captured;
+    final client = ApiClient(
+      baseUrl: 'https://example.test',
+      client: MockClient((request) async {
+        captured = request;
+        return _jsonResponse({
+          'analysis': {
+            'extraction': <String, Object?>{},
+            'metrics': <String, Object?>{},
+            'disclaimer': '',
+          },
+        });
+      }),
+    );
+    final repository = BillAnalysisRepository(
+      client,
+      accessTokenProvider: () async => 'short-lived-token',
+      path: '/api/pro/bill-analysis-v2',
+    );
+
+    await repository.analyze(
+      imageBytes: Uint8List.fromList([0x89, 0x50, 0x4e, 0x47]),
+      mimeType: 'image/png',
+    );
+
+    expect(captured.url.path, '/api/pro/bill-analysis-v2');
     client.close();
   });
 }

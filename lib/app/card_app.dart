@@ -1,4 +1,5 @@
 import 'package:cardfi/app/startup_splash.dart';
+import 'package:cardfi/core/config/app_feature_config.dart';
 import 'package:cardfi/core/localization/app_language.dart';
 import 'package:cardfi/core/localization/app_localizations.dart';
 import 'package:cardfi/core/localization/country_localizations_delegate.dart';
@@ -6,6 +7,7 @@ import 'package:cardfi/core/motion/motion_tokens.dart';
 import 'package:cardfi/core/theme/app_colors.dart';
 import 'package:cardfi/core/theme/app_theme.dart';
 import 'package:cardfi/features/auth/data/auth_repository.dart';
+import 'package:cardfi/features/catalog/domain/card_summary.dart';
 import 'package:cardfi/features/pro/data/pro_controller.dart';
 import 'package:cardfi/features/shell/presentation/app_shell.dart';
 import 'package:flutter/material.dart';
@@ -19,6 +21,8 @@ class CardApp extends StatefulWidget {
     this.proAccessTokenProvider,
     this.proApplicationUserNameProvider,
     this.authRepository,
+    this.catalogRepository,
+    this.edgeSwipeBackEnabled = AppFeatureConfig.edgeSwipeBackEnabled,
     super.key,
   });
 
@@ -27,6 +31,8 @@ class CardApp extends StatefulWidget {
   final ProAccessTokenProvider? proAccessTokenProvider;
   final ProApplicationUserNameProvider? proApplicationUserNameProvider;
   final AuthRepository? authRepository;
+  final CardCatalogRepository? catalogRepository;
+  final bool edgeSwipeBackEnabled;
 
   @override
   State<CardApp> createState() => _CardAppState();
@@ -131,10 +137,12 @@ class _CardAppState extends State<CardApp> {
                 proApplicationUserNameProvider:
                     widget.proApplicationUserNameProvider,
                 authRepository: widget.authRepository,
+                catalogRepository: widget.catalogRepository,
                 isDarkMode: _themeMode == ThemeMode.dark,
                 onToggleTheme: _toggleTheme,
                 selectedLanguage: _language,
                 onLanguageChanged: _changeLanguage,
+                edgeSwipeBackEnabled: widget.edgeSwipeBackEnabled,
               ),
             )
           : const CardFiStartupPlaceholder(),

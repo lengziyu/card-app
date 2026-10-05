@@ -10,6 +10,8 @@ import 'package:cardfi/core/theme/app_colors.dart';
 import 'package:cardfi/core/widgets/app_feedback.dart';
 import 'package:cardfi/features/catalog/domain/card_detail.dart';
 import 'package:cardfi/features/catalog/domain/card_summary.dart';
+import 'package:cardfi/features/catalog/data/card_comment_repository.dart';
+import 'package:cardfi/features/catalog/presentation/card_comments_page.dart';
 import 'package:cardfi/features/catalog/widgets/interactive_card_artwork.dart';
 import 'package:cardfi/features/catalog/widgets/global_account_cover.dart';
 import 'package:cardfi/features/pro/widgets/pro_crown_badge.dart';
@@ -39,7 +41,11 @@ class CardPreviewPage extends StatefulWidget {
     this.usingOfflineFallback = false,
     this.onRetry,
     this.entranceAnimation,
+    this.reconstructOnEntrance = false,
     this.isPro = false,
+    this.commentRepository,
+    this.signedIn = false,
+    this.onCommentLoginRequired,
     super.key,
   });
 
@@ -59,7 +65,11 @@ class CardPreviewPage extends StatefulWidget {
   final bool usingOfflineFallback;
   final VoidCallback? onRetry;
   final Animation<double>? entranceAnimation;
+  final bool reconstructOnEntrance;
   final bool isPro;
+  final CardCommentRepository? commentRepository;
+  final bool signedIn;
+  final VoidCallback? onCommentLoginRequired;
 
   @override
   State<CardPreviewPage> createState() => _CardPreviewPageState();
@@ -187,15 +197,50 @@ class _CardPreviewPageState extends State<CardPreviewPage> {
   CardVisualEffect _effect = CardVisualEffect.particle;
   bool _effectChangedLocally = false;
   bool _effectMenuOpen = false;
+  bool _suppressEffectAnimation = false;
   late final ScrollController _scrollController;
   final ValueNotifier<double> _headerProgress = ValueNotifier(0);
   final ValueNotifier<bool> _cardStageTickerEnabled = ValueNotifier(true);
+  Animation<double>? _effectEntranceAnimation;
+  bool _initialEffectReady = false;
 
   @override
   void initState() {
     super.initState();
     _scrollController = ScrollController()..addListener(_updateHeaderProgress);
+    _observeEffectEntrance(widget.entranceAnimation);
     unawaited(_restoreEffect());
+  }
+
+  @override
+  void didUpdateWidget(covariant CardPreviewPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.entranceAnimation != widget.entranceAnimation ||
+        oldWidget.reconstructOnEntrance != widget.reconstructOnEntrance) {
+      _observeEffectEntrance(widget.entranceAnimation);
+    }
+  }
+
+  void _observeEffectEntrance(Animation<double>? animation) {
+    _effectEntranceAnimation?.removeListener(_handleEffectEntrance);
+    _effectEntranceAnimation = animation;
+    // 重建入口不保留完整飞行卡：详情卡从第一帧就是特效舞台，最终由
+    // 用户选择的效果组装出完整卡面。
+    _initialEffectReady =
+        widget.reconstructOnEntrance ||
+        animation == null ||
+        animation.value >= .68;
+    if (!_initialEffectReady) animation?.addListener(_handleEffectEntrance);
+  }
+
+  void _handleEffectEntrance() {
+    final animation = _effectEntranceAnimation;
+    if (_initialEffectReady || animation == null || animation.value < .68) {
+      return;
+    }
+    animation.removeListener(_handleEffectEntrance);
+    if (!mounted) return;
+    setState(() => _initialEffectReady = true);
   }
 
   Future<void> _restoreEffect() async {
@@ -210,7 +255,21 @@ class _CardPreviewPageState extends State<CardPreviewPage> {
         (_isProEffect(savedEffect) && !widget.isPro)) {
       return;
     }
-    setState(() => _effect = savedEffect);
+    final rebuildingOnEntrance =
+        widget.reconstructOnEntrance &&
+        (widget.entranceAnimation?.value ?? 1) < 1;
+    setState(() {
+      // If the saved effect arrives while reconstruction is still active,
+      // replay that saved effect from zero as well. Settling it immediately
+      // would reintroduce the complete-card flash this entrance avoids.
+      _suppressEffectAnimation = !rebuildingOnEntrance;
+      _effect = savedEffect;
+    });
+    // The preference restore is state hydration, not a user-selected replay.
+    // Keep this one update settled, then allow later menu changes to animate.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _suppressEffectAnimation = false;
+    });
   }
 
   void _selectEffect(CardVisualEffect effect) {
@@ -218,6 +277,7 @@ class _CardPreviewPageState extends State<CardPreviewPage> {
       _effect = effect;
       _effectChangedLocally = true;
       _effectMenuOpen = false;
+      _suppressEffectAnimation = false;
     });
     unawaited(
       SharedPreferences.getInstance().then(
@@ -253,6 +313,7 @@ class _CardPreviewPageState extends State<CardPreviewPage> {
 
   @override
   void dispose() {
+    _effectEntranceAnimation?.removeListener(_handleEffectEntrance);
     _scrollController
       ..removeListener(_updateHeaderProgress)
       ..dispose();
@@ -349,6 +410,40 @@ class _CardPreviewPageState extends State<CardPreviewPage> {
     child: child,
   );
 
+  Widget _sharedCardHandoff(Widget child) {
+    final animation = widget.entranceAnimation;
+    if (animation == null || MediaQuery.disableAnimationsOf(context)) {
+      return Opacity(
+        key: const Key('detail-card-handoff-opacity'),
+        opacity: 1,
+        child: child,
+      );
+    }
+    if (widget.reconstructOnEntrance &&
+        animation.status != AnimationStatus.reverse) {
+      return Opacity(
+        key: const Key('detail-card-handoff-opacity'),
+        opacity: 1,
+        child: child,
+      );
+    }
+    return AnimatedBuilder(
+      animation: animation,
+      child: child,
+      builder: (context, child) => Opacity(
+        key: const Key('detail-card-handoff-opacity'),
+        // This is the exact complement of MarketCardTransition's flight
+        // opacity. Their sum therefore stays at one throughout the handoff.
+        opacity: const Interval(
+          .86,
+          1,
+          curve: Curves.easeOut,
+        ).transform(animation.value),
+        child: child,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final card = widget.card;
@@ -356,6 +451,10 @@ class _CardPreviewPageState extends State<CardPreviewPage> {
     final added = widget.added;
     final onBack = widget.onBack;
     final onAddedChanged = widget.onAddedChanged;
+    final paymentChannels = paymentChannelsForPlatform(
+      detail.paymentChannels,
+      defaultTargetPlatform,
+    );
     final topInset = MediaQuery.paddingOf(context).top;
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     return Stack(
@@ -377,13 +476,20 @@ class _CardPreviewPageState extends State<CardPreviewPage> {
                 valueListenable: _cardStageTickerEnabled,
                 builder: (context, enabled, child) =>
                     TickerMode(enabled: enabled, child: child!),
-                child: _reveal(
+                child: _sharedCardHandoff(
                   card.isGlobalAccount
-                      ? _GlobalAccountStage(card: card, effect: _effect)
-                      : _DetailCardStage(card: card, effect: _effect),
-                  begin: .82,
-                  end: 1,
-                  offset: 0,
+                      ? _GlobalAccountStage(
+                          card: card,
+                          effect: _effect,
+                          animateInitialEffect: _initialEffectReady,
+                          animateEffectChanges: !_suppressEffectAnimation,
+                        )
+                      : _DetailCardStage(
+                          card: card,
+                          effect: _effect,
+                          animateInitialEffect: _initialEffectReady,
+                          animateEffectChanges: !_suppressEffectAnimation,
+                        ),
                 ),
               ),
               SizedBox(height: card.isGlobalAccount ? 18 : 25),
@@ -552,32 +658,22 @@ class _CardPreviewPageState extends State<CardPreviewPage> {
                 SizedBox(height: 28),
                 _reveal(_FeeBlock(detail: detail), begin: .7, end: .94),
               ],
-              if (detail.fees.any((fee) => fee.note?.isNotEmpty == true)) ...[
+              if (paymentChannels.isNotEmpty) ...[
                 SizedBox(height: 20),
                 _reveal(
-                  _RuleBlock(
-                    key: const Key('detail-fee-notes'),
-                    title: '费用说明',
-                    rules: [
-                      for (final fee in detail.fees)
-                        if (fee.note?.isNotEmpty == true)
-                          DetailRule(
-                            label: fee.label,
-                            value: fee.note!,
-                            icon: DetailFeatureIcon.payments,
-                          ),
-                    ],
-                  ),
-                  begin: .71,
-                  end: .95,
-                ),
-              ],
-              if (detail.paymentChannels.isNotEmpty) ...[
-                SizedBox(height: 20),
-                _reveal(
-                  _PaymentBlock(channels: detail.paymentChannels),
+                  _PaymentBlock(channels: paymentChannels),
                   begin: .72,
                   end: .96,
+                ),
+              ],
+              if (!card.isGlobalAccount &&
+                  widget.commentRepository != null) ...[
+                const SizedBox(height: 20),
+                CardCommentPreview(
+                  card: card,
+                  repository: widget.commentRepository!,
+                  signedIn: widget.signedIn,
+                  onLoginRequired: widget.onCommentLoginRequired ?? () {},
                 ),
               ],
               SizedBox(height: 20),
@@ -772,10 +868,17 @@ class _OfflineDetailNotice extends StatelessWidget {
 }
 
 class _DetailCardStage extends StatelessWidget {
-  const _DetailCardStage({required this.card, required this.effect});
+  const _DetailCardStage({
+    required this.card,
+    required this.effect,
+    required this.animateInitialEffect,
+    required this.animateEffectChanges,
+  });
 
   final CardSummary card;
   final CardVisualEffect effect;
+  final bool animateInitialEffect;
+  final bool animateEffectChanges;
 
   @override
   Widget build(BuildContext context) {
@@ -827,7 +930,12 @@ class _DetailCardStage extends StatelessWidget {
             ),
           ),
           Positioned.fill(
-            child: InteractiveCardArtwork(card: card, effect: effect),
+            child: InteractiveCardArtwork(
+              card: card,
+              effect: effect,
+              animateInitialEffect: animateInitialEffect,
+              animateEffectChanges: animateEffectChanges,
+            ),
           ),
         ],
       ),
@@ -836,10 +944,17 @@ class _DetailCardStage extends StatelessWidget {
 }
 
 class _GlobalAccountStage extends StatelessWidget {
-  const _GlobalAccountStage({required this.card, required this.effect});
+  const _GlobalAccountStage({
+    required this.card,
+    required this.effect,
+    required this.animateInitialEffect,
+    required this.animateEffectChanges,
+  });
 
   final CardSummary card;
   final CardVisualEffect effect;
+  final bool animateInitialEffect;
+  final bool animateEffectChanges;
 
   @override
   Widget build(BuildContext context) {
@@ -863,6 +978,8 @@ class _GlobalAccountStage extends StatelessWidget {
         child: InteractiveCardArtwork(
           card: card,
           effect: effect,
+          animateInitialEffect: animateInitialEffect,
+          animateEffectChanges: animateEffectChanges,
           borderRadius: BorderRadius.circular(14),
           artwork: GlobalAccountCover(card: card),
         ),
@@ -2301,8 +2418,9 @@ class _KycBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final opening = detail.openingRequirements;
     return Container(
-      key: Key('detail-kyc'),
+      key: const Key('detail-kyc'),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.glass,
@@ -2313,25 +2431,76 @@ class _KycBlock extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '身份验证（KYC）',
+            opening == null ? '身份验证（KYC）' : '开卡条件',
             style: TextStyle(
               color: AppColors.text,
               fontSize: 18,
               fontWeight: FontWeight.w700,
             ),
           ),
+          if (opening != null && opening.summary.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              '通常需要：${opening.summary}',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: AppColors.textMuted,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+                height: 1.35,
+              ),
+            ),
+          ],
           const SizedBox(height: 14),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              for (final document in KycDocument.values)
-                _StatusPill(
-                  label: document.label,
-                  supported: card.kycDocuments.contains(document),
+          if (opening == null)
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                for (final document in KycDocument.values)
+                  _StatusPill(
+                    label: document.label,
+                    supported: card.kycDocuments.contains(document),
+                  ),
+              ],
+            )
+          else
+            Container(
+              key: const Key('detail-opening-requirements'),
+              padding: const EdgeInsets.symmetric(vertical: 11),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceRaised.withValues(alpha: .48),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppColors.line.withValues(alpha: .7)),
+              ),
+              child: IntrinsicHeight(
+                child: Row(
+                  children: [
+                    for (
+                      var index = 0;
+                      index < OpeningRequirementKind.values.length;
+                      index++
+                    ) ...[
+                      if (index > 0)
+                        VerticalDivider(
+                          width: 1,
+                          thickness: 1,
+                          color: AppColors.line.withValues(alpha: .72),
+                        ),
+                      Expanded(
+                        child: _OpeningRequirementItem(
+                          kind: OpeningRequirementKind.values[index],
+                          state: opening.stateFor(
+                            OpeningRequirementKind.values[index],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-            ],
-          ),
+              ),
+            ),
           if (_showKycNote(detail.kycNote)) ...[
             const SizedBox(height: 10),
             Text(
@@ -2354,6 +2523,82 @@ class _KycBlock extends StatelessWidget {
     return normalized.isNotEmpty &&
         !normalized.startsWith('待补充') &&
         !normalized.startsWith('暂无');
+  }
+}
+
+class _OpeningRequirementItem extends StatelessWidget {
+  const _OpeningRequirementItem({required this.kind, required this.state});
+
+  final OpeningRequirementKind kind;
+  final OpeningRequirementState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final (color, icon, stateLabel) = switch (state) {
+      OpeningRequirementState.required => (
+        AppColors.mint,
+        Icons.check_rounded,
+        '需要',
+      ),
+      OpeningRequirementState.notRequired => (
+        AppColors.textMuted,
+        Icons.remove_rounded,
+        '不需要',
+      ),
+      OpeningRequirementState.unknown => (
+        const Color(0xFFE7A84B),
+        Icons.question_mark_rounded,
+        '待确认',
+      ),
+    };
+    return Semantics(
+      key: Key('opening-requirement-${kind.name}'),
+      label: '${kind.label}，$stateLabel',
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                kind.label,
+                maxLines: 1,
+                style: TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: .12),
+                shape: BoxShape.circle,
+                border: Border.all(color: color.withValues(alpha: .32)),
+              ),
+              child: Icon(icon, size: 17, color: color),
+            ),
+            const SizedBox(height: 6),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                stateLabel,
+                maxLines: 1,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -2619,6 +2864,17 @@ class _PaymentBlock extends StatelessWidget {
     );
   }
 }
+
+/// Keeps payment-channel branding aligned with the platform being shipped.
+///
+/// Payment-channel information remains useful on Android, but Apple has
+/// explicitly asked that this module not be shown in the iOS app.
+/// This is intentionally platform-owned rather than remotely configurable so
+/// the reviewed iOS experience cannot change after approval.
+Set<PaymentChannel> paymentChannelsForPlatform(
+  Set<PaymentChannel> channels,
+  TargetPlatform platform,
+) => platform == TargetPlatform.iOS ? const {} : {...channels};
 
 class _SupportedCurrenciesBlock extends StatelessWidget {
   const _SupportedCurrenciesBlock({required this.currencies});
@@ -2950,63 +3206,142 @@ class _FeeBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      key: Key('detail-fees'),
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '费用',
-          style: TextStyle(
-            color: AppColors.text,
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 14),
-        for (final fee in detail.fees)
-          _FeeRow(label: fee.label, value: fee.value),
-      ],
+    final hasDetails = detail.fees.any((fee) => fee.note?.isNotEmpty == true);
+    return _DetailPanel(
+      key: const Key('detail-fees'),
+      title: '费用',
+      subtitle: hasDetails ? '点击带箭头的项目查看分档与限制' : null,
+      child: Column(
+        children: [
+          for (var index = 0; index < detail.fees.length; index++) ...[
+            if (index > 0) Divider(height: 22, color: AppColors.line),
+            _FeeRow(fee: detail.fees[index]),
+          ],
+        ],
+      ),
     );
   }
 }
 
-class _FeeRow extends StatelessWidget {
-  const _FeeRow({required this.label, required this.value});
+class _FeeRow extends StatefulWidget {
+  const _FeeRow({required this.fee});
 
-  final String label;
-  final String value;
+  final FeeLine fee;
+
+  @override
+  State<_FeeRow> createState() => _FeeRowState();
+}
+
+class _FeeRowState extends State<_FeeRow> {
+  bool _expanded = false;
+
+  void _toggle() {
+    if (widget.fee.note?.isNotEmpty != true) return;
+    AppHaptics.selection();
+    setState(() => _expanded = !_expanded);
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: TextStyle(
-                color: AppColors.textMuted,
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-              ),
+    final fee = widget.fee;
+    final hasDetails = fee.note?.isNotEmpty == true;
+    return Semantics(
+      button: hasDetails,
+      expanded: hasDetails ? _expanded : null,
+      label: hasDetails ? '${fee.label}，${fee.value}，查看详细说明' : null,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          key: Key('detail-fee-${fee.label}'),
+          onTap: hasDetails ? _toggle : null,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      flex: 5,
+                      child: Text(
+                        fee.label,
+                        style: TextStyle(
+                          color: AppColors.textMuted,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 6,
+                      child: Align(
+                        key: Key('detail-fee-value-${fee.label}'),
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          fee.value,
+                          textAlign: TextAlign.right,
+                          style: TextStyle(
+                            color: AppColors.text,
+                            fontSize: 13,
+                            height: 1.3,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (hasDetails) ...[
+                      const SizedBox(width: 5),
+                      AnimatedRotation(
+                        turns: _expanded ? .5 : 0,
+                        duration: const Duration(milliseconds: 180),
+                        curve: Curves.easeOutCubic,
+                        child: Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          size: 19,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeOutCubic,
+                  alignment: Alignment.topCenter,
+                  child: !_expanded
+                      ? const SizedBox.shrink()
+                      : Padding(
+                          padding: const EdgeInsets.only(top: 10),
+                          child: Container(
+                            key: Key('detail-fee-note-${fee.label}'),
+                            padding: const EdgeInsets.fromLTRB(11, 9, 11, 10),
+                            decoration: BoxDecoration(
+                              color: AppColors.isDark
+                                  ? Colors.white.withValues(alpha: .045)
+                                  : const Color(
+                                      0xFF6877FF,
+                                    ).withValues(alpha: .055),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              fee.note!,
+                              style: TextStyle(
+                                color: AppColors.textMuted,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                height: 1.5,
+                              ),
+                            ),
+                          ),
+                        ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(width: 18),
-          SizedBox(
-            width: 132,
-            child: Text(
-              value,
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                color: AppColors.text,
-                fontSize: 14,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
