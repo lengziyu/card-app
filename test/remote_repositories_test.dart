@@ -15,6 +15,87 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 void main() {
+  test('catalog regions include cards after the first 500 records', () async {
+    final offsets = <int>[];
+    final client = ApiClient(
+      baseUrl: 'https://example.test',
+      client: MockClient((request) async {
+        final offset = int.parse(request.url.queryParameters['offset']!);
+        offsets.add(offset);
+        expect(request.url.queryParameters['limit'], '500');
+        return _jsonResponse({
+          'items': offset == 0
+              ? [
+                  for (var index = 0; index < 500; index++)
+                    {'id': 'ucard-$index', 'category': 'U卡'},
+                ]
+              : [
+                  {'id': 'late-hk', 'category': '信用卡', 'marketRegion': 'hk'},
+                  {'id': 'late-us', 'category': '借记卡', 'marketRegion': 'us'},
+                ],
+          'nextOffset': offset == 0 ? 500 : null,
+          'total': 502,
+        });
+      }),
+    );
+    addTearDown(client.close);
+    final repository = RemoteCardCatalogRepository(client);
+
+    final cards = await repository.loadCards();
+    expect(offsets, [0, 500]);
+    expect(cards, hasLength(502));
+    expect(cards[500].id, 'late-hk');
+    expect(cards[500].marketRegion, CardMarketRegion.hk);
+    expect(cards[501].marketRegion, CardMarketRegion.us);
+    expect(await repository.loadCards(), same(cards));
+    expect(offsets, [0, 500]);
+  });
+
+  test('catalog rejects a pagination cursor that does not advance', () async {
+    final client = ApiClient(
+      baseUrl: 'https://example.test',
+      client: MockClient(
+        (request) async => _jsonResponse({'items': [], 'nextOffset': 0}),
+      ),
+    );
+    addTearDown(client.close);
+    await expectLater(
+      RemoteCardCatalogRepository(client).loadCards(),
+      throwsFormatException,
+    );
+  });
+
+  test('card regions follow the H5 market groups from the public API', () async {
+    final client = ApiClient(
+      baseUrl: 'https://example.test',
+      client: MockClient(
+        (request) async => _jsonResponse({
+          'items': [
+            for (final region in ['hk', 'us', 'cn', 'more', 'unknown', null])
+              {
+                'id': 'card-$region',
+                'category': '信用卡',
+                'marketRegion': region,
+                // The curated group takes precedence over unnormalized labels.
+                'region': 'United States',
+              },
+          ],
+        }),
+      ),
+    );
+    addTearDown(client.close);
+
+    final cards = await RemoteCardCatalogRepository(client).loadCards();
+    expect(cards.map((card) => card.marketRegion), [
+      CardMarketRegion.hk,
+      CardMarketRegion.us,
+      CardMarketRegion.cn,
+      CardMarketRegion.more,
+      CardMarketRegion.more,
+      CardMarketRegion.more,
+    ]);
+  });
+
   test('maps the remote catalog, ordering and home configuration', () async {
     final client = ApiClient(
       baseUrl: 'https://example.test',

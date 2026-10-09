@@ -18,6 +18,9 @@ enum CardCategory {
 /// personal card wallet.
 enum CatalogItemKind { card, globalAccount }
 
+/// Region groups curated by the public card catalog, matching the H5 filters.
+enum CardMarketRegion { hk, us, cn, more }
+
 enum KycDocument {
   idCard('身份证'),
   passport('护照');
@@ -51,6 +54,7 @@ class CardSummary {
     this.updatedAt,
     this.isNew = false,
     this.kind = CatalogItemKind.card,
+    this.marketRegion = CardMarketRegion.more,
     this.accountType = '',
   });
 
@@ -83,6 +87,9 @@ class CardSummary {
   final DateTime? updatedAt;
   final bool isNew;
   final CatalogItemKind kind;
+
+  /// Other countries and entries without a confirmed region belong to `more`.
+  final CardMarketRegion marketRegion;
 
   /// Provider-curated account classification from the global-account API.
   ///

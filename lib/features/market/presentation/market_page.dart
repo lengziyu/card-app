@@ -16,6 +16,19 @@ enum _MarketGroup { uCard, globalAccount, other }
 
 enum _UCardFilter { all, newest, idCard, passport }
 
+enum _OtherCardFilter {
+  all('全部'),
+  hk('港卡', CardMarketRegion.hk),
+  us('美卡', CardMarketRegion.us),
+  cn('内地卡', CardMarketRegion.cn),
+  more('更多', CardMarketRegion.more);
+
+  const _OtherCardFilter(this.label, [this.region]);
+
+  final String label;
+  final CardMarketRegion? region;
+}
+
 enum _GlobalAccountTypeFilter { all, traditional, cryptoRelated }
 
 enum _GlobalAccountKycFilter {
@@ -61,6 +74,7 @@ class _MarketPageState extends State<MarketPage> {
   late final ScrollController _scrollController;
   _MarketGroup _group = _MarketGroup.uCard;
   _UCardFilter _filter = _UCardFilter.all;
+  _OtherCardFilter _otherFilter = _OtherCardFilter.all;
   _GlobalAccountTypeFilter _globalAccountTypeFilter =
       _GlobalAccountTypeFilter.all;
   _GlobalAccountKycFilter _globalAccountKycFilter = _GlobalAccountKycFilter.all;
@@ -133,7 +147,13 @@ class _MarketPageState extends State<MarketPage> {
     }
     if (_group == _MarketGroup.other) {
       return cards
-          .where((card) => !card.category.isUCard && !card.isGlobalAccount)
+          .where(
+            (card) =>
+                !card.category.isUCard &&
+                !card.isGlobalAccount &&
+                (_otherFilter.region == null ||
+                    card.marketRegion == _otherFilter.region),
+          )
           .toList();
     }
     return cards.where((card) {
@@ -234,10 +254,9 @@ class _MarketPageState extends State<MarketPage> {
                   SliverPersistentHeader(
                     pinned: true,
                     delegate: PinnedGlassHeaderDelegate(
-                      // 48px 主分类 + 7px 间距 + 38px 三个下拉框，配合上下
-                      // 5/7px 内边距正好占满 105px。此前沿用了带标题筛选面板的
-                      // 170px 高度，移除标题后便留下了大块空白。
-                      height: _group == _MarketGroup.globalAccount ? 105 : 58,
+                      // Regional pills keep a 44px touch target; the account
+                      // dropdowns use their existing 38px compact layout.
+                      height: _group == _MarketGroup.globalAccount ? 105 : 111,
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(24, 5, 24, 7),
                         child: _group == _MarketGroup.globalAccount
@@ -262,7 +281,16 @@ class _MarketPageState extends State<MarketPage> {
                                   ),
                                 ],
                               )
-                            : mainSegment,
+                            : Column(
+                                children: [
+                                  mainSegment,
+                                  const SizedBox(height: 7),
+                                  _OtherCardSegment(
+                                    selected: _otherFilter,
+                                    onSelected: _selectOtherFilter,
+                                  ),
+                                ],
+                              ),
                       ),
                     ),
                   ),
@@ -339,6 +367,14 @@ class _MarketPageState extends State<MarketPage> {
     });
   }
 
+  void _selectOtherFilter(_OtherCardFilter filter) {
+    if (filter == _otherFilter) return;
+    setState(() {
+      _contentDirection = filter.index > _otherFilter.index ? 1 : -1;
+      _otherFilter = filter;
+    });
+  }
+
   void _selectGlobalAccountTypeFilter(_GlobalAccountTypeFilter filter) {
     if (filter == _globalAccountTypeFilter) return;
     setState(() {
@@ -393,7 +429,7 @@ class _MarketPageState extends State<MarketPage> {
     }
     return Column(
       key: ValueKey(
-        '${_group.name}-${_filter.name}-${_globalAccountTypeFilter.name}-${_globalAccountKycFilter.name}-${_globalAccountCapabilityFilter.name}',
+        '${_group.name}-${_filter.name}-${_otherFilter.name}-${_globalAccountTypeFilter.name}-${_globalAccountKycFilter.name}-${_globalAccountCapabilityFilter.name}',
       ),
       children: [
         for (var index = 0; index < cards.length; index++) ...[
@@ -668,6 +704,66 @@ class _SubSegment extends StatelessWidget {
       ],
       selected: selected,
       onChanged: onSelected,
+    );
+  }
+}
+
+class _OtherCardSegment extends StatelessWidget {
+  const _OtherCardSegment({required this.selected, required this.onSelected});
+
+  final _OtherCardFilter selected;
+  final ValueChanged<_OtherCardFilter> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    const fontSize = 11.0;
+    const gap = 8.0;
+    var itemWidth = 44.0;
+    for (final filter in _OtherCardFilter.values) {
+      final painter = TextPainter(
+        text: TextSpan(
+          text: context.tr(filter.label),
+          style: DefaultTextStyle.of(
+            context,
+          ).style.copyWith(fontSize: fontSize, fontWeight: FontWeight.w800),
+        ),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+        maxLines: 1,
+      )..layout();
+      final width = painter.width + 16;
+      if (width > itemWidth) itemWidth = width;
+      painter.dispose();
+    }
+    final minimumWidth =
+        itemWidth * _OtherCardFilter.values.length +
+        gap * (_OtherCardFilter.values.length - 1);
+
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        key: const Key('market-other-filters'),
+        scrollDirection: Axis.horizontal,
+        child: SizedBox(
+          width: minimumWidth > constraints.maxWidth
+              ? minimumWidth
+              : constraints.maxWidth,
+          child: AnimatedPillSegment<_OtherCardFilter>(
+            height: 30,
+            gap: gap,
+            fontSize: fontSize,
+            items: [
+              for (final filter in _OtherCardFilter.values)
+                GlassSegmentItem(
+                  value: filter,
+                  label: filter.label,
+                  key: Key('market-other-filter-${filter.name}'),
+                ),
+            ],
+            selected: selected,
+            onChanged: onSelected,
+          ),
+        ),
+      ),
     );
   }
 }

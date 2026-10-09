@@ -1,0 +1,120 @@
+[
+  {
+    "id": "apple-card",
+    "name": "Apple Card",
+    "category": "信用卡",
+    "source": "https://github.com/HarukaKinen/Cardentify/tree/main/Cards/Apple",
+    "fees": [
+      {
+        "label": "开卡费",
+        "value": "以官网为准"
+      },
+      {
+        "label": "年费",
+        "value": "以官网为准"
+      },
+      {
+        "label": "充值手续费",
+        "value": "以官网为准"
+      },
+      {
+        "label": "取现手续费",
+        "value": "以官网为准"
+      }
+    ],
+    "region": "美国",
+    "kyc": "",
+    "payment": {
+      "id": "apple-card"
+    }
+  },
+  {
+    "id": "bank-of-america-visa-debit-card",
+    "unavailable": true
+  },
+  {
+    "id": "chase-freedom-flex",
+    "name": "Chase Freedom Flex",
+    "category": "信用卡",
+    "source": "https://github.com/HarukaKinen/Cardentify/tree/main/Cards/Chase",
+    "fees": [
+      {
+        "label": "开卡费",
+        "value": "以官网为准"
+      },
+      {
+        "label": "年费",
+        "value": "以官网为准"
+      },
+      {
+        "label": "充值手续费",
+        "value": "以官网为准"
+      },
+      {
+        "label": "取现手续费",
+        "value": "以官网为准"
+      }
+    ],
+    "region": "美国",
+    "kyc": "",
+    "payment": null
+  },
+  {
+    "id": "za-card",
+    "name": "ZA Card",
+    "category": "借记卡",
+    "source": "https://github.com/HarukaKinen/Cardentify/tree/main/Cards/ZA%20Bank",
+    "fees": [
+      {
+        "label": "开卡费",
+        "value": "以官网为准"
+      },
+      {
+        "label": "年费",
+        "value": "以官网为准"
+      },
+      {
+        "label": "充值手续费",
+        "value": "以官网为准"
+      },
+      {
+        "label": "取现手续费",
+        "value": "以官网为准"
+      }
+    ],
+    "region": "香港",
+    "kyc": "",
+    "payment": {
+      "id": "za-card"
+    }
+  },
+  {
+    "id": "hsbc-hk-mastercard-debit",
+    "name": "HSBC Mastercard Debit Card",
+    "category": "借记卡",
+    "source": "https://github.com/HarukaKinen/Cardentify/tree/main/Cards/The%20Hongkong%20and%20Shanghai%20Banking%20Corporation",
+    "fees": [
+      {
+        "label": "开卡费",
+        "value": "以官网为准"
+      },
+      {
+        "label": "年费",
+        "value": "以官网为准"
+      },
+      {
+        "label": "充值手续费",
+        "value": "以官网为准"
+      },
+      {
+        "label": "取现手续费",
+        "value": "以官网为准"
+      }
+    ],
+    "region": "香港",
+    "kyc": "",
+    "payment": {
+      "id": "hsbc-hk-mastercard-debit"
+    }
+  }
+]

@@ -7,6 +7,28 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test(
+    'finishing deletion of an old account does not sign out a new account',
+    () async {
+      final repository = _FakeAuthRepository();
+      final controller = AuthController(repository);
+      addTearDown(controller.dispose);
+      await controller.verifyEmailOtp(
+        email: 'member@example.com',
+        token: '123456',
+      );
+      final result = await controller.deleteAccount(() async {
+        controller.user = const AuthUser(
+          id: 'new-account',
+          email: 'other@example.com',
+          displayName: 'Other',
+          emailVerified: true,
+        );
+      });
+      expect(result, isFalse);
+      expect(controller.user?.id, 'new-account');
+    },
+  );
+  test(
     'email OTP signs an existing user into the same stable account',
     () async {
       final repository = _FakeAuthRepository();

@@ -49,6 +49,35 @@ class WalletCardItem extends StatefulWidget {
 class _WalletCardItemState extends State<WalletCardItem> {
   final GlobalKey _surfaceKey = GlobalKey();
   bool _pressed = false;
+  late Widget _artwork;
+  Brightness? _artworkBrightness;
+
+  @override
+  void initState() {
+    super.initState();
+    _cacheArtwork();
+  }
+
+  @override
+  void didUpdateWidget(covariant WalletCardItem oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.card != widget.card) _cacheArtwork();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final brightness = Theme.of(context).brightness;
+    if (_artworkBrightness == brightness) return;
+    _artworkBrightness = brightness;
+    _cacheArtwork();
+  }
+
+  void _cacheArtwork() {
+    _artwork = RepaintBoundary(
+      child: CardArtwork(card: widget.card, alignment: Alignment.topCenter),
+    );
+  }
 
   void _handleTap() {
     final callback = widget.onTapWithGeometry;
@@ -78,9 +107,9 @@ class _WalletCardItemState extends State<WalletCardItem> {
     final shadowOpacity = AppColors.isDark ? .22 : .1;
     final depth = widget.focusDepth.clamp(0.0, 3.5).toDouble();
     // 逐层高斯模糊让焦点卡始终最清晰，远层自然退后。
-    final blurSigma = depth <= .04 ? 0.0 : depth * .95;
-    final veilStrength = (depth * (AppColors.isDark ? .07 : .12))
-        .clamp(0.0, .42)
+    final blurSigma = reduceMotion || depth <= .04 ? 0.0 : depth * .65;
+    final veilStrength = (depth * (AppColors.isDark ? .055 : .08))
+        .clamp(0.0, .28)
         .toDouble();
     return Semantics(
       button: true,
@@ -139,30 +168,24 @@ class _WalletCardItemState extends State<WalletCardItem> {
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
-                        if (blurSigma == 0)
-                          CardArtwork(
-                            card: widget.card,
-                            alignment: Alignment.topCenter,
-                          )
-                        else
-                          ImageFiltered(
-                            key: Key('home-card-blur-${widget.card.id}'),
-                            imageFilter: ImageFilter.blur(
-                              sigmaX: blurSigma,
-                              sigmaY: blurSigma,
-                            ),
-                            child: CardArtwork(
-                              card: widget.card,
-                              alignment: Alignment.topCenter,
-                            ),
+                        ImageFiltered(
+                          key: Key('home-card-filter-${widget.card.id}'),
+                          enabled: blurSigma > 0,
+                          imageFilter: ImageFilter.blur(
+                            sigmaX: blurSigma,
+                            sigmaY: blurSigma,
                           ),
+                          child: _artwork,
+                        ),
                         if (veilStrength > 0)
                           IgnorePointer(
                             child: ColoredBox(
                               key: Key('home-card-veil-${widget.card.id}'),
-                              color: Colors.white.withValues(
-                                alpha: veilStrength,
-                              ),
+                              color:
+                                  (AppColors.isDark
+                                          ? const Color(0xFF101526)
+                                          : Colors.white)
+                                      .withValues(alpha: veilStrength),
                             ),
                           ),
                         IgnorePointer(

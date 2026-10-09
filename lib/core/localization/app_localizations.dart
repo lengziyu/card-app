@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:cardfi/core/localization/tools_translations.dart';
+import 'package:cardfi/core/localization/ledger_translations.dart';
 
 /// App-owned localization for visible product copy.
 ///
@@ -80,6 +82,7 @@ int _languageIndex(Locale locale) {
 }
 
 const _catalog = <String, List<String>>{
+  ...toolsTranslations,
   '筛选全球账户': [
     '篩選全球帳戶',
     'Filter global accounts',
@@ -2030,6 +2033,58 @@ const _catalog = <String, List<String>>{
     'Outros',
     'Diğer',
   ],
+  '港卡': [
+    '港卡',
+    'Hong Kong',
+    '香港',
+    '홍콩',
+    'Hồng Kông',
+    'Гонконг',
+    'Hong Kong',
+    'Hong Kong',
+    'Hongkong',
+    'Hong Kong',
+    'Hong Kong',
+  ],
+  '美卡': [
+    '美卡',
+    'US',
+    '米国',
+    '미국',
+    'Mỹ',
+    'США',
+    'EE. UU.',
+    'États-Unis',
+    'USA',
+    'EUA',
+    'ABD',
+  ],
+  '内地卡': [
+    '內地卡',
+    'Mainland',
+    '中国本土',
+    '중국 본토',
+    'Trung Quốc đại lục',
+    'Материковый Китай',
+    'China continental',
+    'Chine continentale',
+    'Festlandchina',
+    'China continental',
+    'Çin anakarası',
+  ],
+  '更多': [
+    '更多',
+    'More',
+    'その他',
+    '더보기',
+    'Thêm',
+    'Ещё',
+    'Más',
+    'Plus',
+    'Mehr',
+    'Mais',
+    'Daha fazla',
+  ],
   '卡片': [
     '卡片',
     'Cards',
@@ -3109,6 +3164,8 @@ bool _containsChinese(String value) =>
 /// been promoted to a full multi-locale catalog entry. Keep this English-only:
 /// other locales must continue using their reviewed catalog translations.
 const _englishFallbackPhrases = <String, String>{
+  ...toolsEnglishTranslations,
+  ...ledgerEnglishTranslations,
   // Card-specific community. Comments remain scoped to one card detail;
   // pre-publication moderation is controlled by the server-side global flag.
   '卡友讨论': 'Community discussion',

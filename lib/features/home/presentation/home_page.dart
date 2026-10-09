@@ -11,6 +11,7 @@ import 'package:cardfi/features/catalog/domain/card_summary.dart';
 import 'package:cardfi/features/home/controllers/card_stack_controller.dart';
 import 'package:cardfi/features/home/domain/home_card_layout.dart';
 import 'package:cardfi/features/home/widgets/card_stack_view.dart';
+import 'package:cardfi/features/home/widgets/home_card_scene_fade.dart';
 import 'package:cardfi/features/pro/widgets/pro_crown_badge.dart';
 import 'package:cardfi/core/localization/localized_text.dart';
 import 'package:flutter/material.dart' hide Text;
@@ -30,6 +31,7 @@ class HomePage extends StatefulWidget {
     required this.isPro,
     required this.onOpenPro,
     required this.onToggleNavigation,
+    this.navigationVisible = true,
     super.key,
   });
 
@@ -46,6 +48,7 @@ class HomePage extends StatefulWidget {
   final bool isPro;
   final VoidCallback onOpenPro;
   final VoidCallback onToggleNavigation;
+  final bool navigationVisible;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -111,55 +114,64 @@ class _HomePageState extends State<HomePage>
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     return LayoutBuilder(
       builder: (context, constraints) {
-        // All card scenes start below the fixed title and header actions.
+        // 钱包仍使用列表留白；堆叠和聚焦铺满页面，在浮动控件后面淡出。
+        final isFan =
+            _cardController.mode != CardStackMode.wallet &&
+            widget.cards.isNotEmpty;
         const cardSceneTop = 96.0;
         final navigationClearance = 96.0 + bottomInset;
-        final availableHeight = math.max(
-          280.0,
-          constraints.maxHeight - cardSceneTop - navigationClearance,
-        );
-        final cardScroll = CustomScrollView(
-          key: const Key('home-card-scroll-view'),
-          controller: _cardScrollController,
-          physics: _cardController.mode == CardStackMode.wallet
-              ? const BouncingScrollPhysics()
-              : const NeverScrollableScrollPhysics(),
-          slivers: [
-            SliverPadding(
-              padding: EdgeInsets.fromLTRB(
-                0,
-                cardSceneTop,
-                0,
-                navigationClearance,
-              ),
-              sliver: SliverToBoxAdapter(
-                child: widget.cards.isEmpty
-                    ? Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 18),
-                        child: _EmptyState(
-                          key: const ValueKey('empty-state'),
-                          onAddCard: widget.onAddCard,
-                        ),
-                      )
-                    : CardStackView(
-                        cards: widget.cards,
-                        displayMode: widget.displayMode,
-                        controller: _cardController,
-                        availableHeight: availableHeight,
-                        heightScale: widget.cardHeightScale,
-                        onHeightScaleChanged: widget.onCardHeightScaleChanged,
-                        onReorderCards: widget.onReorderCards,
-                        onOpenCard: widget.onOpenCard,
-                        onOpenCardTransition: widget.onOpenCardTransition,
-                        transitioningCardId: widget.transitioningCardId,
-                      ),
-              ),
-            ),
-          ],
-        );
+        final availableHeight = isFan
+            ? constraints.maxHeight
+            : math.max(
+                0.0,
+                constraints.maxHeight - cardSceneTop - navigationClearance,
+              );
+        final cardContent = widget.cards.isEmpty
+            ? Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 18),
+                child: _EmptyState(
+                  key: const ValueKey('empty-state'),
+                  onAddCard: widget.onAddCard,
+                ),
+              )
+            : CardStackView(
+                cards: widget.cards,
+                displayMode: widget.displayMode,
+                controller: _cardController,
+                availableHeight: availableHeight,
+                heightScale: widget.cardHeightScale,
+                onHeightScaleChanged: widget.onCardHeightScaleChanged,
+                onReorderCards: widget.onReorderCards,
+                onOpenCard: widget.onOpenCard,
+                onOpenCardTransition: widget.onOpenCardTransition,
+                transitioningCardId: widget.transitioningCardId,
+              );
+        final cardScene = isFan
+            ? HomeCardSceneFade(
+                navigationVisible: widget.navigationVisible,
+                child: cardContent,
+              )
+            : CustomScrollView(
+                key: const Key('home-card-scroll-view'),
+                controller: _cardScrollController,
+                physics: _cardController.mode == CardStackMode.wallet
+                    ? const BouncingScrollPhysics()
+                    : const NeverScrollableScrollPhysics(),
+                slivers: [
+                  SliverPadding(
+                    padding: EdgeInsets.fromLTRB(
+                      0,
+                      cardSceneTop,
+                      0,
+                      navigationClearance,
+                    ),
+                    sliver: SliverToBoxAdapter(child: cardContent),
+                  ),
+                ],
+              );
         return Stack(
           children: [
-            Positioned.fill(child: cardScroll),
+            Positioned.fill(child: cardScene),
             Positioned(
               top: 16,
               left: 18,

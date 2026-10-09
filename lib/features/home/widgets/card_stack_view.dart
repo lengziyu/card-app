@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 
 import 'package:cardfi/core/motion/app_haptics.dart';
-import 'package:cardfi/core/motion/motion_tokens.dart';
 import 'package:cardfi/features/catalog/domain/card_summary.dart';
 import 'package:cardfi/features/catalog/widgets/catalog_card_row.dart';
 import 'package:cardfi/features/home/controllers/card_stack_controller.dart';
@@ -59,7 +58,6 @@ class _CardStackViewState extends State<CardStackView> {
   Offset _twoFingerStartCentroid = Offset.zero;
   double _twoFingerSceneOffsetStart = 0;
   double _twoFingerSceneOffset = 0;
-  bool _twoFingerScenePanning = false;
   _TwoFingerGesture _twoFingerGesture = _TwoFingerGesture.undecided;
 
   static const double _twoFingerSceneUpLimit = 48;
@@ -91,7 +89,6 @@ class _CardStackViewState extends State<CardStackView> {
     _pendingHeightScale = null;
     _twoFingerSceneOffset = 0;
     _twoFingerSceneOffsetStart = 0;
-    _twoFingerScenePanning = false;
     _twoFingerGesture = _TwoFingerGesture.undecided;
   }
 
@@ -99,6 +96,10 @@ class _CardStackViewState extends State<CardStackView> {
   Widget build(BuildContext context) {
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
     widget.controller.setReduceMotion(reduceMotion);
+    if (widget.availableHeight <= 0 &&
+        widget.controller.mode != CardStackMode.wallet) {
+      return const SizedBox.shrink();
+    }
     final cardsById = {for (final card in widget.cards) card.id: card};
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -106,10 +107,18 @@ class _CardStackViewState extends State<CardStackView> {
           animation: widget.controller,
           builder: (context, _) {
             final mode = widget.controller.mode;
-            final cardWidth = math.min(
+            final widthLimit = math.min(
               constraints.maxWidth - CardLayoutCalculator.horizontalMargin * 2,
               440.0,
             );
+            final cardWidth = mode == CardStackMode.wallet
+                ? widthLimit
+                : math.min(
+                    widthLimit,
+                    math.max(1.0, widget.availableHeight - 16) *
+                        .46 *
+                        CardLayoutCalculator.cardAspectRatio,
+                  );
             // 三种展示模式共用素材的原始卡面比例。钱包模式只调整卡片
             // 之间露出的高度，不能拉高卡面，否则 CardArtwork 的 cover
             // 会裁掉左右两侧的内容。
@@ -124,13 +133,7 @@ class _CardStackViewState extends State<CardStackView> {
               revealScale: widget.controller.revealScale,
               selectedIndex: widget.controller.layoutSelectedIndex,
             );
-            // Stack and focus are immersive fans: keep the centering math
-            // tied to the viewport slot, but let lower card strips paint and
-            // stay tappable beyond it instead of being clipped away.
-            final fanOverflow = mode == CardStackMode.wallet
-                ? 0.0
-                : math.min(124.0, widget.availableHeight * .22);
-            final height = layoutHeight + fanOverflow;
+            final height = layoutHeight;
             final screenSize = Size(constraints.maxWidth, layoutHeight);
             widget.controller.configureLayout(
               screenSize: screenSize,
@@ -153,7 +156,7 @@ class _CardStackViewState extends State<CardStackView> {
                     key: ValueKey('positioned-$id'),
                     card: card,
                     mode: mode,
-                    selected: widget.controller.selectedId == id,
+                    selected: widget.controller.visualSelectedId == id,
                     cardSize: cardSize,
                     cardAspectRatio: cardAspectRatio,
                     controller: widget.controller,
@@ -180,8 +183,11 @@ class _CardStackViewState extends State<CardStackView> {
                 onScaleStart: supportsSceneGestures ? _onScaleStart : null,
                 onScaleUpdate: supportsSceneGestures ? _onScaleUpdate : null,
                 onScaleEnd: supportsSceneGestures ? _onScaleEnd : null,
-                // 钱包保留自身边界；堆叠与聚焦不再额外叠加顶部遮罩。
+                // 卡列可经过浮动控件后方，页面对卡片层统一做边缘透明渐变。
                 child: SizedBox(
+                  key: mode == CardStackMode.wallet
+                      ? null
+                      : const Key('home-fan-viewport'),
                   height: height,
                   child: mode == CardStackMode.wallet
                       ? ClipRect(
@@ -190,17 +196,10 @@ class _CardStackViewState extends State<CardStackView> {
                             children: cardLayers,
                           ),
                         )
-                      : AnimatedSlide(
+                      : Stack(
                           key: const Key('home-fan-scene'),
-                          duration: reduceMotion || _twoFingerScenePanning
-                              ? Duration.zero
-                              : MotionTokens.fast,
-                          curve: MotionTokens.standardExit,
-                          offset: Offset(0, _twoFingerSceneOffset / height),
-                          child: Stack(
-                            clipBehavior: Clip.none,
-                            children: cardLayers,
-                          ),
+                          clipBehavior: Clip.none,
+                          children: cardLayers,
                         ),
                 ),
               ),
@@ -347,7 +346,6 @@ class _CardStackViewState extends State<CardStackView> {
       );
     _twoFingerStartCentroid = (points[0] + points[1]) / 2;
     _twoFingerSceneOffsetStart = _twoFingerSceneOffset;
-    _twoFingerScenePanning = false;
     _twoFingerGesture = _TwoFingerGesture.undecided;
     widget.controller.cancelDrag();
   }
@@ -381,7 +379,6 @@ class _CardStackViewState extends State<CardStackView> {
           verticalTranslation.abs() >= 2 &&
           verticalTranslation.abs() >= distanceDelta.abs() * .25) {
         _twoFingerGesture = _TwoFingerGesture.scenePan;
-        _twoFingerScenePanning = true;
         AppHaptics.selection();
       } else if (distanceDelta.abs() > 14 &&
           distanceDelta.abs() > verticalTranslation.abs() * 1.35) {
@@ -395,7 +392,8 @@ class _CardStackViewState extends State<CardStackView> {
           .clamp(-_twoFingerSceneUpLimit, _twoFingerSceneDownLimit)
           .toDouble();
       if (nextOffset != _twoFingerSceneOffset) {
-        setState(() => _twoFingerSceneOffset = nextOffset);
+        _twoFingerSceneOffset = nextOffset;
+        widget.controller.setSceneOffset(nextOffset);
       }
       return;
     }
@@ -420,7 +418,7 @@ class _CardStackViewState extends State<CardStackView> {
     _twoFingerStartPoints.clear();
     _twoFingerGesture = _TwoFingerGesture.undecided;
     if (wasScenePan) {
-      setState(() => _twoFingerScenePanning = false);
+      widget.controller.cancelDrag();
       return;
     }
     if (nextHeightScale == null) return;
@@ -483,6 +481,7 @@ class _PositionedWalletCard extends StatelessWidget {
                 mode: mode,
                 selected: selected,
                 elevation: state.elevation,
+                focusDepth: state.focusDepth,
                 aspectRatio: cardAspectRatio,
                 onLongPressStart: onLongPressStart,
                 onLongPressMoveUpdate: onLongPressMoveUpdate,

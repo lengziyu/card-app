@@ -17,6 +17,7 @@ enum ProfileSection {
   favorites('我的收藏', Icons.star_border_rounded),
   bills('我的账单', Icons.receipt_long_outlined),
   history('浏览记录', Icons.history_rounded),
+  tools('实用工具', Icons.grid_view_rounded),
   settings('设置', Icons.settings_outlined),
   language('显示语言', Icons.language_rounded),
   usageGuide('使用说明', Icons.menu_book_outlined),
@@ -125,6 +126,7 @@ class ProfilePage extends StatelessWidget {
               const SizedBox(height: 12),
               _MenuGroup(
                 sections: const [
+                  ProfileSection.tools,
                   ProfileSection.language,
                   ProfileSection.settings,
                 ],

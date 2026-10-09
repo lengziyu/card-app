@@ -49,3 +49,5 @@ flutter:
     - assets/navigation/
     - assets/payment-logos/
     - assets/stablecoins/
+    - assets/tools/
+    - assets/tools/payment-icons/

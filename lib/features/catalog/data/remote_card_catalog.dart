@@ -23,17 +23,32 @@ class RemoteCardCatalogRepository implements CardCatalogRepository {
   }
 
   Future<List<CardSummary>> _fetchCards() async {
-    final response = jsonObject(
-      await _apiClient.get(
-        '/api/cards',
-        query: const {'offset': 0, 'limit': 500},
-      ),
-    );
-    final remoteCards = jsonList(response['items'], label: '卡片列表')
-        .map((item) => _cardFromJson(jsonObject(item, label: '卡片')))
-        .toList(growable: false);
-    _cache = remoteCards;
-    return remoteCards;
+    final cards = <CardSummary>[];
+    var offset = 0;
+    while (true) {
+      final response = jsonObject(
+        await _apiClient.get(
+          '/api/cards',
+          query: {'offset': offset, 'limit': 500},
+        ),
+      );
+      cards.addAll(
+        jsonList(
+          response['items'],
+          label: '卡片列表',
+        ).map((item) => _cardFromJson(jsonObject(item, label: '卡片'))),
+      );
+      final nextOffset = response['nextOffset'];
+      if (nextOffset == null) break;
+      if (nextOffset is! int || nextOffset <= offset) {
+        throw const FormatException('卡片列表分页无效');
+      }
+      offset = nextOffset;
+    }
+    // Publish the cache only after all pages have loaded, so region filters
+    // never silently omit entries after the first 500 cards.
+    _cache = List<CardSummary>.unmodifiable(cards);
+    return _cache!;
   }
 
   CardSummary _cardFromJson(Map<String, dynamic> json) {
@@ -84,6 +99,15 @@ class RemoteCardCatalogRepository implements CardCatalogRepository {
       updatedAt: DateTime.tryParse(json['updatedAt']?.toString() ?? ''),
       isNew: _isNew(json['launchTimestamp'], json['createdAt']),
       kind: _kindFromJson(json['catalogKind'] ?? json['productKind']),
+      marketRegion: switch (json['marketRegion']
+          ?.toString()
+          .trim()
+          .toLowerCase()) {
+        'hk' => CardMarketRegion.hk,
+        'us' => CardMarketRegion.us,
+        'cn' => CardMarketRegion.cn,
+        _ => CardMarketRegion.more,
+      },
     );
   }
 

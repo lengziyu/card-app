@@ -1,0 +1,106 @@
+const ledgerEnglishTranslations = <String, String>{
+  '识别账单缺少有效日期，请核对发生日期。':
+      'The scanned bill has no valid date. Check the entry date.',
+  '请先添加或恢复一张未归档的个人卡片': 'Add a card or restore an archived card first',
+  '这张卡已归档，可查看流水并记录关联退款或返现。新增消费请先恢复卡片。':
+      'This card is archived. You can view entries and record related refunds or cashback. Restore it to add spending.',
+  '已记录手续费': 'Recorded fees',
+  '账号已切换，已停止后续退出操作。':
+      'Your account changed. The new account has not been signed out.',
+  '账号已切换，请重新操作': 'Your account changed. Please try again.',
+  '账本数据已清除，但账号删除未完成：':
+      'Ledger data was cleared, but account deletion did not finish: ',
+  '退款账单请从原消费的记录退款入口补录':
+      'Record this refund from the original purchase’s refund action.',
+  '个人消费账本（功能开放时）': 'Personal spending ledger (when available)',
+  '你主动填写的卡片昵称、末四位及消费、手续费、退款和返现记录，按账号隔离并加密保存，用于个人记账和月度汇总。原识别历史与消费账本独立保存，可分别修改或删除；删除账号时一并清除。':
+      'Your card nicknames, last four digits, spending, fees, refunds and cashback are stored encrypted and isolated by account for personal records and monthly totals. Scanned history and ledger entries are kept separately and can be edited or deleted independently. Both are cleared when you delete your account.',
+  '个人卡片资料、历史账单和消费账本也会清除。':
+      'Personal card details, bill history and ledger entries will also be cleared.',
+  '消费账本': 'Spending ledger',
+  '消费账本 · 记账与月度统计': 'Spending ledger and monthly totals',
+  '管理这张卡': 'Manage this card',
+  '管理我的卡片': 'Manage my cards',
+  '添加个人卡片': 'Add a personal card',
+  '编辑卡片资料': 'Edit card details',
+  '同款卡可以添加多张，仅保存卡号末四位。':
+      'Add multiple cards of the same product. Only the last four digits are stored.',
+  '还没有个人卡片，添加后即可记录消费。': 'Add a personal card to start recording spending.',
+  '卡片产品': 'Card product',
+  '卡片昵称': 'Card nickname',
+  '例如：日常消费、旅行备用': 'For example: Everyday or Travel',
+  '卡号末四位（选填）': 'Last four digits (optional)',
+  '仅用于区分卡片，不填写完整卡号。':
+      'Used to distinguish your cards. Do not enter the full card number.',
+  '请填写 4 位数字，或留空': 'Enter four digits or leave blank',
+  '卡片形式': 'Card format',
+  '未指定': 'Unspecified',
+  '实体卡': 'Physical card',
+  '归档卡片': 'Archive card',
+  '归档后保留流水，可继续记录关联退款和返现。':
+      'Keep existing entries and continue recording related refunds and cashback.',
+  '已归档': 'Archived',
+  '删除个人卡片': 'Delete personal card',
+  '删除这张个人卡片？有流水的卡片请使用归档。': 'Delete this card? Archive cards that have entries.',
+  '账号已切换，请重新打开账本': 'Your account changed. Please reopen the ledger.',
+  '个人卡片': 'Personal card',
+  '全部卡片': 'All cards',
+  '上个月': 'Previous month',
+  '下个月': 'Next month',
+  '月度汇总仅含已入账流水，按原币种分别统计。':
+      'Monthly totals include posted entries only, grouped by currency.',
+  '本月暂无已入账流水': 'No posted entries this month',
+  '消费扣款': 'Spending debits',
+  '退款': 'Refund',
+  '已到账返现': 'Cashback received',
+  '净支出': 'Net spending',
+  '记一笔': 'Add entry',
+  '识别账单': 'Scan a bill',
+  '记入消费账本': 'Add to spending ledger',
+  '导入这笔识别账单': 'Import this scanned bill',
+  '流水状态': 'Entry status',
+  '全部状态': 'All statuses',
+  '已入账': 'Posted',
+  '失败': 'Failed',
+  '筛选币种': 'Filter currency',
+  '没有符合条件的流水': 'No matching entries',
+  '记录退款': 'Record refund',
+  '记录返现': 'Record cashback',
+  '来自识别账单': 'From a scanned bill',
+  '手动录入': 'Manual entry',
+  '请先添加一张个人卡片': 'Add a personal card first',
+  '编辑流水': 'Edit entry',
+  '流水类型': 'Entry type',
+  '发生日期': 'Date',
+  '已关联原消费': 'Linked to the original purchase',
+  '关联原消费': 'Original purchase',
+  '实际扣款金额': 'Actual debit amount',
+  '原始消费金额（选填）': 'Original purchase amount (optional)',
+  '手续费金额（选填）': 'Fee amount (optional)',
+  '手续费已包含在扣款中': 'Fee included in debit',
+  '关闭后作为额外扣款计入净支出。':
+      'When off, the fee is added to net spending as an extra debit.',
+  '返现到账后，从消费流水的更多操作中记录返现。':
+      'Record cashback from the purchase entry’s actions when it arrives.',
+  '仅已入账流水进入月度汇总；预计返现请选择处理中。':
+      'Only posted entries count toward totals. Set expected cashback to pending.',
+  '请核对手续费是否已含在扣款中；返现需另行确认到账。原始识别账单保持独立保存。':
+      'Check whether fees are included. Confirm cashback separately when received. The original scanned record is kept separately.',
+  '已核对金额、手续费和卡片归属': 'I have checked the amounts, fees and selected card',
+  '识别的卡片或末四位与所选卡片不同，请核对。':
+      'The scanned card or last four digits do not match your selection. Please check.',
+  '请先核对识别结果和卡片归属': 'Check the scanned details and selected card first',
+  '请勿填写完整卡号或其他敏感号码':
+      'Do not enter full card numbers or other sensitive numbers',
+  '请输入有效金额（最多 8 位小数）': 'Enter a valid amount (up to 8 decimal places)',
+  '请填写有效币种代码': 'Enter a valid currency code',
+  '请选择个人卡片': 'Select a personal card',
+  '请选择卡片产品': 'Select a card product',
+  '原始消费金额和币种需要一起填写': 'Enter both the original amount and its currency',
+  '保存中…': 'Saving…',
+  '删除流水': 'Delete entry',
+  '删除这笔流水？此操作无法撤销。': 'Delete this entry? This cannot be undone.',
+  '消费账本暂不可用，请稍后重试': 'The spending ledger is unavailable. Try again later.',
+  '消费账本暂未开放，请稍后重试':
+      'The spending ledger is not available yet. Try again later.',
+};

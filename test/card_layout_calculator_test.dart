@@ -55,28 +55,28 @@ void main() {
     );
 
     expect(states, hasLength(6));
-    // 参照效果：所有卡片等宽、全彩，不缩小也不加蒙层。
-    expect(states.every((state) => state.scale == 1), isTrue);
+    expect(states[2].scale, 1);
+    expect(states[1].scale, lessThan(states[2].scale));
+    expect(states[3].scale, states[1].scale);
+    expect(states.every((state) => state.focusDepth == 0), isTrue);
     expect(states.every((state) => state.opacity == 1), isTrue);
     expect(states.every((state) => state.left == states.first.left), isTrue);
-    // z 顺序即列表顺序：每张卡只露出卡头条带。
-    for (var index = 1; index < states.length; index++) {
-      expect(states[index].zIndex, greaterThan(states[index - 1].zIndex));
-    }
-    // 选中卡上方与下方的条带保持同一节奏。
-    expect(states[1].top - states[0].top, inInclusiveRange(58, 112));
-    expect(states[2].top - states[1].top, inInclusiveRange(58, 112));
-    expect(states[5].top - states[4].top, inInclusiveRange(58, 112));
-    // 选中卡完整展开：下一张卡从它的底边（加小间隙）继续。
+    expect(states[2].zIndex, greaterThan(states[1].zIndex));
+    expect(states[2].zIndex, greaterThan(states[3].zIndex));
+    // 当前卡完整，下一张从背后伸出，后排延续条带直到屏幕边缘。
+    expect(states[3].top, lessThan(states[2].top + cardSize.height));
     expect(
-      states[3].top - (states[2].top + cardSize.height),
-      inInclusiveRange(0, 16),
+      states[5].top - states[4].top,
+      closeTo(states[4].top - states[3].top, .001),
     );
-    // 堆叠模式带一点交替倾斜，选中卡摆正。
-    expect(states[2].rotation, 0);
-    expect(states[1].rotation, isNot(0));
-    expect(states[1].rotation.sign, isNot(states[0].rotation.sign));
-    expect(states.every((state) => state.rotation.abs() <= .03), isTrue);
+    for (final state in states) {
+      expect(state.rotation, 0);
+    }
+    expect(
+      states.last.top + cardSize.height * states.last.scale,
+      greaterThan(screenSize.height),
+      reason: 'rear surfaces continue behind the navigation fade',
+    );
   });
 
   test('focus mode keeps the selected card full and reacts during drag', () {
@@ -116,16 +116,20 @@ void main() {
       resting[2].top,
       closeTo((screenSize.height - cardSize.height) / 2 - 8, .001),
     );
-    // 上方最远卡可以越过场景顶边，由渐隐遮罩溶解。
+    // 上方以稳定条带间距延伸，经过标题区域时由页面透明渐变淡出。
     expect(resting[0].top, lessThan(resting[1].top));
-    expect(resting[1].top - resting[0].top, inInclusiveRange(84, 128));
-    expect(resting[2].top - resting[1].top, inInclusiveRange(84, 128));
-    // 下一张从选中卡背后伸出，顶部固定有一段被焦点卡遮住。
-    final focusReveal = resting[2].top - resting[1].top;
+    expect(resting[0].top, lessThan(cardSize.height * .1));
     expect(
-      resting[2].top + cardSize.height - resting[3].top,
-      closeTo(focusReveal, .001),
+      resting[1].top - resting[0].top,
+      closeTo(resting[2].top - resting[1].top, .001),
     );
+    expect(resting[2].top - resting[1].top, inInclusiveRange(84, 128));
+    // 下方最近一张只露出部分卡面，视觉重心仍属于当前卡。
+    final trailingVisibleHeight =
+        resting[3].top +
+        cardSize.height * resting[3].scale -
+        (resting[2].top + cardSize.height);
+    expect(trailingVisibleHeight / cardSize.height, inInclusiveRange(.3, .6));
     for (var index = 3; index < resting.length; index++) {
       final previousVisualBottom =
           resting[index - 1].top + cardSize.height * resting[index - 1].scale;
@@ -135,7 +139,11 @@ void main() {
         reason: 'each lower card starts behind the card immediately above it',
       );
     }
-    expect(resting[4].top - resting[3].top, inInclusiveRange(84, 128));
+    expect(resting[4].top - resting[3].top, greaterThan(0));
+    expect(
+      resting.last.top + cardSize.height * resting.last.scale,
+      greaterThan(screenSize.height),
+    );
     // 向上拖拽：展开区连续交给下一张，所有卡都沿同一队列运动。
     expect(dragging[2].top, lessThan(resting[2].top));
     expect(dragging[3].top, lessThan(resting[3].top));
@@ -396,14 +404,14 @@ void main() {
     controller.configureLayout(screenSize: screenSize, cardSize: cardSize);
 
     controller.selectCard('c');
-    final firstTop = controller.transformFor('a').top;
     controller.startDrag();
     controller.updateDrag(-80);
     expect(controller.endDrag(velocity: -600), 3);
     expect(controller.selectedId, 'd');
     expect(controller.cardIds, const ['a', 'b', 'c', 'd', 'e']);
-    // 卡列跟随选中项滚动，第一张卡上移或保持不动，但不会下移。
-    expect(controller.transformFor('a').top, lessThanOrEqualTo(firstTop));
+    final selectedTarget = controller.targetTransformFor('d')!;
+    expect(selectedTarget.top, greaterThan(0));
+    expect(selectedTarget.top + cardSize.height, lessThan(screenSize.height));
   });
 
   test('a fast fling skims across multiple cards at once', () {

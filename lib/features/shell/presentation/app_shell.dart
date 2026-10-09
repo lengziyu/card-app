@@ -63,6 +63,9 @@ import 'package:cardfi/features/pro/data/pro_config.dart';
 import 'package:cardfi/features/pro/data/bill_analysis_repository.dart';
 import 'package:cardfi/features/pro/data/bill_benchmark_repository.dart';
 import 'package:cardfi/features/pro/data/bill_history_repository.dart';
+import 'package:cardfi/features/pro/domain/bill_record.dart';
+import 'package:cardfi/features/ledger/data/ledger_repository.dart';
+import 'package:cardfi/features/ledger/presentation/ledger_workspace_page.dart';
 import 'package:cardfi/features/pro/data/pro_controller.dart';
 import 'package:cardfi/features/pro/data/pro_workspace_controller.dart';
 import 'package:cardfi/features/pro/presentation/pro_page.dart';
@@ -76,6 +79,8 @@ import 'package:cardfi/features/ranking/presentation/ranking_page.dart';
 import 'package:cardfi/features/ranking/presentation/tip_submission_page.dart';
 import 'package:cardfi/features/shell/widgets/aurora_background.dart';
 import 'package:cardfi/features/shell/widgets/bottom_navigation.dart';
+import 'package:cardfi/features/tools/data/tools_repository.dart';
+import 'package:cardfi/features/tools/presentation/tools_page.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -90,6 +95,7 @@ class AppShell extends StatefulWidget {
     this.proApplicationUserNameProvider,
     this.authRepository,
     this.catalogRepository,
+    this.toolsRepository,
     required this.isDarkMode,
     required this.onToggleTheme,
     required this.selectedLanguage,
@@ -104,6 +110,7 @@ class AppShell extends StatefulWidget {
   final ProApplicationUserNameProvider? proApplicationUserNameProvider;
   final AuthRepository? authRepository;
   final CardCatalogRepository? catalogRepository;
+  final ToolsRepository? toolsRepository;
   final bool isDarkMode;
   final VoidCallback onToggleTheme;
   final AppLanguage selectedLanguage;
@@ -160,6 +167,9 @@ class _AppShellState extends State<AppShell>
   bool _transitionIncludesSourceTitle = true;
   bool _reconstructPreviewOnEntrance = false;
   bool _marketCardClosing = false;
+  double _previewScrollOffset = 0;
+  double _closingPreviewScrollOffset = 0;
+  bool _marketReturnUsesFade = false;
   bool _preserveNavigationAfterMarketClose = false;
   ProfileSection? _profileSection;
   final List<ProfileSection> _profileSectionHistory = [];
@@ -195,6 +205,8 @@ class _AppShellState extends State<AppShell>
   final Set<String> _addedCardIds = <String>{};
 
   late final ApiClient _apiClient;
+  late final ToolsRepository _toolsRepository;
+  final _toolsPageKey = GlobalKey<ToolsPageState>();
   late final CardCatalogRepository _catalogRepository;
   late final RemoteRankingRepository _rankingRepository;
   late final RemoteCardDetailRepository _remoteDetailRepository;
@@ -210,6 +222,7 @@ class _AppShellState extends State<AppShell>
   late final BillAnalysisRepository _billAnalysisRepository;
   late final BillBenchmarkRepository _billBenchmarkRepository;
   late final BillHistoryRepository _billHistoryRepository;
+  late final ApiClient _ledgerApiClient;
   late final CardAdvisorRepository _cardAdvisorRepository;
   late final CardApplicationAssistantRepository _applicationAssistantRepository;
   late final RemoteUserDataRepository _remoteUserDataRepository;
@@ -244,6 +257,7 @@ class _AppShellState extends State<AppShell>
         ? _initialHomeCardDisplayMode()
         : HomeCardDisplayMode.wallet;
     _apiClient = ApiClient();
+    _toolsRepository = widget.toolsRepository ?? ToolsRepository(_apiClient);
     _authController = AuthController(
       widget.authRepository ??
           SupabaseAuthRepository(
@@ -294,6 +308,9 @@ class _AppShellState extends State<AppShell>
     _billHistoryRepository = BillHistoryRepository(
       _apiClient,
       accessTokenProvider: proAccessTokenProvider,
+    );
+    _ledgerApiClient = ApiClient(
+      baseUrl: LedgerConfig.baseUrl.isEmpty ? null : LedgerConfig.baseUrl,
     );
     _cardAdvisorRepository = CardAdvisorRepository(
       _apiClient,
@@ -467,12 +484,41 @@ class _AppShellState extends State<AppShell>
 
   Future<bool> _deleteCurrentAccount() async {
     final userId = _activePersonalStateUserId;
-    final deleted = await _authController.deleteAccount(
-      _authAccountRepository.deleteAccount,
-    );
-    if (deleted && userId != null) {
+    final deleted = await _authController.deleteAccount(() async {
+      final token = await _authController.idToken();
+      if (userId == null ||
+          _authController.user?.id != userId ||
+          token == null) {
+        throw const ApiException(
+          code: 'SESSION_CHANGED',
+          message: '账号已切换，请重新操作',
+        );
+      }
+      var ledgerCleared = false;
+      if (widget.enableRemoteData) {
+        ledgerCleared = await _ledgerRepository(
+          userId,
+        ).eraseForAccountDeletion();
+      }
+      if (_authController.user?.id != userId) {
+        throw const ApiException(
+          code: 'SESSION_CHANGED',
+          message: '账号已切换，请重新操作',
+        );
+      }
+      try {
+        // Keep the original account's token across the cleanup boundary.
+        await _authAccountRepository.deleteAccount(accessToken: token);
+      } on ApiException catch (error) {
+        if (!ledgerCleared) rethrow;
+        throw ApiException(
+          code: error.code,
+          statusCode: error.statusCode,
+          message: '账本数据已清除，但账号删除未完成：${error.message}',
+        );
+      }
       await _localStateRepository.clear(userId);
-    }
+    });
     return deleted;
   }
 
@@ -1298,6 +1344,7 @@ class _AppShellState extends State<AppShell>
       return;
     }
     AppHaptics.selection();
+    final owner = _activePersonalStateUserId;
     Navigator.of(context).push(
       PageRouteBuilder<void>(
         opaque: false,
@@ -1312,12 +1359,63 @@ class _AppShellState extends State<AppShell>
               repository: _billHistoryRepository,
               benchmarkRepository: _billBenchmarkRepository,
               cards: _catalogCards,
+              onOpenLedger: LedgerConfig.enabled
+                  ? () => _openLedger(expectedSubject: owner)
+                  : null,
+              onAddToLedger: LedgerConfig.enabled
+                  ? (bill) => _openLedger(bill: bill, expectedSubject: owner)
+                  : null,
               onBack: () => Navigator.of(routeContext).pop(),
             ),
           ),
         ),
         transitionsBuilder: (context, animation, _, child) =>
             buildMotionPageTransition(context, animation, child),
+      ),
+    );
+  }
+
+  LedgerRepository _ledgerRepository(String subject) => LedgerRepository(
+    _ledgerApiClient,
+    subject: subject,
+    currentSubject: () =>
+        _authController.isVerified ? _authController.user?.id : null,
+    accessToken: _authController.idToken,
+  );
+
+  void _openLedger({
+    CardSummary? product,
+    BillRecord? bill,
+    String? expectedSubject,
+  }) {
+    if (!_canManagePersonalData) {
+      _openAuth();
+      return;
+    }
+    final subject = _activePersonalStateUserId;
+    if (subject == null ||
+        expectedSubject != null && expectedSubject != subject) {
+      return;
+    }
+    Navigator.of(context).push<void>(
+      ledgerRoute(
+        context,
+        LedgerWorkspacePage(
+          repository: _ledgerRepository(subject),
+          catalog: _catalogCards,
+          initialProduct: product,
+          importBill: bill,
+          sessionChanges: _authController,
+          sessionValid: () =>
+              _authController.isVerified && _authController.user?.id == subject,
+          onBack: () => Navigator.of(context).pop(),
+          onAnalyze: () {
+            Navigator.of(context).pop();
+            // Close any legacy history/detail routes above the shell first.
+            Navigator.of(context).popUntil((route) => route.isFirst);
+            _openBillAnalysis();
+          },
+        ),
       ),
     );
   }
@@ -1490,6 +1588,7 @@ class _AppShellState extends State<AppShell>
       ..dispose();
     _marketCardTransitionController.dispose();
     _billBenchmarkRepository.dispose();
+    _ledgerApiClient.close();
     _apiClient.close();
     super.dispose();
   }
@@ -1648,11 +1747,7 @@ class _AppShellState extends State<AppShell>
     if (_previewCard != null || _marketCardTransitionController.isAnimating) {
       return;
     }
-    _showCard(
-      card,
-      marketSourceGeometry: geometry,
-      reconstructOnEntrance: true,
-    );
+    _showCard(card, marketSourceGeometry: geometry);
   }
 
   void _openHomeCard(CardSummary card, CatalogCardSourceGeometry geometry) {
@@ -1684,6 +1779,9 @@ class _AppShellState extends State<AppShell>
       _transitionIncludesSourceTitle = includeSourceTitle;
       _reconstructPreviewOnEntrance = reconstructOnEntrance;
       _marketCardClosing = false;
+      _previewScrollOffset = 0;
+      _closingPreviewScrollOffset = 0;
+      _marketReturnUsesFade = false;
       if (_canManagePersonalData) {
         _recentCardIds
           ..remove(card.id)
@@ -1729,6 +1827,9 @@ class _AppShellState extends State<AppShell>
     _transitionIncludesSourceTitle = true;
     _reconstructPreviewOnEntrance = false;
     _marketCardClosing = false;
+    _previewScrollOffset = 0;
+    _closingPreviewScrollOffset = 0;
+    _marketReturnUsesFade = false;
   }
 
   void _changeCardFavorite(CardSummary card, bool favorite) {
@@ -1945,6 +2046,13 @@ class _AppShellState extends State<AppShell>
   }
 
   void _closeOverlay() {
+    if (_profileSection == ProfileSection.tools &&
+        _previewCard == null &&
+        _article == null &&
+        _authMode == null &&
+        _toolsPageKey.currentState?.handleBack() == true) {
+      return;
+    }
     if (_authMode == AuthMode.passwordRecovery) {
       unawaited(_cancelPasswordRecoveryAndClose());
       return;
@@ -1982,7 +2090,14 @@ class _AppShellState extends State<AppShell>
 
   Future<void> _closeMarketPreview() async {
     if (_marketCardClosing) return;
-    setState(() => _marketCardClosing = true);
+    setState(() {
+      _marketCardClosing = true;
+      _closingPreviewScrollOffset = _previewScrollOffset;
+      // Once the card has scrolled under the fixed header, fade the current
+      // reading position back to the retained list instead of inventing a
+      // full card at its original, now invisible, detail position.
+      _marketReturnUsesFade = _previewScrollOffset > 20;
+    });
     await _marketCardTransitionController.reverse();
     if (!mounted) return;
     setState(() {
@@ -1993,6 +2108,9 @@ class _AppShellState extends State<AppShell>
       _transitionIncludesSourceTitle = true;
       _reconstructPreviewOnEntrance = false;
       _marketCardClosing = false;
+      _previewScrollOffset = 0;
+      _closingPreviewScrollOffset = 0;
+      _marketReturnUsesFade = false;
       _preserveNavigationAfterMarketClose = true;
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -2188,7 +2306,12 @@ class _AppShellState extends State<AppShell>
                         ),
                       ),
                       builder: (context, child) {
-                        final fade = marketPreviewActive
+                        final fade =
+                            marketPreviewActive && _marketReturnUsesFade
+                            ? MotionTokens.standardEnter.transform(
+                                _marketCardTransitionController.value,
+                              )
+                            : marketPreviewActive
                             ? const Interval(
                                 .12,
                                 .56,
@@ -2258,7 +2381,19 @@ class _AppShellState extends State<AppShell>
                                         ignoring: !interactive,
                                         child: ExcludeSemantics(
                                           excluding: !interactive,
-                                          child: child,
+                                          child: Opacity(
+                                            key: const Key(
+                                              'detail-return-opacity',
+                                            ),
+                                            opacity: _marketReturnUsesFade
+                                                ? MotionTokens.standardEnter
+                                                      .transform(
+                                                        _marketCardTransitionController
+                                                            .value,
+                                                      )
+                                                : 1,
+                                            child: child,
+                                          ),
                                         ),
                                       );
                                     },
@@ -2324,16 +2459,20 @@ class _AppShellState extends State<AppShell>
                       onFinished: _clearAuthCelebration,
                     ),
                   ),
-                if (marketPreviewActive)
+                if (marketPreviewActive && !_marketReturnUsesFade)
                   if (_marketCardSourceGeometry case final sourceGeometry?)
                     MarketCardTransition(
                       key: const Key('market-card-transition'),
                       card: _marketTransitionCard!,
                       animation: _marketCardTransitionController,
                       sourceRect: sourceGeometry.artworkRect,
-                      targetRect: _marketDetailArtworkRect(context),
+                      targetRect: _marketDetailArtworkRect(
+                        context,
+                      ).shift(Offset(0, -_closingPreviewScrollOffset)),
                       sourceTitleRect: sourceGeometry.titleRect,
-                      targetTitleRect: _marketDetailTitleRect(context),
+                      targetTitleRect: _marketDetailTitleRect(
+                        context,
+                      ).shift(Offset(0, -_closingPreviewScrollOffset)),
                       animateTitle: _transitionIncludesSourceTitle,
                       hideArtworkOnForward: _reconstructPreviewOnEntrance,
                     ),
@@ -2429,6 +2568,13 @@ class _AppShellState extends State<AppShell>
     final entranceAnimation = _marketPreviewActive
         ? _marketCardTransitionController
         : null;
+    final sourceImageCacheWidth =
+        _marketPreviewActive && !_reconstructPreviewOnEntrance
+        ? (_marketCardSourceGeometry!.artworkRect.width *
+                  MediaQuery.devicePixelRatioOf(context))
+              .round()
+              .clamp(1, 1280)
+        : null;
     if (!widget.enableRemoteData) {
       return CardPreviewPage(
         card: previewCard,
@@ -2441,6 +2587,9 @@ class _AppShellState extends State<AppShell>
             _changeCardFavorite(previewCard, favorite),
         onCorrection: () => _openCorrection(previewCard),
         onCompare: () => _openComparison(previewCard),
+        onManagePersonalCard: LedgerConfig.enabled
+            ? () => _openLedger(product: previewCard)
+            : null,
         onOpenApplicationAssistant: () =>
             _openApplicationAssistant(previewCard),
         watched: _proWorkspaceController.isWatched(previewCard.id),
@@ -2448,6 +2597,9 @@ class _AppShellState extends State<AppShell>
         onViewSimilar: _viewSimilarCards,
         isPro: _isPro,
         entranceAnimation: entranceAnimation,
+        sourceImageCacheWidth: sourceImageCacheWidth,
+        fadeOnExit: _marketReturnUsesFade,
+        onScrollOffsetChanged: (offset) => _previewScrollOffset = offset,
         reconstructOnEntrance:
             _marketPreviewActive && _reconstructPreviewOnEntrance,
       );
@@ -2476,6 +2628,9 @@ class _AppShellState extends State<AppShell>
               _changeCardFavorite(previewCard, favorite),
           onCorrection: () => _openCorrection(previewCard),
           onCompare: () => _openComparison(previewCard),
+          onManagePersonalCard: LedgerConfig.enabled
+              ? () => _openLedger(product: previewCard)
+              : null,
           onOpenApplicationAssistant: () =>
               _openApplicationAssistant(previewCard),
           watched: _proWorkspaceController.isWatched(previewCard.id),
@@ -2491,6 +2646,9 @@ class _AppShellState extends State<AppShell>
           }),
           usingOfflineFallback: snapshot.hasError,
           entranceAnimation: entranceAnimation,
+          sourceImageCacheWidth: sourceImageCacheWidth,
+          fadeOnExit: _marketReturnUsesFade,
+          onScrollOffsetChanged: (offset) => _previewScrollOffset = offset,
           reconstructOnEntrance:
               _marketPreviewActive && _reconstructPreviewOnEntrance,
           onRetry: snapshot.hasError
@@ -2520,6 +2678,9 @@ class _AppShellState extends State<AppShell>
     if (_billAnalysisOpen) {
       return BillAnalysisPage(
         repository: _billAnalysisRepository,
+        onAddToLedger: LedgerConfig.enabled
+            ? (bill) => _openLedger(bill: bill)
+            : null,
         benchmarkRepository: _billBenchmarkRepository,
         enableRemoteData: widget.enableRemoteData,
         onBack: _closeOverlay,
@@ -2644,6 +2805,14 @@ class _AppShellState extends State<AppShell>
     }
     final profileSection = _profileSection;
     if (profileSection != null) {
+      if (profileSection == ProfileSection.tools) {
+        return ToolsPage(
+          key: _toolsPageKey,
+          repository: _toolsRepository,
+          cards: _catalogCards,
+          onBack: _closeOverlay,
+        );
+      }
       if (profileSection == ProfileSection.motionLab) {
         return MotionLabPage(onBack: _closeOverlay, cards: _catalogCards);
       }
@@ -2761,7 +2930,7 @@ class _AppShellState extends State<AppShell>
           onAddCard: _addCard,
           onOpenCard: _openCard,
           onOpenCardTransition: _openHomeCard,
-          transitioningCardId: _marketPreviewActive
+          transitioningCardId: _marketPreviewActive && !_marketReturnUsesFade
               ? _marketTransitionCard?.id
               : null,
           onCardHeightScaleChanged: _changeHomeCardHeightScale,
@@ -2771,6 +2940,7 @@ class _AppShellState extends State<AppShell>
           onOpenPro: _openPro,
           onToggleNavigation: () =>
               setState(() => _navigationHidden = !_navigationHidden),
+          navigationVisible: !_navigationHidden,
         ),
         MarketPage(
           repository: _catalogRepository,
@@ -2780,7 +2950,7 @@ class _AppShellState extends State<AppShell>
           onOpenAiAdvisor: _openAiAssistantHub,
           onOpenCard: _openCard,
           onOpenCardTransition: _openMarketCard,
-          transitioningCardId: _marketPreviewActive
+          transitioningCardId: _marketPreviewActive && !_marketReturnUsesFade
               ? _marketTransitionCard?.id
               : null,
         ),

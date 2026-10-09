@@ -13,6 +13,7 @@ import 'package:cardfi/features/catalog/domain/card_summary.dart';
 import 'package:cardfi/features/catalog/data/card_comment_repository.dart';
 import 'package:cardfi/features/catalog/presentation/card_comments_page.dart';
 import 'package:cardfi/features/catalog/widgets/interactive_card_artwork.dart';
+import 'package:cardfi/features/catalog/widgets/card_artwork.dart';
 import 'package:cardfi/features/catalog/widgets/global_account_cover.dart';
 import 'package:cardfi/features/pro/widgets/pro_crown_badge.dart';
 import 'package:cardfi/features/shell/widgets/sticky_page_header.dart';
@@ -36,12 +37,16 @@ class CardPreviewPage extends StatefulWidget {
     required this.onCompare,
     required this.onViewSimilar,
     this.onOpenApplicationAssistant,
+    this.onManagePersonalCard,
     this.watched = false,
     this.onWatchChanged,
     this.usingOfflineFallback = false,
     this.onRetry,
     this.entranceAnimation,
     this.reconstructOnEntrance = false,
+    this.fadeOnExit = false,
+    this.onScrollOffsetChanged,
+    this.sourceImageCacheWidth,
     this.isPro = false,
     this.commentRepository,
     this.signedIn = false,
@@ -60,12 +65,16 @@ class CardPreviewPage extends StatefulWidget {
   final VoidCallback onCompare;
   final VoidCallback onViewSimilar;
   final VoidCallback? onOpenApplicationAssistant;
+  final VoidCallback? onManagePersonalCard;
   final bool watched;
   final ValueChanged<bool>? onWatchChanged;
   final bool usingOfflineFallback;
   final VoidCallback? onRetry;
   final Animation<double>? entranceAnimation;
   final bool reconstructOnEntrance;
+  final bool fadeOnExit;
+  final ValueChanged<double>? onScrollOffsetChanged;
+  final int? sourceImageCacheWidth;
   final bool isPro;
   final CardCommentRepository? commentRepository;
   final bool signedIn;
@@ -201,46 +210,16 @@ class _CardPreviewPageState extends State<CardPreviewPage> {
   late final ScrollController _scrollController;
   final ValueNotifier<double> _headerProgress = ValueNotifier(0);
   final ValueNotifier<bool> _cardStageTickerEnabled = ValueNotifier(true);
-  Animation<double>? _effectEntranceAnimation;
-  bool _initialEffectReady = false;
+  // A shared card arrives fully rendered. Replaying a reconstruction after
+  // the flight would dissolve it a second time; explicit effects still work.
+  bool get _animateInitialEffect =>
+      widget.reconstructOnEntrance || widget.entranceAnimation == null;
 
   @override
   void initState() {
     super.initState();
     _scrollController = ScrollController()..addListener(_updateHeaderProgress);
-    _observeEffectEntrance(widget.entranceAnimation);
     unawaited(_restoreEffect());
-  }
-
-  @override
-  void didUpdateWidget(covariant CardPreviewPage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.entranceAnimation != widget.entranceAnimation ||
-        oldWidget.reconstructOnEntrance != widget.reconstructOnEntrance) {
-      _observeEffectEntrance(widget.entranceAnimation);
-    }
-  }
-
-  void _observeEffectEntrance(Animation<double>? animation) {
-    _effectEntranceAnimation?.removeListener(_handleEffectEntrance);
-    _effectEntranceAnimation = animation;
-    // 重建入口不保留完整飞行卡：详情卡从第一帧就是特效舞台，最终由
-    // 用户选择的效果组装出完整卡面。
-    _initialEffectReady =
-        widget.reconstructOnEntrance ||
-        animation == null ||
-        animation.value >= .68;
-    if (!_initialEffectReady) animation?.addListener(_handleEffectEntrance);
-  }
-
-  void _handleEffectEntrance() {
-    final animation = _effectEntranceAnimation;
-    if (_initialEffectReady || animation == null || animation.value < .68) {
-      return;
-    }
-    animation.removeListener(_handleEffectEntrance);
-    if (!mounted) return;
-    setState(() => _initialEffectReady = true);
   }
 
   Future<void> _restoreEffect() async {
@@ -301,6 +280,7 @@ class _CardPreviewPageState extends State<CardPreviewPage> {
   };
 
   void _updateHeaderProgress() {
+    widget.onScrollOffsetChanged?.call(_scrollController.offset);
     final next = (_scrollController.offset / 190).clamp(0.0, 1.0);
     if ((next - _headerProgress.value).abs() > .002) {
       _headerProgress.value = next;
@@ -313,7 +293,6 @@ class _CardPreviewPageState extends State<CardPreviewPage> {
 
   @override
   void dispose() {
-    _effectEntranceAnimation?.removeListener(_handleEffectEntrance);
     _scrollController
       ..removeListener(_updateHeaderProgress)
       ..dispose();
@@ -366,6 +345,12 @@ class _CardPreviewPageState extends State<CardPreviewPage> {
           Navigator.pop(sheetContext);
           widget.onCompare();
         },
+        onManagePersonalCard: widget.onManagePersonalCard == null
+            ? null
+            : () {
+                Navigator.pop(sheetContext);
+                widget.onManagePersonalCard!();
+              },
         onOpenApplicationAssistant: widget.onOpenApplicationAssistant == null
             ? null
             : () {
@@ -403,7 +388,7 @@ class _CardPreviewPageState extends State<CardPreviewPage> {
     required double end,
     double offset = 10,
   }) => StaggeredReveal(
-    animation: widget.entranceAnimation,
+    animation: widget.fadeOnExit ? null : widget.entranceAnimation,
     begin: begin,
     end: end,
     offset: offset,
@@ -412,7 +397,9 @@ class _CardPreviewPageState extends State<CardPreviewPage> {
 
   Widget _sharedCardHandoff(Widget child) {
     final animation = widget.entranceAnimation;
-    if (animation == null || MediaQuery.disableAnimationsOf(context)) {
+    if (animation == null ||
+        widget.fadeOnExit ||
+        MediaQuery.disableAnimationsOf(context)) {
       return Opacity(
         key: const Key('detail-card-handoff-opacity'),
         opacity: 1,
@@ -481,13 +468,14 @@ class _CardPreviewPageState extends State<CardPreviewPage> {
                       ? _GlobalAccountStage(
                           card: card,
                           effect: _effect,
-                          animateInitialEffect: _initialEffectReady,
+                          animateInitialEffect: _animateInitialEffect,
                           animateEffectChanges: !_suppressEffectAnimation,
                         )
                       : _DetailCardStage(
                           card: card,
                           effect: _effect,
-                          animateInitialEffect: _initialEffectReady,
+                          sourceImageCacheWidth: widget.sourceImageCacheWidth,
+                          animateInitialEffect: _animateInitialEffect,
                           animateEffectChanges: !_suppressEffectAnimation,
                         ),
                 ),
@@ -500,8 +488,8 @@ class _CardPreviewPageState extends State<CardPreviewPage> {
                   style: TextStyle(
                     color: AppColors.text,
                     fontSize: 25,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -1.1,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -.65,
                   ),
                 ),
                 begin: .48,
@@ -514,7 +502,7 @@ class _CardPreviewPageState extends State<CardPreviewPage> {
                   style: TextStyle(
                     color: AppColors.textMuted,
                     fontSize: 14,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
                 begin: .52,
@@ -873,12 +861,14 @@ class _DetailCardStage extends StatelessWidget {
     required this.effect,
     required this.animateInitialEffect,
     required this.animateEffectChanges,
+    this.sourceImageCacheWidth,
   });
 
   final CardSummary card;
   final CardVisualEffect effect;
   final bool animateInitialEffect;
   final bool animateEffectChanges;
+  final int? sourceImageCacheWidth;
 
   @override
   Widget build(BuildContext context) {
@@ -933,6 +923,13 @@ class _DetailCardStage extends StatelessWidget {
             child: InteractiveCardArtwork(
               card: card,
               effect: effect,
+              artwork: sourceImageCacheWidth == null
+                  ? null
+                  : CardArtwork(
+                      card: card,
+                      showGeneratedLabels: false,
+                      fallbackMemCacheWidth: sourceImageCacheWidth,
+                    ),
               animateInitialEffect: animateInitialEffect,
               animateEffectChanges: animateEffectChanges,
             ),
@@ -1061,8 +1058,10 @@ class _TopFadedScroll extends StatelessWidget {
     return ShaderMask(
       blendMode: BlendMode.dstIn,
       shaderCallback: (bounds) {
-        final hold = (topInset * .55 / bounds.height).clamp(0.0, .18);
-        final fadeEnd = ((topInset + 82) / bounds.height).clamp(.05, .28);
+        // Keep scrolling text clear of the fixed title and its 48px controls.
+        // Start the fade below them, so two titles never overlap on scroll.
+        final hold = ((topInset + 56) / bounds.height).clamp(0.0, .22);
+        final fadeEnd = ((topInset + 96) / bounds.height).clamp(.05, .32);
         return LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
@@ -1396,6 +1395,7 @@ class _DetailActionSheet extends StatelessWidget {
     required this.onFavorite,
     required this.onViewSimilar,
     required this.onCompare,
+    this.onManagePersonalCard,
     required this.onOpenApplicationAssistant,
     required this.watched,
     required this.onWatch,
@@ -1410,6 +1410,7 @@ class _DetailActionSheet extends StatelessWidget {
   final VoidCallback onFavorite;
   final VoidCallback onViewSimilar;
   final VoidCallback onCompare;
+  final VoidCallback? onManagePersonalCard;
   final VoidCallback? onOpenApplicationAssistant;
   final bool watched;
   final VoidCallback? onWatch;
@@ -1493,6 +1494,7 @@ class _DetailActionSheet extends StatelessWidget {
                 onFavorite: onFavorite,
                 onViewSimilar: onViewSimilar,
                 onCompare: onCompare,
+                onManagePersonalCard: onManagePersonalCard,
                 onOpenApplicationAssistant: onOpenApplicationAssistant,
                 watched: watched,
                 onWatch: onWatch,
@@ -1606,6 +1608,7 @@ class _CardActionLayout extends StatelessWidget {
     required this.onFavorite,
     required this.onViewSimilar,
     required this.onCompare,
+    this.onManagePersonalCard,
     required this.onOpenApplicationAssistant,
     required this.watched,
     required this.onWatch,
@@ -1619,6 +1622,7 @@ class _CardActionLayout extends StatelessWidget {
   final VoidCallback onFavorite;
   final VoidCallback onViewSimilar;
   final VoidCallback onCompare;
+  final VoidCallback? onManagePersonalCard;
   final VoidCallback? onOpenApplicationAssistant;
   final bool watched;
   final VoidCallback? onWatch;
@@ -1658,6 +1662,13 @@ class _CardActionLayout extends StatelessWidget {
       children: [
         _ActionTileGrid(
           children: [
+            if (added && onManagePersonalCard != null)
+              _ActionTile(
+                key: const Key('detail-action-personal-card'),
+                icon: Icons.account_balance_wallet_outlined,
+                label: '管理这张卡',
+                onTap: onManagePersonalCard,
+              ),
             _ActionTile(
               key: const Key('detail-action-favorite'),
               icon: favorite ? Icons.star_rounded : Icons.star_border_rounded,
@@ -2169,20 +2180,16 @@ class _BasicInfo extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       key: Key('detail-basic-info'),
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: AppColors.glass,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.line),
-      ),
+      padding: const EdgeInsets.all(8),
+      decoration: _detailPanelDecoration(),
       child: card.isGlobalAccount
           ? Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _MetaCell(label: '适用地区', value: detail.region),
-                Divider(height: 1, color: AppColors.line),
+                const SizedBox(height: 6),
                 _MetaCell(label: '入金方式', value: detail.funding),
-                Divider(height: 1, color: AppColors.line),
+                const SizedBox(height: 6),
                 _MetaCell(label: '开放状态', value: detail.availability),
               ],
             )
@@ -2195,36 +2202,52 @@ class _BasicInfo extends StatelessWidget {
                   fullValueKey: const Key('detail-region-value'),
                 ),
                 if (card.cashbackRate.trim().isNotEmpty) ...[
-                  Divider(height: 1, color: AppColors.line),
+                  const SizedBox(height: 6),
                   _CompactMetaCell(
                     label: '返现概览',
                     value: card.cashbackRate,
                     maxLines: 2,
                   ),
                 ],
-                Divider(height: 1, color: AppColors.line),
-                IntrinsicHeight(
-                  child: Row(
-                    key: const Key('detail-funding-availability'),
-                    children: [
-                      Expanded(
-                        child: _CompactMetaCell(
-                          label: '入金方式',
-                          value: detail.funding,
-                          maxLines: 2,
-                          fullValueKey: const Key('detail-funding-value'),
-                        ),
+                const SizedBox(height: 6),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final funding = _CompactMetaCell(
+                      label: '入金方式',
+                      value: detail.funding,
+                      maxLines: 2,
+                      fullValueKey: const Key('detail-funding-value'),
+                    );
+                    final availability = _CompactMetaCell(
+                      label: '开放状态',
+                      value: detail.availability,
+                    );
+                    final stack =
+                        constraints.maxWidth < 260 ||
+                        MediaQuery.textScalerOf(context).scale(14) > 20;
+                    if (stack) {
+                      return Column(
+                        key: const Key('detail-funding-availability'),
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          funding,
+                          const SizedBox(height: 6),
+                          availability,
+                        ],
+                      );
+                    }
+                    return IntrinsicHeight(
+                      child: Row(
+                        key: const Key('detail-funding-availability'),
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(child: funding),
+                          const SizedBox(width: 6),
+                          Expanded(child: availability),
+                        ],
                       ),
-                      VerticalDivider(width: 1, color: AppColors.line),
-                      Expanded(
-                        child: _CompactMetaCell(
-                          label: '开放状态',
-                          value: detail.availability,
-                          maxLines: 2,
-                        ),
-                      ),
-                    ],
-                  ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -2247,30 +2270,49 @@ class _CompactMetaCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final content = Padding(
-      padding: const EdgeInsets.fromLTRB(14, 11, 14, 12),
+    final content = Container(
+      constraints: const BoxConstraints(minHeight: 64),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 13),
+      decoration: BoxDecoration(
+        color: AppColors.isDark
+            ? const Color(0xFF272E40)
+            : const Color(0xFFF3F5FA),
+        borderRadius: BorderRadius.circular(17),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: AppColors.textMuted,
-              fontSize: 10.5,
-              fontWeight: FontWeight.w700,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              if (fullValueKey != null)
+                Icon(
+                  Icons.chevron_right_rounded,
+                  size: 15,
+                  color: AppColors.textMuted,
+                ),
+            ],
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: 5),
           Text(
             value,
-            maxLines: maxLines,
-            overflow: TextOverflow.ellipsis,
+            maxLines: fullValueKey == null ? null : maxLines,
+            overflow: fullValueKey == null ? null : TextOverflow.ellipsis,
             style: TextStyle(
               color: AppColors.text,
-              fontSize: 12.5,
-              fontWeight: FontWeight.w800,
-              height: 1.25,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              height: 1.4,
             ),
           ),
         ],
@@ -2378,8 +2420,14 @@ class _MetaCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 15),
+      decoration: BoxDecoration(
+        color: AppColors.isDark
+            ? const Color(0xFF272E40)
+            : const Color(0xFFF3F5FA),
+        borderRadius: BorderRadius.circular(17),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -2388,20 +2436,18 @@ class _MetaCell extends StatelessWidget {
             label,
             style: TextStyle(
               color: AppColors.textMuted,
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w500,
             ),
           ),
           const SizedBox(height: 6),
           Text(
             value,
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: AppColors.text,
               fontSize: 14,
-              fontWeight: FontWeight.w900,
-              height: 1.35,
+              fontWeight: FontWeight.w600,
+              height: 1.45,
             ),
           ),
         ],
@@ -2421,12 +2467,8 @@ class _KycBlock extends StatelessWidget {
     final opening = detail.openingRequirements;
     return Container(
       key: const Key('detail-kyc'),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.glass,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.line),
-      ),
+      padding: const EdgeInsets.all(18),
+      decoration: _detailPanelDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -2442,13 +2484,11 @@ class _KycBlock extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               '通常需要：${opening.summary}',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: AppColors.textMuted,
-                fontSize: 11.5,
-                fontWeight: FontWeight.w700,
-                height: 1.35,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                height: 1.5,
               ),
             ),
           ],
@@ -3441,11 +3481,7 @@ class _DetailPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: AppColors.glass,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: AppColors.line),
-      ),
+      decoration: _detailPanelDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -3461,3 +3497,20 @@ class _DetailPanel extends StatelessWidget {
     );
   }
 }
+
+BoxDecoration _detailPanelDecoration() => BoxDecoration(
+  color: AppColors.isDark ? const Color(0xEE30384C) : const Color(0xF5FFFFFF),
+  borderRadius: BorderRadius.circular(24),
+  border: Border.all(
+    color: AppColors.isDark ? const Color(0x14FFFFFF) : Colors.white,
+  ),
+  boxShadow: [
+    BoxShadow(
+      color: const Color(
+        0xFF394B7A,
+      ).withValues(alpha: AppColors.isDark ? .10 : .045),
+      blurRadius: 24,
+      offset: const Offset(0, 8),
+    ),
+  ],
+);

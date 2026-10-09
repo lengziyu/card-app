@@ -12,6 +12,7 @@ class CardTransformState {
     required this.rotation,
     required this.elevation,
     required this.zIndex,
+    this.focusDepth = 0,
   });
 
   final double top;
@@ -21,6 +22,7 @@ class CardTransformState {
   final double rotation;
   final double elevation;
   final int zIndex;
+  final double focusDepth;
 
   CardTransformState copyWith({
     double? top,
@@ -30,6 +32,7 @@ class CardTransformState {
     double? rotation,
     double? elevation,
     int? zIndex,
+    double? focusDepth,
   }) {
     return CardTransformState(
       top: top ?? this.top,
@@ -39,6 +42,7 @@ class CardTransformState {
       rotation: rotation ?? this.rotation,
       elevation: elevation ?? this.elevation,
       zIndex: zIndex ?? this.zIndex,
+      focusDepth: focusDepth ?? this.focusDepth,
     );
   }
 
@@ -55,6 +59,7 @@ class CardTransformState {
       rotation: lerpDouble(begin.rotation, end.rotation, progress)!,
       elevation: lerpDouble(begin.elevation, end.elevation, progress)!,
       zIndex: (begin.zIndex + (end.zIndex - begin.zIndex) * progress).round(),
+      focusDepth: lerpDouble(begin.focusDepth, end.focusDepth, progress)!,
     );
   }
 }

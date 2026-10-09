@@ -209,39 +209,53 @@ class _QuickActionMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     return IgnorePointer(
       ignoring: !open,
-      child: SizedBox(
-        width: 128,
-        height: 95,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Positioned(
-              right: 70,
-              bottom: 0,
-              child: _QuickMenuButton(
-                actionKey: const Key('nav-quick-bill'),
-                open: open,
-                delay: 1,
-                closedOffset: const Offset(1.21, .85),
-                tooltip: context.tr('拍照识别账单'),
-                icon: AppIcons.bill,
-                onTap: onAnalyzeBill,
+      child: ExcludeSemantics(
+        excluding: !open,
+        child: ExcludeFocus(
+          excluding: !open,
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(end: open ? 1 : 0),
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : (open ? MotionTokens.tabSwitch : MotionTokens.stateChange),
+            builder: (context, progress, _) => SizedBox(
+              width: 128,
+              height: 95,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned(
+                    right: 70,
+                    bottom: 0,
+                    child: _QuickMenuButton(
+                      actionKey: const Key('nav-quick-bill'),
+                      progress: Interval(
+                        .12,
+                        1,
+                        curve: Curves.easeInOutCubic,
+                      ).transform(progress),
+                      closedOffset: const Offset(70, 49),
+                      tooltip: context.tr('拍照识别账单'),
+                      icon: AppIcons.bill,
+                      onTap: onAnalyzeBill,
+                    ),
+                  ),
+                  Positioned(
+                    right: 0,
+                    bottom: 37,
+                    child: _QuickMenuButton(
+                      actionKey: const Key('nav-quick-add-card'),
+                      progress: Curves.easeInOutCubic.transform(progress),
+                      closedOffset: const Offset(0, 86),
+                      tooltip: context.tr('添加卡片'),
+                      icon: AppIcons.cardsSelected,
+                      onTap: onAddCard,
+                    ),
+                  ),
+                ],
               ),
             ),
-            Positioned(
-              right: 0,
-              bottom: 37,
-              child: _QuickMenuButton(
-                actionKey: const Key('nav-quick-add-card'),
-                open: open,
-                delay: 0,
-                closedOffset: const Offset(0, 1.48),
-                tooltip: context.tr('添加卡片'),
-                icon: AppIcons.cardsSelected,
-                onTap: onAddCard,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -251,8 +265,7 @@ class _QuickActionMenu extends StatelessWidget {
 class _QuickMenuButton extends StatelessWidget {
   const _QuickMenuButton({
     required this.actionKey,
-    required this.open,
-    required this.delay,
+    required this.progress,
     required this.closedOffset,
     required this.tooltip,
     required this.icon,
@@ -260,8 +273,7 @@ class _QuickMenuButton extends StatelessWidget {
   });
 
   final Key actionKey;
-  final bool open;
-  final int delay;
+  final double progress;
   final Offset closedOffset;
   final String tooltip;
   final IconData icon;
@@ -269,41 +281,36 @@ class _QuickMenuButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final reduceMotion = MediaQuery.disableAnimationsOf(context);
-    final duration = reduceMotion
-        ? Duration.zero
-        : MotionTokens.contentSwitch + Duration(milliseconds: delay * 35);
     return Semantics(
       button: true,
       label: tooltip,
-      child: AnimatedSlide(
-        duration: duration,
-        curve: MotionTokens.standardEnter,
-        offset: open ? Offset.zero : closedOffset,
-        child: AnimatedOpacity(
-          duration: duration,
-          curve: MotionTokens.standardEnter,
-          opacity: open ? 1 : 0,
-          child: MotionPressEffect(
-            child: Tooltip(
-              message: tooltip,
-              child: Material(
-                color: Colors.transparent,
-                shape: const CircleBorder(),
-                child: InkWell(
-                  key: actionKey,
-                  onTap: onTap,
-                  customBorder: const CircleBorder(),
-                  child: Container(
-                    width: 58,
-                    height: 58,
-                    decoration: _quickMenuDecoration(),
-                    child: Icon(
-                      icon,
-                      size: 23,
-                      color: AppColors.isDark
-                          ? Colors.white
-                          : const Color(0xFF4F67FF),
+      child: Transform.translate(
+        offset: closedOffset * (1 - progress),
+        child: Transform.scale(
+          scale: .86 + .14 * progress,
+          child: Opacity(
+            opacity: progress,
+            child: MotionPressEffect(
+              child: Tooltip(
+                message: tooltip,
+                child: Material(
+                  color: Colors.transparent,
+                  shape: const CircleBorder(),
+                  child: InkWell(
+                    key: actionKey,
+                    onTap: onTap,
+                    customBorder: const CircleBorder(),
+                    child: Container(
+                      width: 58,
+                      height: 58,
+                      decoration: _quickMenuDecoration(),
+                      child: Icon(
+                        icon,
+                        size: 23,
+                        color: AppColors.isDark
+                            ? Colors.white
+                            : const Color(0xFF4F67FF),
+                      ),
                     ),
                   ),
                 ),

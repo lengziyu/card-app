@@ -31,6 +31,7 @@ class BillAnalysisPage extends StatefulWidget {
     this.benchmarkRepository,
     this.historyRepository,
     this.onOpenHistory,
+    this.onAddToLedger,
     this.cards = const [],
     super.key,
   });
@@ -41,6 +42,7 @@ class BillAnalysisPage extends StatefulWidget {
   final BillBenchmarkRepository? benchmarkRepository;
   final BillHistoryRepository? historyRepository;
   final VoidCallback? onOpenHistory;
+  final ValueChanged<BillRecord>? onAddToLedger;
   final List<CardSummary> cards;
 
   @override
@@ -333,6 +335,15 @@ class _BillAnalysisPageState extends State<BillAnalysisPage> {
                 _MessageCard(
                   message: _savingHistory ? '正在保存结构化结果…' : _historyMessage!,
                   error: !_savingHistory && _savedRecord == null,
+                ),
+              ],
+              if (_savedRecord != null && widget.onAddToLedger != null) ...[
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  key: const Key('bill-result-add-to-ledger'),
+                  onPressed: () => widget.onAddToLedger!(_savedRecord!),
+                  icon: const Icon(Icons.add_card_outlined),
+                  label: const Text('记入消费账本'),
                 ),
               ],
             ],

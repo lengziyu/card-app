@@ -7,6 +7,30 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 void main() {
+  test(
+    'account deletion retains the token captured before ledger cleanup',
+    () async {
+      late http.Request captured;
+      final client = ApiClient(
+        baseUrl: 'https://example.test',
+        client: MockClient((request) async {
+          captured = request;
+          return http.Response('{}', 200);
+        }),
+      );
+      addTearDown(client.close);
+      final repository = AuthAccountRepository(
+        client,
+        accessTokenProvider: () async => 'new-account-token',
+      );
+      await repository.deleteAccount(accessToken: 'original-account-token');
+      expect(captured.method, 'DELETE');
+      expect(
+        captured.headers['authorization'],
+        'Bearer original-account-token',
+      );
+    },
+  );
   test('loads the server-generated purchase account UUID', () async {
     late http.Request captured;
     final client = ApiClient(

@@ -1,4 +1,3 @@
-import 'package:cardfi/core/motion/motion_tokens.dart';
 import 'package:cardfi/core/theme/app_colors.dart';
 import 'package:cardfi/features/catalog/domain/card_summary.dart';
 import 'package:cardfi/features/catalog/widgets/card_artwork.dart';
@@ -47,10 +46,9 @@ class MarketCardTransition extends StatelessWidget {
         child: AnimatedBuilder(
           animation: animation,
           builder: (context, _) {
-            final curve = animation.status == AnimationStatus.reverse
-                ? MotionTokens.standardExit
-                : MotionTokens.standardEnter;
-            final value = curve.transform(animation.value);
+            // Keep the same path when back is requested mid-flight. Switching
+            // curves with the animation status would jump the card's position.
+            final value = Curves.easeInOutCubic.transform(animation.value);
             final rect = Rect.lerp(sourceRect, targetRect, value)!;
             final titleRect = Rect.lerp(
               sourceTitleRect,
@@ -64,7 +62,7 @@ class MarketCardTransition extends StatelessWidget {
                   1,
                   curve: Curves.easeOut,
                 ).transform(animation.value);
-            final radius = card.isGlobalAccount ? 14.0 : 10 + (10 * value);
+            final radius = card.isGlobalAccount ? 14.0 : 10 + (12 * value);
             // 首页进入详情时由详情页的粒子重建接管开场，不能让一张完整
             // 卡面先飞到终点。返回时仍恢复共享卡片飞行，保持关闭连贯。
             final showArtwork =
@@ -105,6 +103,13 @@ class MarketCardTransition extends StatelessWidget {
                                     card: card,
                                     showGeneratedLabels: false,
                                     memCacheWidth: targetImageCacheWidth,
+                                    fallbackMemCacheWidth:
+                                        (sourceRect.width *
+                                                MediaQuery.devicePixelRatioOf(
+                                                  context,
+                                                ))
+                                            .round()
+                                            .clamp(1, 1280),
                                   ),
                           ),
                         ),

@@ -362,6 +362,10 @@ class _ProfileSubpageState extends State<ProfileSubpage> {
           ProfileSection.privacy => _legalPage(
             items: const [
               (
+                '个人消费账本（功能开放时）',
+                '你主动填写的卡片昵称、末四位及消费、手续费、退款和返现记录，按账号隔离并加密保存，用于个人记账和月度汇总。原识别历史与消费账本独立保存，可分别修改或删除；删除账号时一并清除。',
+              ),
+              (
                 '我们处理哪些数据',
                 '账号功能会处理邮箱、公开昵称、内部用户标识和登录会话；同步功能会处理卡包、收藏、浏览历史、规则关注、反馈与投稿。通知开启后会处理设备推送令牌和随机安装标识。',
               ),
@@ -470,6 +474,7 @@ class _ProfileSubpageState extends State<ProfileSubpage> {
           // MotionLabPage. Keep this branch for enum exhaustiveness if a
           // future caller reaches ProfileSubpage directly.
           ProfileSection.motionLab => const SizedBox.shrink(),
+          ProfileSection.tools => const SizedBox.shrink(),
           ProfileSection.referral => const SizedBox.shrink(),
         },
       ],
@@ -2677,8 +2682,16 @@ class _SettingsDeleteAccountActionState
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('永久删除账号？'),
-        content: const Text(
-          '这会永久删除账号及已同步的卡包、收藏、历史、反馈和 Pro 工作区数据，无法恢复。已有应用商店订阅不会自动取消。',
+        content: const SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('这会永久删除账号及已同步的卡包、收藏、历史、反馈和 Pro 工作区数据，无法恢复。已有应用商店订阅不会自动取消。'),
+              SizedBox(height: 12),
+              Text('个人卡片资料、历史账单和消费账本也会清除。'),
+            ],
+          ),
         ),
         actions: [
           TextButton(

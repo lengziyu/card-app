@@ -15,6 +15,8 @@ import 'package:cardfi/core/localization/app_language.dart';
 import 'package:cardfi/core/motion/edge_swipe_back.dart';
 import 'package:cardfi/features/home/domain/card_layout_calculator.dart';
 import 'package:cardfi/features/home/domain/home_card_layout.dart';
+import 'package:cardfi/features/home/widgets/card_stack_view.dart';
+import 'package:cardfi/features/home/widgets/home_card_scene_fade.dart';
 import 'package:cardfi/features/market/presentation/card_advisor_page.dart';
 import 'package:cardfi/features/market/presentation/market_page.dart';
 import 'package:cardfi/features/profile/data/local_guest_state.dart';
@@ -531,8 +533,41 @@ void main() {
     expect(find.byKey(const Key('home-card-previous')), findsNothing);
     expect(find.byKey(const Key('home-card-next')), findsNothing);
     expect(find.text('轻触查看'), findsNothing);
-    expect(find.byKey(const Key('home-card-blur-bybit-card')), findsNothing);
-    expect(find.byKey(const Key('home-card-veil-bybit-card')), findsNothing);
+    expect(
+      tester
+          .widget<ImageFiltered>(
+            find.byKey(const Key('home-card-filter-redotpay')),
+          )
+          .enabled,
+      isFalse,
+    );
+    expect(find.byKey(const Key('home-card-veil-redotpay')), findsNothing);
+    expect(
+      tester
+          .widget<ImageFiltered>(
+            find.byKey(const Key('home-card-filter-bybit-card')),
+          )
+          .enabled,
+      isTrue,
+    );
+    expect(find.byKey(const Key('home-card-veil-bybit-card')), findsOneWidget);
+
+    final viewport = tester.getRect(find.byKey(const Key('home-fan-viewport')));
+    expect(
+      viewport.top,
+      lessThan(tester.getTopLeft(find.byKey(const Key('home-title'))).dy),
+    );
+    expect(
+      viewport.bottom,
+      greaterThan(tester.getBottomLeft(find.byKey(const Key('nav-add'))).dy),
+    );
+    expect(
+      find.descendant(
+        of: find.byType(CardStackView),
+        matching: find.byType(ClipRect),
+      ),
+      findsNothing,
+    );
 
     double visualWidth(Finder finder) =>
         (tester.getTopRight(finder) - tester.getTopLeft(finder)).distance;
@@ -895,7 +930,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('market card detail runs the effect before the full card', (
+  testWidgets('market card stays continuous through detail and back', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({
@@ -914,6 +949,8 @@ void main() {
       const Offset(0, -320),
     );
     await tester.pumpAndSettle();
+    final sourceRow = find.byKey(const Key('catalog-card-etherfi-core'));
+    final sourcePosition = tester.getTopLeft(sourceRow);
     await tester.tap(find.byKey(const Key('catalog-card-etherfi-core')));
     await tester.pump(const Duration(milliseconds: 100));
     await tester.pump();
@@ -924,21 +961,35 @@ void main() {
     expect(interactiveArtwork.effect, CardVisualEffect.flame);
     expect(
       interactiveArtwork.animateInitialEffect,
-      isTrue,
-      reason: 'the selected effect must own the first detail frame',
+      isFalse,
+      reason: 'a shared card must not dissolve again when it reaches detail',
     );
     expect(
       find.descendant(
         of: find.byKey(const Key('market-card-transition')),
         matching: find.byType(CardArtwork),
       ),
-      findsNothing,
-      reason: 'the complete shared card must not render before the effect',
+      findsOneWidget,
+      reason: 'the selected card stays visible throughout the shared flight',
     );
     expect(
       find.byKey(const Key('market-card-flight-position')),
-      findsNothing,
-      reason: 'the forward market transition must not flash a complete card',
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<Opacity>(find.byKey(const Key('detail-card-handoff-opacity')))
+          .opacity,
+      0,
+    );
+
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('card-preview-page')), findsOneWidget);
+    expect(
+      tester
+          .widget<InteractiveCardArtwork>(find.byType(InteractiveCardArtwork))
+          .animateInitialEffect,
+      isFalse,
     );
     expect(
       tester
@@ -946,9 +997,100 @@ void main() {
           .opacity,
       1,
     );
-
+    await tester.tap(find.byKey(const Key('preview-back')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 120));
+    expect(
+      find.byKey(const Key('market-card-flight-position')),
+      findsOneWidget,
+    );
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('card-preview-page')), findsOneWidget);
+    expect(find.byKey(const Key('card-preview-page')), findsNothing);
+    expect(tester.getTopLeft(sourceRow), sourcePosition);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('scrolled detail fades back without a misplaced flying card', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const CardApp(catalogRepository: LocalCardCatalogRepository()),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('nav-市场')));
+    await tester.pumpAndSettle();
+    await tester.drag(
+      find.byKey(const Key('market-page')),
+      const Offset(0, -320),
+    );
+    await tester.pumpAndSettle();
+    final source = find.byKey(const Key('catalog-card-etherfi-core'));
+    final sourcePosition = tester.getTopLeft(source);
+    await tester.tap(source);
+    await tester.pumpAndSettle();
+    final detailScrollable = find
+        .descendant(
+          of: find.byKey(const Key('card-preview-page')),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    await tester.drag(detailScrollable, const Offset(0, -400));
+    await tester.pumpAndSettle();
+    final detailOffset = tester
+        .state<ScrollableState>(detailScrollable)
+        .position
+        .pixels;
+    expect(detailOffset, greaterThan(20));
+
+    await tester.tap(find.byKey(const Key('preview-back')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 120));
+    expect(find.byKey(const Key('market-card-flight-position')), findsNothing);
+    expect(
+      tester.state<ScrollableState>(detailScrollable).position.pixels,
+      detailOffset,
+    );
+    expect(
+      tester
+          .widget<Opacity>(find.byKey(const Key('detail-return-opacity')))
+          .opacity,
+      allOf(greaterThan(0), lessThan(1)),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(source), sourcePosition);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('market detail opens and returns with reduced motion', (
+    tester,
+  ) async {
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(disableAnimations: true);
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+    await tester.pumpWidget(
+      const CardApp(catalogRepository: LocalCardCatalogRepository()),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('nav-市场')));
+    await tester.pumpAndSettle();
+    await tester.drag(
+      find.byKey(const Key('market-page')),
+      const Offset(0, -320),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('catalog-card-etherfi-core')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('market-card-flight-position')), findsNothing);
+    expect(
+      tester
+          .widget<Opacity>(find.byKey(const Key('detail-card-handoff-opacity')))
+          .opacity,
+      1,
+    );
+    await tester.tap(find.byKey(const Key('preview-back')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('card-preview-page')), findsNothing);
+    expect(find.byKey(const Key('market-page')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -1186,7 +1328,7 @@ void main() {
     expect(find.byKey(const Key('detail-region-value')), findsOneWidget);
     expect(find.byKey(const Key('detail-funding-value')), findsOneWidget);
     final fundingLabel = tester.widget<Text>(find.text('入金方式'));
-    expect(fundingLabel.style?.fontSize, 10.5);
+    expect(fundingLabel.style?.fontSize, 11.5);
     final regionValue = find.byKey(const Key('detail-region-value'));
     await tester.tapAt(tester.getTopLeft(regionValue) + const Offset(28, 28));
     await tester.pumpAndSettle();
@@ -1328,6 +1470,8 @@ void main() {
     final stack = find.byKey(const Key('card-stack'));
     final firstCard = find.byKey(const Key('home-card-etherfi-core'));
     final originalTop = tester.getTopLeft(firstCard).dy;
+    final lastCard = find.byKey(const Key('home-card-bybit-card'));
+    final originalLastBottom = tester.getBottomLeft(lastCard).dy;
     final center = tester.getTopLeft(stack) + const Offset(195, 140);
     tester.binding.handlePointerEvent(
       PointerDownEvent(pointer: 21, position: center - const Offset(38, 0)),
@@ -1370,7 +1514,14 @@ void main() {
     );
     await tester.pump();
 
-    expect(tester.getTopLeft(firstCard).dy, closeTo(originalTop + 280, 2));
+    final pannedTop = tester.getTopLeft(firstCard).dy;
+    expect(pannedTop, closeTo(originalTop + 280, 2));
+    final viewport = tester.getRect(find.byKey(const Key('home-fan-viewport')));
+    expect(tester.getBottomLeft(lastCard).dy, greaterThan(viewport.bottom));
+    expect(
+      tester.getBottomLeft(lastCard).dy,
+      closeTo(originalLastBottom + 280, 2),
+    );
 
     tester.binding.handlePointerEvent(
       PointerUpEvent(pointer: 21, position: center + const Offset(-38, 280)),
@@ -1380,27 +1531,56 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(tester.getTopLeft(firstCard).dy, closeTo(originalTop + 280, 2));
+    expect(tester.getTopLeft(firstCard).dy, closeTo(pannedTop, 2));
   });
 
-  testWidgets('stack and focus do not add a top mask over the cards', (
-    tester,
-  ) async {
-    await tester.pumpWidget(const CardApp(proUnlocked: true));
-    await tester.pumpAndSettle();
-
-    for (final mode in const [
-      (button: Key('home-mode-stack'), scene: Key('card-stack')),
-      (button: Key('home-mode-focus'), scene: Key('home-focus-stack')),
-    ]) {
-      await tester.tap(find.byKey(const Key('home-mode-button')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(mode.button));
+  testWidgets(
+    'fan edge fades leave floating header and navigation interactive',
+    (tester) async {
+      await tester.pumpWidget(const CardApp(proUnlocked: true));
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('home-fan-top-fade')), findsNothing);
-    }
-  });
+      for (final mode in const [
+        (button: Key('home-mode-stack'), scene: Key('card-stack')),
+        (button: Key('home-mode-focus'), scene: Key('home-focus-stack')),
+      ]) {
+        await tester.tap(find.byKey(const Key('home-mode-button')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(mode.button));
+        await tester.pumpAndSettle();
+
+        final fade = find.byKey(const Key('home-fan-edge-fade'));
+        expect(fade, findsOneWidget);
+        expect(tester.widget<ShaderMask>(fade).blendMode, BlendMode.dstIn);
+        expect(
+          find.ancestor(of: find.byKey(mode.scene), matching: fade),
+          findsOneWidget,
+        );
+        for (final control in [
+          find.byKey(const Key('home-title-toggle')),
+          find.byKey(const Key('home-mode-button')),
+          find.byKey(const Key('home-add-button')),
+          find.byKey(const Key('nav-add')),
+        ]) {
+          expect(find.ancestor(of: control, matching: fade), findsNothing);
+        }
+        final sceneSize = tester.getSize(find.byKey(mode.scene));
+        await tester.tap(find.byKey(const Key('home-title-toggle')));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('nav-add')), findsNothing);
+        expect(
+          tester
+              .widget<HomeCardSceneFade>(find.byType(HomeCardSceneFade))
+              .navigationVisible,
+          isFalse,
+        );
+        expect(tester.getSize(find.byKey(mode.scene)), sceneSize);
+        await tester.tap(find.byKey(const Key('home-title-toggle')));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('nav-add')), findsOneWidget);
+      }
+    },
+  );
 
   testWidgets('home title toggles immersive navigation', (tester) async {
     await tester.pumpWidget(const CardApp());

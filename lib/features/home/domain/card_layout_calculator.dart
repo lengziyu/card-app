@@ -8,9 +8,8 @@ import 'package:flutter/material.dart';
 ///
 /// 输入只包含模式、选中项、拖拽量和可用尺寸；Widget 不再自行拼坐标。
 ///
-/// 堆叠与聚焦共用同一套"连续扇形卡列"模型：每张卡露出一段等高的卡头条带，
-/// 选中卡完整展开（下一张卡从它的底边继续），z 顺序即列表顺序。拖拽量被换算成
-/// 小数选中位置，因此手指可以 1:1 连续滑过多张卡而不是一次一张。
+/// 堆叠与聚焦共用连续卡列：主卡完整显示，后排延伸到浮动控件下方。
+/// 拖拽量换算成小数选中位置，交接时主卡跟随手指，边缘淡出由页面处理。
 abstract final class CardLayoutCalculator {
   static const double cardAspectRatio = 1.586;
 
@@ -20,9 +19,6 @@ abstract final class CardLayoutCalculator {
 
   /// 选中卡底边与下一张卡头之间的间隙。
   static const double _fanGap = 10;
-
-  /// 三种模式从同一顶部基线开始。
-  static const double _stackTopInset = _contentInset;
 
   /// 参照效果中，焦点卡最宽；每离开焦点一层约收窄 7.5%。
   static const double focusDepthScaleStep = .075;
@@ -35,6 +31,7 @@ abstract final class CardLayoutCalculator {
     required Size cardSize,
     required int itemCount,
     double revealScale = 1,
+    double sceneOffset = 0,
   }) {
     if (itemCount <= 0) return const [];
     final safeSelected = selectedIndex < 0
@@ -48,6 +45,7 @@ abstract final class CardLayoutCalculator {
         cardSize: cardSize,
         itemCount: itemCount,
         revealScale: revealScale,
+        sceneOffset: sceneOffset,
       ),
       CardStackMode.focus => _focusFan(
         selectedIndex: math.max(0, safeSelected),
@@ -56,6 +54,7 @@ abstract final class CardLayoutCalculator {
         cardSize: cardSize,
         itemCount: itemCount,
         revealScale: revealScale,
+        sceneOffset: sceneOffset,
       ),
       CardStackMode.wallet => _wallet(
         selectedIndex: safeSelected,
@@ -77,8 +76,7 @@ abstract final class CardLayoutCalculator {
     double revealScale = 1,
   }) {
     if (itemCount <= 0) return math.min(availableHeight, cardHeight);
-    // 扇形卡列自己在场景内滚动，场景高度始终等于可用高度；超出的条带
-    // 允许绘制到场景之外（不裁剪），与参照的全出血卡列一致。
+    // 连续卡列占满页面，后排经过上下边缘时由透明渐变自然淡出。
     if (mode != CardStackMode.wallet) return availableHeight;
     final reveal = _walletReveal(revealScale);
     final contentHeight = selectedIndex < 0
@@ -91,20 +89,18 @@ abstract final class CardLayoutCalculator {
 
   /// 一次完整卡片切换所需的手指位移。
   ///
-  /// 聚焦模式用下一张卡从场外进入焦点的完整行程，保证主卡 1:1 跟手；
-  /// 堆叠模式继续按展开区的高度换算。
+  /// 堆叠与聚焦使用完整卡高作为行程，让主卡在交接时保持 1:1 跟手。
   static double dragStep({
     required CardStackMode mode,
     required Size cardSize,
     double revealScale = 1,
   }) {
-    if (mode == CardStackMode.focus) {
-      return math.max(72, cardSize.height - _focusReveal(revealScale));
-    }
-    return math.max(72, cardSize.height + _fanGap - _stackReveal(revealScale));
+    return mode == CardStackMode.wallet
+        ? math.max(72, cardSize.height + _fanGap - _stackReveal(revealScale))
+        : cardSize.height;
   }
 
-  /// 堆叠：连续扇形卡列，所有卡等大全彩、z 序即列表顺序，只露卡头条带。
+  /// 堆叠初始露出卡头，展开后与聚焦共用连续卡列。
   static List<CardTransformState> _stackFan({
     required int selectedIndex,
     required double dragOffset,
@@ -112,79 +108,41 @@ abstract final class CardLayoutCalculator {
     required Size cardSize,
     required int itemCount,
     required double revealScale,
+    required double sceneOffset,
   }) {
-    final reveal = _stackReveal(revealScale);
-    final left = (screenSize.width - cardSize.width) / 2;
-
-    // 初始态：全部卡只露卡头条带，没有任何一张被展开高亮。
-    if (selectedIndex < 0) {
-      return List.generate(itemCount, (index) {
-        final side = index.isEven ? -1.0 : 1.0;
-        return CardTransformState(
-          top: _stackTopInset + index * reveal,
-          left: left,
-          scale: 1,
-          opacity: 1,
-          rotation: side * (.016 + (index % 3) * .004),
-          elevation: (26 - index * 2).clamp(8.0, 26.0).toDouble(),
-          zIndex: index,
-        );
-      });
+    if (selectedIndex >= 0) {
+      return _continuousFan(
+        mode: CardStackMode.stack,
+        selectedIndex: selectedIndex,
+        dragOffset: dragOffset,
+        screenSize: screenSize,
+        cardSize: cardSize,
+        itemCount: itemCount,
+        revealScale: revealScale,
+        sceneOffset: sceneOffset,
+      );
     }
-
-    final step = dragStep(
-      mode: CardStackMode.stack,
-      cardSize: cardSize,
-      revealScale: revealScale,
-    );
-    final maxPosition = (itemCount - 1).toDouble();
-    // 小数选中位置：拖拽把选中项在卡列上连续移动，越过端点时轻微越界，
-    // 由调用方的阻尼负责手感。
-    final position = (selectedIndex - dragOffset / step)
-        .clamp(-.45, maxPosition + .45)
-        .toDouble();
-    final expand = cardSize.height + _fanGap - reveal;
-    final contentHeight =
-        _stackTopInset +
-        _contentInset +
-        maxPosition * reveal +
-        cardSize.height +
-        (itemCount > 1 ? _fanGap : 0);
-    final naturalSelectedTop = _stackTopInset + position * reveal;
-    final centeredTop = (screenSize.height - cardSize.height) / 2 - 8;
-    // 跟随选中项居中，但滚动被钳制在内容范围内：卡列在两端保持锚定，
-    // 中段像滚轮一样跟手。
-    final scroll = (naturalSelectedTop - centeredTop)
-        .clamp(0.0, math.max(0.0, contentHeight - screenSize.height))
-        .toDouble();
-    return List.generate(itemCount, (index) {
-      final distance = (index - position).abs();
-      // 选中槽位之后的卡整体让出一张卡的高度；clamp 让这段展开量在
-      // 相邻两张卡之间连续转移，拖拽时几何保持连贯。
-      final expansion = (index - position).clamp(0.0, 1.0);
-      final proximity = math.min(1.0, distance);
-      final top = _stackTopInset + index * reveal + expand * expansion - scroll;
-      final side = index.isEven ? -1.0 : 1.0;
-      return CardTransformState(
-        top: top,
+    final left = (screenSize.width - cardSize.width) / 2;
+    final origin = _contentInset + sceneOffset;
+    final reveal = _stackReveal(revealScale);
+    return List.generate(
+      itemCount,
+      (index) => CardTransformState(
+        top: origin + index * reveal,
         left: left,
         scale: 1,
-        opacity: 1,
-        // 堆叠模式带一点交替的倾斜，像随手码放的卡片；选中卡摆正。
-        rotation: side * (.016 + (index % 3) * .004) * proximity,
-        elevation: (26 - 12 * proximity - math.max(0, distance - 1) * 1.5)
-            .clamp(8.0, 26.0)
-            .toDouble(),
+        opacity: _surfaceVisible(
+          origin + index * reveal,
+          cardSize.height,
+          screenSize.height,
+        ),
+        rotation: 0,
+        elevation: (20 - index * 1.5).clamp(8.0, 20.0).toDouble(),
         zIndex: index,
-      );
-    });
+      ),
+    );
   }
 
-  /// 聚焦：复刻参照卡包的连续卡列。
-  ///
-  /// 焦点卡最宽且层级最高，向上下逐层收窄并后退。焦点上方只露卡头，
-  /// 焦点下方的每张卡都从上一张背后伸出，只露卡底。拖拽期间展开区、
-  /// 宽度和层级在相邻卡之间连续交接。
   static List<CardTransformState> _focusFan({
     required int selectedIndex,
     required double dragOffset,
@@ -192,42 +150,96 @@ abstract final class CardLayoutCalculator {
     required Size cardSize,
     required int itemCount,
     required double revealScale,
+    required double sceneOffset,
+  }) => _continuousFan(
+    mode: CardStackMode.focus,
+    selectedIndex: selectedIndex,
+    dragOffset: dragOffset,
+    screenSize: screenSize,
+    cardSize: cardSize,
+    itemCount: itemCount,
+    revealScale: revealScale,
+    sceneOffset: sceneOffset,
+  );
+
+  static List<CardTransformState> _continuousFan({
+    required CardStackMode mode,
+    required int selectedIndex,
+    required double dragOffset,
+    required Size screenSize,
+    required Size cardSize,
+    required int itemCount,
+    required double revealScale,
+    required double sceneOffset,
   }) {
-    final reveal = _focusReveal(revealScale);
-    final step = dragStep(
-      mode: CardStackMode.focus,
-      cardSize: cardSize,
-      revealScale: revealScale,
-    );
+    final height = cardSize.height;
     final maxPosition = (itemCount - 1).toDouble();
-    final position = (selectedIndex - dragOffset / step)
-        .clamp(-.45, maxPosition + .45)
+    final position = (selectedIndex - dragOffset / height)
+        .clamp(-.4, maxPosition + .4)
         .toDouble();
     final left = (screenSize.width - cardSize.width) / 2;
-    final focusTop = (screenSize.height - cardSize.height) / 2 - 8;
-    // offset == 1 时，下一张卡的 top = 焦点卡底边 - reveal；即它的
-    // 顶部有完整一段 reveal 被焦点卡遮住。更下方的卡同样逐层相压。
-    final expand = cardSize.height - reveal * 2;
+    final anchor = (screenSize.height - height) / 2 - 8 + sceneOffset;
+    final reveal = mode == CardStackMode.focus
+        ? _focusReveal(cardSize, revealScale)
+        : math.min(_stackReveal(revealScale), height * .42);
+    final trailingStep = mode == CardStackMode.focus
+        ? height - reveal
+        : height * (.6 * revealScale).clamp(.56, .72);
     final nearest = position.round().clamp(0, itemCount - 1).toInt();
     return List.generate(itemCount, (index) {
       final offset = index - position;
-      final depth = offset.abs().clamp(0.0, 3.2).toDouble();
-      final layerDepth = (index - nearest).abs();
-      // offset <= 0 的卡按条带向上排列；offset >= 1 的卡整体让出一张
-      // 完整卡。0...1 之间的 expansion 让“完整展开区”连续交给下一张。
-      final expansion = offset.clamp(0.0, 1.0).toDouble();
+      final distance = offset.abs();
+      final depth = distance.clamp(0.0, 3.2).toDouble();
+      final scaleStep = mode == CardStackMode.focus
+          ? focusDepthScaleStep
+          : .035;
+      final scale = (1 - depth * scaleStep).clamp(.76, 1.0).toDouble();
+      final slot = offset < 0 ? reveal : trailingStep;
+      final travel = distance <= 1
+          ? _focusTravel(offset, height, offset < 0 ? slot : height - slot)
+          : offset.sign * (slot + (distance - 1) * reveal);
       return CardTransformState(
-        top: focusTop + offset * reveal + expand * expansion,
+        top: anchor + travel,
         left: left,
-        scale: (1 - depth * focusDepthScaleStep).clamp(.76, 1.0).toDouble(),
-        opacity: 1,
+        scale: scale,
+        opacity: _surfaceVisible(
+          anchor + travel,
+          height * scale,
+          screenSize.height,
+        ),
         rotation: 0,
-        elevation: (24 - depth * 3).clamp(10.0, 24.0).toDouble(),
-        // 焦点卡位于最上层；向上下两侧逐层降低。这样焦点以下的卡会
-        // 从上一张背后伸出，而不是反过来盖住上一张卡的底部。
-        zIndex: itemCount - layerDepth,
+        elevation: (22 - depth * 4).clamp(8.0, 22.0).toDouble(),
+        zIndex: itemCount - (index - nearest).abs(),
+        focusDepth: mode == CardStackMode.focus ? depth : 0,
       );
     });
+  }
+
+  // 完全离开屏幕的卡片无需绘制；仍在边缘内的部分只由位置渐变淡出。
+  static double _surfaceVisible(
+    double top,
+    double height,
+    double sceneHeight,
+  ) => top + height <= 0 || top >= sceneHeight ? 0 : 1;
+
+  static double _focusTravel(double offset, double cardHeight, double reveal) {
+    final depth = offset.abs();
+    if (depth <= .5) return offset * cardHeight;
+    final sign = offset.sign;
+    final slot = offset < 0 ? reveal : cardHeight - reveal;
+    if (depth >= 1) return sign * (slot + (depth - 1) * reveal);
+
+    // 在半个卡位处，两张卡先分开再交换层级，完整圆角始终保留。
+    // Hermite 段把跟手速度平滑接到后排条带，避免中途突然停住或跳位。
+    final t = (depth - .5) * 2;
+    final t2 = t * t;
+    final t3 = t2 * t;
+    final travel =
+        (2 * t3 - 3 * t2 + 1) * cardHeight * .5 +
+        (t3 - 2 * t2 + t) * cardHeight * .5 +
+        (-2 * t3 + 3 * t2) * slot +
+        (t3 - t2) * reveal * .5;
+    return sign * travel;
   }
 
   static List<CardTransformState> _wallet({
@@ -340,8 +352,9 @@ abstract final class CardLayoutCalculator {
     return (84 * revealScale).clamp(58.0, 112.0).toDouble();
   }
 
-  static double _focusReveal(double revealScale) {
-    return (104 * revealScale).clamp(84.0, 128.0).toDouble();
+  static double _focusReveal(Size cardSize, double revealScale) {
+    // 默认约露出四成卡高；窄屏和双指缩放仍按卡面比例计算。
+    return cardSize.height * (.42 * revealScale).clamp(.28, .62);
   }
 
   static int _dragTarget({

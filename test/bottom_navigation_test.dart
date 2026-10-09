@@ -70,6 +70,62 @@ void main() {
     );
   });
 
+  testWidgets('quick menu reverses in place and only runs the tapped action', (
+    tester,
+  ) async {
+    var bills = 0;
+    final semantics = tester.ensureSemantics();
+    await tester.pumpWidget(
+      _testApp(selectedIndex: 0, onAnalyzeBill: () => bills++),
+    );
+    final toggle = find.byKey(const Key('nav-add'));
+    final shortcut = find.byKey(const Key('nav-quick-bill'));
+    expect(find.semantics.byLabel('拍照识别账单'), findsNothing);
+
+    await tester.tap(toggle);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 140));
+    final openingPosition = tester.getCenter(shortcut);
+    await tester.tap(toggle);
+    await tester.pump();
+    expect(tester.getCenter(shortcut), openingPosition);
+    expect(find.semantics.byLabel('拍照识别账单'), findsNothing);
+    await tester.pump(const Duration(milliseconds: 40));
+    final closingPosition = tester.getCenter(shortcut);
+    await tester.tap(toggle);
+    await tester.pump();
+    expect(tester.getCenter(shortcut), closingPosition);
+    await tester.pumpAndSettle();
+
+    expect(find.semantics.byLabel('拍照识别账单'), findsWidgets);
+    await tester.tap(shortcut);
+    await tester.pumpAndSettle();
+    expect(bills, 1);
+    expect(find.semantics.byLabel('拍照识别账单'), findsNothing);
+    expect(tester.takeException(), isNull);
+    semantics.dispose();
+  });
+
+  testWidgets('reduced motion keeps shortcuts usable and hidden when closed', (
+    tester,
+  ) async {
+    var additions = 0;
+    await tester.pumpWidget(
+      _testApp(selectedIndex: 0, reduceMotion: true, onAdd: () => additions++),
+    );
+    await tester.tap(find.byKey(const Key('nav-add')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('nav-quick-add-card')));
+    await tester.pump();
+    expect(additions, 1);
+    final shortcut = find.byKey(const Key('nav-quick-add-card'));
+    final opacity = tester.widget<Opacity>(
+      find.ancestor(of: shortcut, matching: find.byType(Opacity)).first,
+    );
+    expect(opacity.opacity, 0);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('dark navigation keeps every primary icon white', (tester) async {
     AppColors.configure(Brightness.dark);
     addTearDown(() => AppColors.configure(Brightness.light));
@@ -100,15 +156,24 @@ Finder _navigationIcons(String label) {
   );
 }
 
-Widget _testApp({required int selectedIndex}) {
+Widget _testApp({
+  required int selectedIndex,
+  bool reduceMotion = false,
+  VoidCallback? onAdd,
+  VoidCallback? onAnalyzeBill,
+}) {
   return MaterialApp(
+    builder: (context, child) => MediaQuery(
+      data: MediaQuery.of(context).copyWith(disableAnimations: reduceMotion),
+      child: child!,
+    ),
     home: Scaffold(
       bottomNavigationBar: BottomNavigation(
         selectedIndex: selectedIndex,
         addSelected: false,
         onDestinationSelected: (_) {},
-        onAdd: () {},
-        onAnalyzeBill: () {},
+        onAdd: onAdd ?? () {},
+        onAnalyzeBill: onAnalyzeBill ?? () {},
       ),
     ),
   );

@@ -13,6 +13,171 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   setUp(() => AppColors.configure(Brightness.light));
 
+  testWidgets('other cards match all five H5 regional filters', (tester) async {
+    final cards = [
+      for (final region in CardMarketRegion.values)
+        _regionalCard(region.name, region: region),
+      _regionalCard('unclassified'),
+      _regionalCard('ucard', category: CardCategory.uCard),
+      _regionalCard('account', kind: CatalogItemKind.globalAccount),
+    ];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MarketPage(
+          repository: _CardsRepository(cards),
+          onSearch: () {},
+          onOpenCard: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('market-group-other')));
+    await tester.pumpAndSettle();
+
+    for (final label in ['全部', '港卡', '美卡', '内地卡', '更多']) {
+      expect(find.text(label), findsOneWidget);
+    }
+    List<String> visibleCards() => tester
+        .widgetList<CatalogCardRow>(find.byType(CatalogCardRow))
+        .map((row) => row.card.id)
+        .toList();
+    expect(visibleCards(), ['hk', 'us', 'cn', 'more', 'unclassified']);
+
+    for (final entry in {
+      'hk': ['hk'],
+      'us': ['us'],
+      'cn': ['cn'],
+      'more': ['more', 'unclassified'],
+      'all': ['hk', 'us', 'cn', 'more', 'unclassified'],
+    }.entries) {
+      await tester.tap(find.byKey(Key('market-other-filter-${entry.key}')));
+      await tester.pumpAndSettle();
+      expect(visibleCards(), entry.value, reason: entry.key);
+    }
+
+    await tester.tap(find.byKey(const Key('market-other-filter-us')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('market-group-ucard')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('market-other-filters')), findsNothing);
+    expect(visibleCards(), ['ucard']);
+    await tester.tap(find.byKey(const Key('market-group-other')));
+    await tester.pumpAndSettle();
+    expect(visibleCards(), ['us']);
+  });
+
+  testWidgets('empty regional filters remain selectable', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MarketPage(
+          repository: _CardsRepository([
+            _regionalCard('hk', region: CardMarketRegion.hk),
+          ]),
+          onSearch: () {},
+          onOpenCard: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('market-group-other')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('market-other-filter-us')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('market-empty')), findsOneWidget);
+    expect(find.byType(CatalogCardRow), findsNothing);
+    await tester.tap(find.byKey(const Key('market-other-filter-hk')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('catalog-card-hk')), findsOneWidget);
+  });
+
+  testWidgets('other-card regions stay pinned while the list scrolls', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MarketPage(
+          repository: _CardsRepository([
+            for (var index = 0; index < 20; index++)
+              _regionalCard('hk-$index', region: CardMarketRegion.hk),
+          ]),
+          onSearch: () {},
+          onOpenCard: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('market-group-other')));
+    await tester.pumpAndSettle();
+    await tester.drag(
+      find.byKey(const Key('market-page')),
+      const Offset(0, -700),
+    );
+    await tester.pumpAndSettle();
+
+    final mainTab = tester.getRect(find.byKey(const Key('market-group-other')));
+    final filterTab = tester.getRect(
+      find.byKey(const Key('market-other-filter-us')),
+    );
+    expect(mainTab.top, greaterThanOrEqualTo(0));
+    expect(filterTab.top, greaterThan(mainTab.bottom));
+    expect(filterTab.bottom, lessThanOrEqualTo(111));
+    await tester.tap(find.byKey(const Key('market-other-filter-us')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('market-empty')), findsOneWidget);
+  });
+
+  testWidgets('regional tabs scroll on narrow screens with large text', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('en', 'US'),
+        supportedLocales: const [Locale('en', 'US')],
+        localizationsDelegates: const [AppLocalizations.delegate],
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(2)),
+          child: child!,
+        ),
+        home: MarketPage(
+          repository: _CardsRepository([
+            _regionalCard('us', region: CardMarketRegion.us),
+          ]),
+          onSearch: () {},
+          onOpenCard: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('market-group-other')));
+    await tester.pumpAndSettle();
+    expect(find.text('Hong Kong'), findsOneWidget);
+    expect(find.text('US'), findsOneWidget);
+    expect(find.text('Mainland'), findsOneWidget);
+    expect(find.text('More'), findsOneWidget);
+    final scroll = tester.widget<SingleChildScrollView>(
+      find.byKey(const Key('market-other-filters')),
+    );
+    final content = scroll.child! as SizedBox;
+    expect(content.width, greaterThan(272));
+    await tester.drag(
+      find.byKey(const Key('market-other-filters')),
+      const Offset(-1000, 0),
+    );
+    await tester.pumpAndSettle();
+    final moreTab = find.byKey(const Key('market-other-filter-more'));
+    expect(tester.getSize(moreTab).height, greaterThanOrEqualTo(44));
+    await tester.tap(moreTab);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('market-empty')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('market row presses subtly and reports its artwork rect', (
     tester,
   ) async {
@@ -687,8 +852,44 @@ void main() {
     );
     expect(titlePositioned.left, targetTitle.left);
     expect(titlePositioned.top, targetTitle.top);
+
+    // A system back action can interrupt entry before the card has arrived.
+    controller.value = .52;
+    await tester.pump();
+    final beforeReverse = tester.getRect(
+      find.byKey(const Key('market-card-flight-opacity')),
+    );
+    controller.reverse();
+    await tester.pump();
+    expect(
+      tester.getRect(find.byKey(const Key('market-card-flight-opacity'))),
+      beforeReverse,
+      reason:
+          'reversing mid-flight must not switch to a different spatial curve',
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester.getRect(find.byKey(const Key('market-card-flight-opacity'))),
+      source,
+    );
   });
 }
+
+CardSummary _regionalCard(
+  String id, {
+  CardMarketRegion region = CardMarketRegion.more,
+  CardCategory category = CardCategory.debitCard,
+  CatalogItemKind kind = CatalogItemKind.card,
+}) => CardSummary(
+  id: id,
+  name: id,
+  issuer: 'Issuer',
+  category: category,
+  label: 'VISA',
+  tint: 0xFF112233,
+  marketRegion: region,
+  kind: kind,
+);
 
 class _CardsRepository implements CardCatalogRepository {
   const _CardsRepository(this.cards);

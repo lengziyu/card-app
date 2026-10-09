@@ -1,0 +1,1008 @@
+{
+  "etherfi": [
+    {
+      "id": "etherfi-pr",
+      "label": "国际卡段",
+      "bin": "45492423",
+      "network": "Visa",
+      "type": "借记卡 · Signature",
+      "region": "波多黎各",
+      "issuer": "Banco San Juan Internacional, Inc.",
+      "status": "review",
+      "source": "社区持卡实测 · CardBIN 反查",
+      "sourceUrl": "https://www.arnebiae.com/p/ucardranking/",
+      "checkedAt": "2026-09-12"
+    },
+    {
+      "id": "etherfi-us",
+      "label": "美国卡计划",
+      "bin": "待录入",
+      "network": "Visa",
+      "type": "信用卡",
+      "region": "美国",
+      "issuer": "Third National",
+      "status": "verified",
+      "source": "ether.fi 使用条款",
+      "sourceUrl": "https://www.ether.fi/legal/terms-of-use",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "etherfi-core": [
+    {
+      "id": "etherfi-pr",
+      "label": "国际卡段",
+      "bin": "45492423",
+      "network": "Visa",
+      "type": "借记卡 · Signature",
+      "region": "波多黎各",
+      "issuer": "Banco San Juan Internacional, Inc.",
+      "status": "review",
+      "source": "社区持卡实测 · CardBIN 反查",
+      "sourceUrl": "https://www.arnebiae.com/p/ucardranking/",
+      "checkedAt": "2026-09-12"
+    },
+    {
+      "id": "etherfi-us",
+      "label": "美国卡计划",
+      "bin": "待录入",
+      "network": "Visa",
+      "type": "信用卡",
+      "region": "美国",
+      "issuer": "Third National",
+      "status": "verified",
+      "source": "ether.fi 使用条款",
+      "sourceUrl": "https://www.ether.fi/legal/terms-of-use",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "etherfi-luxe": [
+    {
+      "id": "etherfi-pr",
+      "label": "国际卡段",
+      "bin": "45492423",
+      "network": "Visa",
+      "type": "借记卡 · Signature",
+      "region": "波多黎各",
+      "issuer": "Banco San Juan Internacional, Inc.",
+      "status": "review",
+      "source": "社区持卡实测 · CardBIN 反查",
+      "sourceUrl": "https://www.arnebiae.com/p/ucardranking/",
+      "checkedAt": "2026-09-12"
+    },
+    {
+      "id": "etherfi-us",
+      "label": "美国卡计划",
+      "bin": "待录入",
+      "network": "Visa",
+      "type": "信用卡",
+      "region": "美国",
+      "issuer": "Third National",
+      "status": "verified",
+      "source": "ether.fi 使用条款",
+      "sourceUrl": "https://www.ether.fi/legal/terms-of-use",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "etherfi-pinnacle": [
+    {
+      "id": "etherfi-pr",
+      "label": "国际卡段",
+      "bin": "45492423",
+      "network": "Visa",
+      "type": "借记卡 · Signature",
+      "region": "波多黎各",
+      "issuer": "Banco San Juan Internacional, Inc.",
+      "status": "review",
+      "source": "社区持卡实测 · CardBIN 反查",
+      "sourceUrl": "https://www.arnebiae.com/p/ucardranking/",
+      "checkedAt": "2026-09-12"
+    },
+    {
+      "id": "etherfi-us",
+      "label": "美国卡计划",
+      "bin": "待录入",
+      "network": "Visa",
+      "type": "信用卡",
+      "region": "美国",
+      "issuer": "Third National",
+      "status": "verified",
+      "source": "ether.fi 使用条款",
+      "sourceUrl": "https://www.ether.fi/legal/terms-of-use",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "etherfi-vip": [
+    {
+      "id": "etherfi-pr",
+      "label": "国际卡段",
+      "bin": "45492423",
+      "network": "Visa",
+      "type": "借记卡 · Signature",
+      "region": "波多黎各",
+      "issuer": "Banco San Juan Internacional, Inc.",
+      "status": "review",
+      "source": "社区持卡实测 · CardBIN 反查",
+      "sourceUrl": "https://www.arnebiae.com/p/ucardranking/",
+      "checkedAt": "2026-09-12"
+    },
+    {
+      "id": "etherfi-us",
+      "label": "美国卡计划",
+      "bin": "待录入",
+      "network": "Visa",
+      "type": "信用卡",
+      "region": "美国",
+      "issuer": "Third National",
+      "status": "verified",
+      "source": "ether.fi 使用条款",
+      "sourceUrl": "https://www.ether.fi/legal/terms-of-use",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "starryblu-xingkong": [
+    {
+      "id": "starryblu-sg",
+      "label": "新加坡卡段",
+      "bin": "228001",
+      "network": "Mastercard",
+      "type": "借记卡 · Platinum",
+      "region": "新加坡",
+      "issuer": "Wotransfer Pte. Ltd.",
+      "status": "review",
+      "source": "社区前缀 · 开源 BIN 反查 · 官网交叉确认",
+      "sourceUrl": "https://www.starryblu.com/en/starrycard",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "starryblu-xingqiu": [
+    {
+      "id": "starryblu-sg",
+      "label": "新加坡卡段",
+      "bin": "228001",
+      "network": "Mastercard",
+      "type": "借记卡 · Platinum",
+      "region": "新加坡",
+      "issuer": "Wotransfer Pte. Ltd.",
+      "status": "review",
+      "source": "社区前缀 · 开源 BIN 反查 · 官网交叉确认",
+      "sourceUrl": "https://www.starryblu.com/en/starrycard",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "starryblu-zhushen": [
+    {
+      "id": "starryblu-sg",
+      "label": "新加坡卡段",
+      "bin": "228001",
+      "network": "Mastercard",
+      "type": "借记卡 · Platinum",
+      "region": "新加坡",
+      "issuer": "Wotransfer Pte. Ltd.",
+      "status": "review",
+      "source": "社区前缀 · 开源 BIN 反查 · 官网交叉确认",
+      "sourceUrl": "https://www.starryblu.com/en/starrycard",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "starryblu-bojin": [
+    {
+      "id": "starryblu-sg",
+      "label": "新加坡卡段",
+      "bin": "228001",
+      "network": "Mastercard",
+      "type": "借记卡 · Platinum",
+      "region": "新加坡",
+      "issuer": "Wotransfer Pte. Ltd.",
+      "status": "review",
+      "source": "社区前缀 · 开源 BIN 反查 · 官网交叉确认",
+      "sourceUrl": "https://www.starryblu.com/en/starrycard",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "backpack": [
+    {
+      "id": "backpack-upcoming",
+      "label": "早期开放卡计划",
+      "bin": "待录入",
+      "network": "待公布",
+      "type": "借记卡 · Platinum（目录名称）",
+      "region": "开放地区待公布",
+      "issuer": "发卡主体待公布",
+      "status": "review",
+      "source": "Backpack 官方早期开放说明",
+      "sourceUrl": "https://learn.backpack.exchange/articles/how-to-claim-bp",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "bybit": [
+    {
+      "id": "bybit-eea",
+      "label": "欧洲经济区卡段",
+      "bin": "待录入",
+      "network": "Mastercard",
+      "type": "借记卡",
+      "region": "法国 · EEA",
+      "issuer": "Harmoniie SAS",
+      "status": "verified",
+      "source": "Bybit 持卡人条款",
+      "sourceUrl": "https://www.bybit.com/common-static/compliance/legal/BYBIT/f74da2d9b786062b31695984ba07290d.pdf",
+      "checkedAt": "2026-09-12"
+    },
+    {
+      "id": "bybit-uk",
+      "label": "英国卡段",
+      "bin": "52058123",
+      "network": "Mastercard",
+      "type": "借记卡 · Standard",
+      "region": "英国",
+      "issuer": "Moorwand Ltd",
+      "status": "review",
+      "source": "社区持卡实测 · 开源 BIN 反查",
+      "sourceUrl": "https://www.arnebiae.com/p/ucardranking/",
+      "checkedAt": "2026-09-12"
+    },
+    {
+      "id": "bybit-au",
+      "label": "澳大利亚卡段",
+      "bin": "539900",
+      "network": "Mastercard",
+      "type": "可充值预付借记卡",
+      "region": "澳大利亚",
+      "issuer": "Fly Wallet Pty Ltd",
+      "status": "review",
+      "source": "社区持卡实测 · CardBIN 反查",
+      "sourceUrl": "https://www.arnebiae.com/p/ucardranking/",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "redotpay": [
+    {
+      "id": "redotpay-hk-414631",
+      "label": "香港商业卡段",
+      "bin": "414631",
+      "network": "Visa",
+      "type": "信用卡 · Business Enhanced",
+      "region": "中国香港",
+      "issuer": "Reap Technologies Ltd.",
+      "status": "review",
+      "source": "社区持卡实测 · 开源 BIN 反查",
+      "sourceUrl": "https://www.arnebiae.com/p/ucardranking/",
+      "checkedAt": "2026-09-12"
+    },
+    {
+      "id": "redotpay-hk-493728",
+      "label": "香港商业卡段",
+      "bin": "493728",
+      "network": "Visa",
+      "type": "信用卡 · Business Enhanced",
+      "region": "中国香港",
+      "issuer": "Reap Technologies Ltd.",
+      "status": "review",
+      "source": "社区持卡实测 · CardBIN 反查",
+      "sourceUrl": "https://www.arnebiae.com/p/ucardranking/",
+      "checkedAt": "2026-09-12"
+    },
+    {
+      "id": "redotpay-sg-493724",
+      "label": "新加坡虚拟卡段",
+      "bin": "493724",
+      "network": "Visa",
+      "type": "预付借记卡 · B2B Virtual",
+      "region": "新加坡",
+      "issuer": "Sunrate Pte. Ltd.",
+      "status": "review",
+      "source": "社区持卡实测 · CardBIN 反查",
+      "sourceUrl": "https://www.arnebiae.com/p/ucardranking/",
+      "checkedAt": "2026-09-12"
+    },
+    {
+      "id": "redotpay-hkd",
+      "label": "HKD 卡计划",
+      "bin": "待录入",
+      "network": "Visa",
+      "type": "借记卡",
+      "region": "中国香港",
+      "issuer": "发卡主体待确认",
+      "status": "review",
+      "source": "RedotPay 官方资料",
+      "sourceUrl": "https://redotpay.zendesk.com/hc/en-us/articles/9720619307663-Rules-for-physical-cards-and-virtual-cards",
+      "checkedAt": "2026-09-12"
+    },
+    {
+      "id": "redotpay-usd",
+      "label": "新加坡卡计划",
+      "bin": "待录入",
+      "network": "Visa",
+      "type": "支付卡",
+      "region": "新加坡",
+      "issuer": "StraitsX",
+      "status": "verified",
+      "source": "RedotPay × StraitsX × Visa 公告",
+      "sourceUrl": "https://www.redotpay.com/zh/news/redotpay-partners-with-straitsx-and-visa-to-revolutionise-digital-spending",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "bitget": [
+    {
+      "id": "bitget-apac",
+      "label": "亚太 DCS 卡段",
+      "bin": "43821400",
+      "network": "Visa",
+      "type": "信用卡 · Platinum",
+      "region": "新加坡 · 亚太",
+      "issuer": "DCS Card Centre Pte. Ltd.",
+      "status": "review",
+      "source": "社区持卡实测 · Bitget 官方条款交叉确认",
+      "sourceUrl": "https://www.bitget.com/support/articles/12560603881449",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "bitget-wallet": [
+    {
+      "id": "bitget-wallet-cn-fiat24",
+      "label": "中国大陆 Fiat24 卡段",
+      "bin": "54810849",
+      "network": "Mastercard",
+      "type": "借记卡 · Standard",
+      "region": "中国大陆 · 瑞士 BIN",
+      "issuer": "SR Saphirstein AG（Fiat24）",
+      "status": "review",
+      "source": "社区持卡实测 · BinCheck 8 位反查 · Bitget Wallet 官网交叉确认",
+      "sourceUrl": "https://bincheck.io/it/details/54810849",
+      "checkedAt": "2026-09-12"
+    },
+    {
+      "id": "bitget-wallet-apac",
+      "label": "亚太 DeCard 卡计划",
+      "bin": "待录入",
+      "network": "Visa",
+      "type": "信用卡",
+      "region": "新加坡 · 韩国 · 日本等亚太地区",
+      "issuer": "DCS Card Centre · DeCard",
+      "status": "verified",
+      "source": "Bitget Wallet 亚太帮助中心",
+      "sourceUrl": "https://web3.bitget.com/zh/helpCenter/425",
+      "checkedAt": "2026-09-12"
+    },
+    {
+      "id": "bitget-wallet-eu-latam",
+      "label": "欧洲及拉美卡计划",
+      "bin": "待录入",
+      "network": "Mastercard",
+      "type": "加密支付卡",
+      "region": "欧洲经济区 · 拉丁美洲",
+      "issuer": "Immersve",
+      "status": "verified",
+      "source": "Bitget Wallet 官方申请指南",
+      "sourceUrl": "https://web3.bitget.com/en/academy/how-to-apply-for-the-bitget-wallet-card-step-by-step-guide-for-new-users",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "mexc": [
+    {
+      "id": "mexc-global",
+      "label": "MEXC Global Card",
+      "bin": "待录入",
+      "network": "Visa",
+      "type": "支付卡",
+      "region": "全球支持地区",
+      "issuer": "发卡主体待披露",
+      "status": "review",
+      "source": "MEXC Global Card 官方公告",
+      "sourceUrl": "https://blog.mexc.com/press-release/mexc-launches-mexc-global-card-with-up-to-10-cashback-and-7-annualized-returns/",
+      "checkedAt": "2026-09-12"
+    },
+    {
+      "id": "mexc-apac",
+      "label": "MEXC Card（APAC）",
+      "bin": "待录入",
+      "network": "Visa",
+      "type": "支付卡",
+      "region": "菲律宾 · 中国台湾 · 泰国等",
+      "issuer": "发卡主体待披露",
+      "status": "review",
+      "source": "MEXC APAC 申请指南",
+      "sourceUrl": "https://www.mexc.com/support/article/how-to-apply-for-mexc-card-apac-400415248342093824",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "mexc-new": [
+    {
+      "id": "mexc-etherfi",
+      "label": "MEXC × ether.fi 联名卡",
+      "bin": "待录入",
+      "network": "Visa",
+      "type": "信用卡",
+      "region": "支持地区",
+      "issuer": "Third National（按 ether.fi 当前条款）",
+      "status": "review",
+      "source": "MEXC 联名卡公告 · ether.fi 条款",
+      "sourceUrl": "https://blog.mexc.com/press-release/mexc-partners-with-ether-fi-with-a-co-branded-card/",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "crypto": [
+    {
+      "id": "crypto-sg",
+      "label": "新加坡卡段",
+      "bin": "460507",
+      "network": "Visa",
+      "type": "预付借记卡 · Classic",
+      "region": "新加坡",
+      "issuer": "Foris Asia Pte. Ltd.",
+      "status": "review",
+      "source": "社区持卡实测 · Crypto.com 官方协议交叉确认",
+      "sourceUrl": "https://crypto.com/document/sg_card",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "okx": [
+    {
+      "id": "okx-eea",
+      "label": "欧洲经济区卡计划",
+      "bin": "待录入",
+      "network": "Mastercard",
+      "type": "借记卡",
+      "region": "欧洲经济区",
+      "issuer": "UAB Monavate",
+      "status": "verified",
+      "source": "OKX EEA 区域附录",
+      "sourceUrl": "https://www.okx.com/en-gb/help/eea-regional-addendum-to-pay-wallet-terms",
+      "checkedAt": "2026-09-12"
+    },
+    {
+      "id": "okx-sg",
+      "label": "新加坡卡计划",
+      "bin": "待录入",
+      "network": "Visa",
+      "type": "预付卡",
+      "region": "新加坡",
+      "issuer": "Xfers Pte. Ltd.（StraitsX）",
+      "status": "verified",
+      "source": "OKX StraitsX 持卡人协议",
+      "sourceUrl": "https://www.okx.com/en-ae/help/okx-cardholder-agreement-straitsx",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "cypher": [
+    {
+      "id": "cypher-intl",
+      "label": "历史国际卡计划（已停止）",
+      "bin": "待录入",
+      "network": "Visa",
+      "type": "信用卡",
+      "region": "非美国地区",
+      "issuer": "Third National",
+      "status": "verified",
+      "source": "Cypher 官方持卡条款",
+      "sourceUrl": "https://cypherhq.io/legal-card-terms/",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "solayer": [
+    {
+      "id": "solayer-pr-observed",
+      "label": "社区实测 6 位卡段",
+      "bin": "454924",
+      "network": "Visa",
+      "type": "卡类型待发卡方确认",
+      "region": "美国卡计划 · 波多黎各 BIN",
+      "issuer": "Third National（官网）",
+      "status": "review",
+      "source": "社区持卡实测 · 官方条款交叉确认",
+      "sourceUrl": "https://kannetflix.com/pay/card-ranking/",
+      "checkedAt": "2026-09-12"
+    },
+    {
+      "id": "solayer-intl",
+      "label": "国际卡计划",
+      "bin": "待录入",
+      "network": "Visa",
+      "type": "信用卡",
+      "region": "非美国地区",
+      "issuer": "Third National",
+      "status": "verified",
+      "source": "Solayer 国际持卡条款",
+      "sourceUrl": "https://docs.solayer.org/resources/legal/intl-card-terms",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "avici": [
+    {
+      "id": "avici-intl",
+      "label": "国际卡计划",
+      "bin": "待录入",
+      "network": "Visa",
+      "type": "信用卡 · Platinum / Signature",
+      "region": "非美国地区",
+      "issuer": "Third National",
+      "status": "verified",
+      "source": "Avici 官方持卡条款",
+      "sourceUrl": "https://docs.avici.money/getting-started/legal/terms-of-service-avici-card",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "coinbase": [
+    {
+      "id": "coinbase-us",
+      "label": "美国借记卡计划",
+      "bin": "待录入",
+      "network": "Visa",
+      "type": "借记卡",
+      "region": "美国（夏威夷除外）",
+      "issuer": "Pathward, N.A. · Marqeta",
+      "status": "verified",
+      "source": "Coinbase Card 官方说明",
+      "sourceUrl": "https://help.coinbase.com/en/coinbase/trading-and-funding/coinbase-card/cb-card",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "kast": [
+    {
+      "id": "kast-pr",
+      "label": "波多黎各卡段",
+      "bin": "45492406",
+      "network": "Visa",
+      "type": "借记卡 · Classic",
+      "region": "波多黎各",
+      "issuer": "Banco San Juan Internacional, Inc.",
+      "status": "review",
+      "source": "社区持卡实测 · CardBIN 反查",
+      "sourceUrl": "https://www.arnebiae.com/p/ucardranking/",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "tria": [
+    {
+      "id": "tria-pr",
+      "label": "波多黎各卡段",
+      "bin": "45492406",
+      "network": "Visa",
+      "type": "借记卡 · Classic",
+      "region": "波多黎各",
+      "issuer": "Banco San Juan Internacional, Inc.",
+      "status": "review",
+      "source": "社区持卡实测 · CardBIN 反查",
+      "sourceUrl": "https://www.arnebiae.com/p/ucardranking/",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "tuyo": [
+    {
+      "id": "tuyo-pr",
+      "label": "波多黎各卡段",
+      "bin": "45492406",
+      "network": "Visa",
+      "type": "借记卡 · Classic",
+      "region": "波多黎各",
+      "issuer": "Banco San Juan Internacional, Inc.",
+      "status": "review",
+      "source": "社区持卡实测 · CardBIN 反查",
+      "sourceUrl": "https://www.arnebiae.com/p/ucardranking/",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "payy": [
+    {
+      "id": "payy-pr",
+      "label": "波多黎各卡段",
+      "bin": "45492406",
+      "network": "Visa",
+      "type": "借记卡 · Classic",
+      "region": "波多黎各",
+      "issuer": "Banco San Juan Internacional, Inc.",
+      "status": "review",
+      "source": "社区持卡实测 · CardBIN 反查",
+      "sourceUrl": "https://www.arnebiae.com/p/ucardranking/",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "plasma-one": [
+    {
+      "id": "plasma-one-pr",
+      "label": "波多黎各卡段",
+      "bin": "45492406",
+      "network": "Visa",
+      "type": "借记卡 · Classic",
+      "region": "波多黎各",
+      "issuer": "Banco San Juan Internacional, Inc.",
+      "status": "review",
+      "source": "社区持卡实测 · CardBIN 反查",
+      "sourceUrl": "https://www.arnebiae.com/p/ucardranking/",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "ready": [
+    {
+      "id": "ready-ch",
+      "label": "瑞士商业卡段",
+      "bin": "53386752",
+      "network": "Mastercard",
+      "type": "商业借记卡",
+      "region": "瑞士",
+      "issuer": "Monavate Ltd",
+      "status": "review",
+      "source": "社区持卡实测 · CardBIN 反查",
+      "sourceUrl": "https://www.arnebiae.com/p/ucardranking/",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "infini-card": [
+    {
+      "id": "infini-us",
+      "label": "美国商业卡段",
+      "bin": "441357",
+      "network": "Visa",
+      "type": "商业借记卡",
+      "region": "美国",
+      "issuer": "Piermont Bank",
+      "status": "review",
+      "source": "社区持卡实测 · CardBIN 反查",
+      "sourceUrl": "https://www.arnebiae.com/p/ucardranking/",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "biyapay": [
+    {
+      "id": "biyapay-hk-404045",
+      "label": "历史香港卡段（已停用）",
+      "bin": "404045",
+      "network": "Visa",
+      "type": "商业信用卡 · Purchasing",
+      "region": "中国香港",
+      "issuer": "LianLian International Company Ltd.",
+      "status": "review",
+      "source": "社区历史记录 · 开源 BIN 反查",
+      "sourceUrl": "https://www.arnebiae.com/p/ucardranking/",
+      "checkedAt": "2026-09-12"
+    },
+    {
+      "id": "biyapay-hk-414154",
+      "label": "历史香港卡段（已停用）",
+      "bin": "414154",
+      "network": "Visa",
+      "type": "商业信用卡 · Purchasing",
+      "region": "中国香港",
+      "issuer": "LianLian International Company Ltd.",
+      "status": "review",
+      "source": "社区历史记录 · 开源 BIN 反查",
+      "sourceUrl": "https://www.arnebiae.com/p/ucardranking/",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "savo": [
+    {
+      "id": "savo-tr",
+      "label": "土耳其卡段",
+      "bin": "439724",
+      "network": "Visa",
+      "type": "预付借记卡 · Classic",
+      "region": "土耳其",
+      "issuer": "Paladyum Elektronik Para ve Odeme Hizmetleri A.S.",
+      "status": "review",
+      "source": "社区持卡前缀 · CardBIN 反查",
+      "sourceUrl": "https://haiqo.net/t/topic/24",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "coca": [
+    {
+      "id": "coca-uk",
+      "label": "英国卡段",
+      "bin": "44260100",
+      "network": "Visa",
+      "type": "预付借记卡",
+      "region": "英国",
+      "issuer": "Wirex Ltd.",
+      "status": "review",
+      "source": "社区持卡实测 · CardBIN 反查",
+      "sourceUrl": "https://www.arnebiae.com/p/ucardranking/",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "pintopay": [
+    {
+      "id": "pintopay-global",
+      "label": "国际卡计划",
+      "bin": "待录入",
+      "network": "Visa",
+      "type": "借记卡 · 虚拟 / 实体",
+      "region": "180+ 个国家/地区",
+      "issuer": "持牌合作发卡方（未披露）",
+      "status": "review",
+      "source": "PintoPay 官网 · 服务条款",
+      "sourceUrl": "https://pintopay.me/en",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "spritz": [
+    {
+      "id": "spritz-us",
+      "label": "加密抵押信用卡计划",
+      "bin": "待录入",
+      "network": "Visa",
+      "type": "全额抵押信用卡",
+      "region": "支持地区",
+      "issuer": "Rain",
+      "status": "verified",
+      "source": "Spritz 官方帮助中心",
+      "sourceUrl": "https://help.spritz.finance/en/articles/6981238-is-the-spritz-card-a-credit-card",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "bing": [
+    {
+      "id": "bing-virtual",
+      "label": "美国 / 香港虚拟卡计划",
+      "bin": "待录入",
+      "network": "待公布",
+      "type": "加密借记卡 · Virtual",
+      "region": "美国 · 中国香港",
+      "issuer": "发卡主体待公布",
+      "status": "review",
+      "source": "BingCard 官网 · 价格页",
+      "sourceUrl": "https://www.bingcard.com/pricing",
+      "checkedAt": "2026-09-12"
+    },
+    {
+      "id": "bing-physical",
+      "label": "香港实体卡计划",
+      "bin": "待录入",
+      "network": "待公布",
+      "type": "加密借记卡 · Platinum",
+      "region": "中国香港",
+      "issuer": "发卡主体待公布",
+      "status": "review",
+      "source": "BingCard 官网",
+      "sourceUrl": "https://www.bingcard.com/",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "x": [
+    {
+      "id": "x-money-us",
+      "label": "美国 X Money 卡计划",
+      "bin": "待录入",
+      "network": "Visa",
+      "type": "预付借记卡",
+      "region": "美国（分批开放）",
+      "issuer": "Cross River Bank",
+      "status": "verified",
+      "source": "X Money 官网 · 账户协议",
+      "sourceUrl": "https://money.x.com/en",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "crypto-cash": [
+    {
+      "id": "crypto-cash-visa",
+      "label": "Visa 卡计划",
+      "bin": "待录入",
+      "network": "Visa",
+      "type": "加密借记卡 · 虚拟 / 实体",
+      "region": "全球支持地区",
+      "issuer": "合作发卡方（未披露）",
+      "status": "review",
+      "source": "Crypto Cash 官网",
+      "sourceUrl": "https://thecryptocash.co/",
+      "checkedAt": "2026-09-12"
+    },
+    {
+      "id": "crypto-cash-mastercard",
+      "label": "Mastercard 卡计划",
+      "bin": "待录入",
+      "network": "Mastercard",
+      "type": "加密借记卡 · 虚拟 / 实体",
+      "region": "全球支持地区",
+      "issuer": "合作发卡方（未披露）",
+      "status": "review",
+      "source": "Crypto Cash 官网",
+      "sourceUrl": "https://thecryptocash.co/",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "solcard": [
+    {
+      "id": "solcard-visa",
+      "label": "Visa 虚拟卡计划",
+      "bin": "待录入",
+      "network": "Visa",
+      "type": "加密充值虚拟卡",
+      "region": "全球支持地区",
+      "issuer": "持牌合作发卡方（未披露）",
+      "status": "verified",
+      "source": "SolCard 官方帮助中心",
+      "sourceUrl": "https://help.solcard.cc/en/articles/11500204-what-is-solcard-how-it-works",
+      "checkedAt": "2026-09-12"
+    },
+    {
+      "id": "solcard-mastercard",
+      "label": "Mastercard 卡计划",
+      "bin": "待录入",
+      "network": "Mastercard",
+      "type": "加密充值支付卡",
+      "region": "全球支持地区",
+      "issuer": "持牌合作发卡方（未披露）",
+      "status": "verified",
+      "source": "SolCard 官网",
+      "sourceUrl": "https://www.solcard.cc/about",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "bitstore": [
+    {
+      "id": "bitstore-virtual",
+      "label": "美元虚拟卡计划",
+      "bin": "待录入",
+      "network": "Mastercard",
+      "type": "预付虚拟卡",
+      "region": "全球支持地区",
+      "issuer": "合作发卡方（未披露）",
+      "status": "review",
+      "source": "Bit.Store 官网",
+      "sourceUrl": "https://www.bitstore.com/",
+      "checkedAt": "2026-09-12"
+    },
+    {
+      "id": "bitstore-eea",
+      "label": "欧洲实体卡计划（已停止）",
+      "bin": "待录入",
+      "network": "Mastercard",
+      "type": "预付实体卡",
+      "region": "欧洲经济区",
+      "issuer": "Paytend Europe UAB",
+      "status": "verified",
+      "source": "Bit.Store 官网 · 停止服务公告",
+      "sourceUrl": "https://www.bitstore.com/blog",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "krak": [
+    {
+      "id": "krak-us",
+      "label": "美国商业卡段",
+      "bin": "532113",
+      "network": "Mastercard",
+      "type": "商业预付借记卡",
+      "region": "美国",
+      "issuer": "Sutton Bank",
+      "status": "review",
+      "source": "社区持卡实测 · CardBIN 反查",
+      "sourceUrl": "https://www.arnebiae.com/p/ucardranking/",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "xapo-bank": [
+    {
+      "id": "xapo-gi",
+      "label": "直布罗陀卡段",
+      "bin": "555530",
+      "network": "Mastercard",
+      "type": "World Elite 借记卡",
+      "region": "直布罗陀",
+      "issuer": "Xapo Bank (Gibraltar) Ltd",
+      "status": "review",
+      "source": "社区持卡实测 · CardBIN 反查",
+      "sourceUrl": "https://www.arnebiae.com/p/ucardranking/",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "wirex": [
+    {
+      "id": "wirex-uk",
+      "label": "英国卡段",
+      "bin": "537389",
+      "network": "Mastercard",
+      "type": "Standard 借记卡",
+      "region": "英国",
+      "issuer": "Wirex Ltd",
+      "status": "review",
+      "source": "社区持卡实测 · CardBIN 反查",
+      "sourceUrl": "https://www.arnebiae.com/p/ucardranking/",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "nexo": [
+    {
+      "id": "nexo-uk",
+      "label": "英国卡段",
+      "bin": "530849",
+      "network": "Mastercard",
+      "type": "信用卡 · Standard",
+      "region": "英国",
+      "issuer": "DiPocket Ltd",
+      "status": "review",
+      "source": "社区持卡实测 · CardBIN 反查",
+      "sourceUrl": "https://www.arnebiae.com/p/ucardranking/",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "metamask": [
+    {
+      "id": "metamask-global",
+      "label": "国际卡计划",
+      "bin": "待录入",
+      "network": "Mastercard",
+      "type": "借记卡",
+      "region": "支持地区",
+      "issuer": "Monavate Ltd",
+      "status": "verified",
+      "source": "MetaMask Card FAQ",
+      "sourceUrl": "https://support.metamask.io/manage-crypto/metamask-card/card-faq",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "1inch": [
+    {
+      "id": "1inch-uk-eu",
+      "label": "英国及欧洲卡计划",
+      "bin": "待录入",
+      "network": "Mastercard",
+      "type": "预付卡",
+      "region": "英国 · 欧洲",
+      "issuer": "Monavate Ltd",
+      "status": "verified",
+      "source": "1inch Card 官网",
+      "sourceUrl": "https://1inch.com/card",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "safepal": [
+    {
+      "id": "safepal-fiat24",
+      "label": "Fiat24 瑞士卡段",
+      "bin": "54810849",
+      "network": "Mastercard",
+      "type": "借记卡 · Standard",
+      "region": "瑞士",
+      "issuer": "SR Saphirstein AG",
+      "status": "review",
+      "source": "社区持卡实测 · BinCheck 8 位反查 · SafePal 官网交叉确认",
+      "sourceUrl": "https://bincheck.io/it/details/54810849",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "gnosis-pay": [
+    {
+      "id": "gnosis-pay-uk-observed",
+      "label": "历史英国卡段（社区实测）",
+      "bin": "45672509",
+      "network": "Visa",
+      "type": "借记卡 · Platinum",
+      "region": "英国",
+      "issuer": "Zopa Bank Ltd",
+      "status": "review",
+      "source": "社区持卡实测 · CardBIN 反查",
+      "sourceUrl": "https://www.arnebiae.com/p/ucardranking/",
+      "checkedAt": "2026-09-12"
+    },
+    {
+      "id": "gnosis-pay-eea",
+      "label": "EEA / 非 EEA 卡计划",
+      "bin": "待录入",
+      "network": "Visa",
+      "type": "借记卡",
+      "region": "欧洲及支持地区",
+      "issuer": "Monavate Ltd",
+      "status": "verified",
+      "source": "Gnosis Pay 持卡人条款",
+      "sourceUrl": "https://help.gnosispay.com/hc/en-us/articles/39726524737044-Monavate-Cardholder-Terms-Non-EEA",
+      "checkedAt": "2026-09-12"
+    }
+  ],
+  "minipay": [
+    {
+      "id": "minipay-gnosis",
+      "label": "Gnosis Pay 卡计划",
+      "bin": "待录入",
+      "network": "Visa",
+      "type": "借记卡",
+      "region": "支持地区",
+      "issuer": "Monavate Ltd",
+      "status": "verified",
+      "source": "Gnosis × MiniPay 官方公告",
+      "sourceUrl": "https://www.gnosis.io/blog/minipay-launches-visa-card-powered-by-gnosis-pay",
+      "checkedAt": "2026-09-12"
+    }
+  ]
+}

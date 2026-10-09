@@ -484,8 +484,14 @@ class AuthController extends ChangeNotifier {
         message = '请先完成邮箱验证，再删除账号。';
         return false;
       }
+      final deletingUserId = user!.id;
       await deleteRemoteAccount();
+      if (user != null && user!.id != deletingUserId) {
+        message = '账号已切换，已停止后续退出操作。';
+        return false;
+      }
       await _repository.signOut();
+      if (user != null && user!.id != deletingUserId) return false;
       user = null;
       lastSuccessfulAuthMethod = null;
       message = '账号和云端数据已删除。';

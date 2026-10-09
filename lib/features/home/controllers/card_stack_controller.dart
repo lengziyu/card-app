@@ -31,8 +31,8 @@ class CardStackController extends ChangeNotifier {
 
   static const Duration motionDuration = Duration(milliseconds: 340);
   static const Curve settleCurve = Cubic(.2, .82, .24, 1);
-  static const double distanceThresholdFactor = .1;
-  static const double velocityThreshold = 420;
+  static const double distanceThresholdFactor = .18;
+  static const double velocityThreshold = 700;
 
   final AnimationController _motion;
   List<String> _cardIds;
@@ -42,6 +42,7 @@ class CardStackController extends ChangeNotifier {
   bool _walletExpanded;
   double _revealScale;
   double _dragOffset = 0;
+  double _sceneOffset = 0;
   String? _reorderingId;
   double _reorderOriginTop = 0;
   double _reorderDragTop = 0;
@@ -51,10 +52,14 @@ class CardStackController extends ChangeNotifier {
   Map<String, CardTransformState> _from = const {};
   Map<String, CardTransformState> _target = const {};
   Curve _curve = settleCurve;
-  double? _focusMotionFromPosition;
-  double? _focusMotionToPosition;
-  double? _focusTransformCachePosition;
-  Map<String, CardTransformState> _focusTransformCache = const {};
+  double? _fanMotionFromPosition;
+  double? _fanMotionToPosition;
+  double? _fanTransformCachePosition;
+  Map<String, CardTransformState> _fanTransformCache = const {};
+  Map<String, CardTransformState> _fanMotionBaseFrom = const {};
+  Map<String, CardTransformState> _dragTakeoverFrom = const {};
+  Map<String, CardTransformState> _dragTakeoverBase = const {};
+  double _dragTakeoverOffset = 0;
 
   CardStackMode get mode => _mode;
   List<String> get cardIds => List.unmodifiable(_cardIds);
@@ -83,6 +88,26 @@ class CardStackController extends ChangeNotifier {
 
   bool get isAnimating => _motion.isAnimating;
 
+  bool get _isFan => _mode != CardStackMode.wallet;
+
+  /// 画面当前经过的卡位，目标选中项可能还在远处。
+  double get visualPosition {
+    if (_isFan &&
+        _fanMotionFromPosition != null &&
+        _fanMotionToPosition != null &&
+        _motion.value < 1) {
+      return _currentFanMotionPosition;
+    }
+    return selectedIndex - (isConfigured ? _dragOffset / _fanDragStep() : 0);
+  }
+
+  String? get visualSelectedId {
+    if (!_isFan || layoutSelectedIndex < 0 || _cardIds.isEmpty) {
+      return selectedId;
+    }
+    return _cardIds[visualPosition.round().clamp(0, _cardIds.length - 1)];
+  }
+
   CardTransformState? targetTransformFor(String id) => _target[id];
 
   void configureLayout({required Size screenSize, required Size cardSize}) {
@@ -92,7 +117,7 @@ class CardStackController extends ChangeNotifier {
         : const <String, CardTransformState>{};
     _screenSize = screenSize;
     _cardSize = cardSize;
-    _clearFocusTransformCache();
+    _clearFanTransformCache();
     final next = _calculateTarget();
     if (current.isEmpty || _motion.value == 1) {
       _from = next;
@@ -132,6 +157,7 @@ class CardStackController extends ChangeNotifier {
     if (_mode == nextMode) return;
     _transition(() {
       _mode = nextMode;
+      _sceneOffset = 0;
       _dragOffset = 0;
       _reorderingId = null;
       _reorderOriginTop = 0;
@@ -150,10 +176,11 @@ class CardStackController extends ChangeNotifier {
     final index = _cardIds.indexOf(id);
     if (index < 0) return false;
     if (_mode == CardStackMode.stack) {
-      if (_selectedId == id) return true;
+      if (_selectedId == id) return !_motion.isAnimating;
       _transition(() {
         _hasUserSelected = true;
         _selectedId = id;
+        _dragOffset = 0;
       });
       return false;
     }
@@ -166,7 +193,7 @@ class CardStackController extends ChangeNotifier {
       });
       return false;
     }
-    if (_selectedId == id) return true;
+    if (_selectedId == id) return !_motion.isAnimating;
     _transition(() {
       _hasUserSelected = true;
       _selectedId = id;
@@ -178,36 +205,28 @@ class CardStackController extends ChangeNotifier {
   void startDrag() {
     if (_reorderingId != null ||
         (_mode == CardStackMode.wallet && !_walletExpanded) ||
-        (_mode == CardStackMode.stack && !_hasUserSelected) ||
         _cardIds.length < 2) {
       return;
     }
-    if (_motion.isAnimating) {
-      if (_mode == CardStackMode.focus &&
-          _focusMotionFromPosition != null &&
-          _focusMotionToPosition != null) {
-        // 连续快划经常会在上一次吸附尚未结束时再次落指。把动画当前的
-        // 小数卡位还原成 dragOffset，新的手势便可从屏幕上的精确位置
-        // 接管，而不是先跳到上一轮的目标卡。
-        final position = _currentFocusMotionPosition;
-        _motion.stop();
-        _focusMotionFromPosition = null;
-        _focusMotionToPosition = null;
-        final anchor = position.round().clamp(0, _cardIds.length - 1);
-        _selectedId = _cardIds[anchor];
-        _dragOffset = (anchor - position) * _fanDragStep();
-        final rebased = _calculateTarget();
-        _from = rebased;
-        _target = rebased;
-        _motion.value = 1;
-        return;
-      }
-      final current = _snapshotCurrent();
-      _motion.stop();
-      _from = current;
-      _target = current;
-      _motion.value = 1;
+    _dragTakeoverFrom = const {};
+    _dragTakeoverBase = const {};
+    if (!_motion.isAnimating) return;
+    final current = _snapshotCurrent();
+    final position = _isFan && layoutSelectedIndex >= 0 ? visualPosition : null;
+    _motion.stop();
+    _fanMotionFromPosition = null;
+    _fanMotionToPosition = null;
+    if (position != null) {
+      final anchor = position.round().clamp(0, _cardIds.length - 1);
+      _selectedId = _cardIds[anchor];
+      _dragOffset = (anchor - position) * _fanDragStep();
     }
+    _dragTakeoverFrom = current;
+    _dragTakeoverBase = _calculateTarget();
+    _dragTakeoverOffset = _dragOffset;
+    _from = current;
+    _target = current;
+    _motion.value = 1;
   }
 
   void updateDrag(double delta) {
@@ -221,8 +240,15 @@ class CardStackController extends ChangeNotifier {
       // The first direct swipe is also the selection gesture. Establish the
       // active card before calculating transforms so the card visibly follows
       // the finger instead of only reacting after it is released.
+      final current = _snapshotCurrent();
       _hasUserSelected = true;
       _selectedId = _cardIds.first;
+      _motion.stop();
+      _fanMotionFromPosition = null;
+      _fanMotionToPosition = null;
+      _dragTakeoverFrom = current;
+      _dragTakeoverBase = _calculateTarget();
+      _dragTakeoverOffset = _dragOffset;
     }
     if (_mode == CardStackMode.wallet) {
       final atFirst = selectedIndex == 0 && _dragOffset + delta > 0;
@@ -246,7 +272,22 @@ class CardStackController extends ChangeNotifier {
           .clamp(minOffset - step * .4, maxOffset + step * .4)
           .toDouble();
     }
-    final next = _calculateTarget();
+    final rawTarget = _calculateTarget();
+    final remaining =
+        1 -
+        ((_dragOffset - _dragTakeoverOffset).abs() / (_cardSize.height * .5))
+            .clamp(0.0, 1.0);
+    final next = _dragTakeoverFrom.isEmpty
+        ? rawTarget
+        : {
+            for (final entry in rawTarget.entries)
+              entry.key: _correctSurface(
+                entry.value,
+                _dragTakeoverFrom[entry.key],
+                _dragTakeoverBase[entry.key],
+                remaining,
+              ),
+          };
     _from = next;
     _target = next;
     _motion.value = 1;
@@ -261,7 +302,7 @@ class CardStackController extends ChangeNotifier {
     }
     final current = _snapshotCurrent();
     var nextIndex = selectedIndex;
-    double? focusPosition;
+    double? fanPosition;
     if (_mode == CardStackMode.wallet) {
       final distancePassed =
           _dragOffset.abs() >= _cardSize.height * distanceThresholdFactor;
@@ -274,12 +315,15 @@ class CardStackController extends ChangeNotifier {
       // 松手时把当前小数位置沿速度方向做惯性投影，再吸附到最近的卡。
       final step = _fanDragStep();
       final position = selectedIndex - _dragOffset / step;
-      if (_mode == CardStackMode.focus) focusPosition = position;
-      final projected = position - velocity * .12 / step;
+      fanPosition = position;
+      final velocityPassed = velocity.abs() >= velocityThreshold;
+      final projected = velocityPassed
+          ? position - velocity.clamp(-4500.0, 4500.0) * .12 / step
+          : position;
       nextIndex = projected.round();
       if (nextIndex == selectedIndex) {
-        final distancePassed = _dragOffset.abs() >= step * .24;
-        final velocityPassed = velocity.abs() >= velocityThreshold;
+        final distancePassed =
+            _dragOffset.abs() >= _cardSize.height * distanceThresholdFactor;
         if (distancePassed || velocityPassed) {
           nextIndex += (velocityPassed ? velocity : _dragOffset) < 0 ? 1 : -1;
         }
@@ -293,8 +337,8 @@ class CardStackController extends ChangeNotifier {
       current,
       _calculateTarget(),
       curve: settleCurve,
-      focusFromPosition: focusPosition,
-      focusToPosition: focusPosition == null ? null : nextIndex.toDouble(),
+      fanFromPosition: fanPosition,
+      fanToPosition: fanPosition == null ? null : nextIndex.toDouble(),
     );
     return nextIndex;
   }
@@ -308,8 +352,15 @@ class CardStackController extends ChangeNotifier {
   void cancelDrag() {
     if (_dragOffset == 0) return;
     final current = _snapshotCurrent();
+    final position = _isFan ? visualPosition : null;
     _dragOffset = 0;
-    _startMotion(current, _calculateTarget(), curve: settleCurve);
+    _startMotion(
+      current,
+      _calculateTarget(),
+      curve: settleCurve,
+      fanFromPosition: position,
+      fanToPosition: position == null ? null : selectedIndex.toDouble(),
+    );
   }
 
   bool startWalletReorder(String id) {
@@ -395,6 +446,26 @@ class CardStackController extends ChangeNotifier {
     _reduceMotion = value;
   }
 
+  void setSceneOffset(double offset) {
+    if (_sceneOffset == offset || !_isFan) return;
+    final position = layoutSelectedIndex >= 0 ? visualPosition : null;
+    _motion.stop();
+    _fanMotionFromPosition = null;
+    _fanMotionToPosition = null;
+    _sceneOffset = offset;
+    _clearFanTransformCache();
+    if (position != null) {
+      final anchor = position.round().clamp(0, _cardIds.length - 1);
+      _selectedId = _cardIds[anchor];
+      _dragOffset = (anchor - position) * _fanDragStep();
+    }
+    final next = _calculateTarget();
+    _from = next;
+    _target = next;
+    _motion.value = 1;
+    notifyListeners();
+  }
+
   CardTransformState transformFor(String id) {
     final end = _target[id];
     if (end == null) {
@@ -413,23 +484,53 @@ class CardStackController extends ChangeNotifier {
         end.copyWith(top: end.top + 24, scale: end.scale * .96, opacity: 0);
     if (_motion.value >= 1) return end;
     final progress = _curve.transform(_motion.value).clamp(0.0, 1.0);
-    if (_mode == CardStackMode.focus &&
-        _focusMotionFromPosition != null &&
-        _focusMotionToPosition != null) {
-      // 聚焦吸附不在两个终态之间直接 lerp。直接插值“小数卡位”可让
-      // 跨越多张卡的快速划动逐张经过同一展开槽，间距和层级始终稳定。
-      return _focusTransformsAtPosition(_currentFocusMotionPosition)[id] ?? end;
+    if (_isFan &&
+        _fanMotionFromPosition != null &&
+        _fanMotionToPosition != null) {
+      // 点击、取消与吸附经过同一条连续卡列，不能直接跨过中间卡。
+      final state = _fanTransformsAtPosition(_currentFanMotionPosition)[id];
+      if (state == null) return end;
+      return _correctSurface(
+        state,
+        begin,
+        _fanMotionBaseFrom[id],
+        1 - progress,
+      );
     }
-    final lerped = CardTransformState.lerp(begin, end, progress);
-    // 层级在动画一开始就切到目标值，避免绘制顺序在过渡中反复重排造成抖动。
-    return lerped.copyWith(zIndex: end.zIndex);
+    return CardTransformState.lerp(begin, end, progress);
+  }
+
+  CardTransformState _correctSurface(
+    CardTransformState state,
+    CardTransformState? source,
+    CardTransformState? base,
+    double remaining,
+  ) {
+    if (source == null || base == null || remaining == 0) return state;
+    final scale = state.scale + (source.scale - base.scale) * remaining;
+    final top = state.top + (source.top - base.top) * remaining;
+    return state.copyWith(
+      top: top,
+      scale: scale,
+      opacity: (state.opacity + (source.opacity - base.opacity) * remaining)
+          .clamp(0.0, 1.0)
+          .toDouble(),
+      focusDepth:
+          (state.focusDepth + (source.focusDepth - base.focusDepth) * remaining)
+              .clamp(0.0, 3.5)
+              .toDouble(),
+      elevation:
+          state.elevation + (source.elevation - base.elevation) * remaining,
+      zIndex: remaining == 1 ? source.zIndex : state.zIndex,
+    );
   }
 
   List<String> get paintOrder {
     final indexed = _cardIds.indexed.toList();
+    final states = _snapshotCurrent();
     indexed.sort((left, right) {
-      final leftZ = _target[left.$2]?.zIndex ?? transformFor(left.$2).zIndex;
-      final rightZ = _target[right.$2]?.zIndex ?? transformFor(right.$2).zIndex;
+      final leftZ = states[left.$2]!.zIndex;
+      final rightZ = states[right.$2]!.zIndex;
       final depth = leftZ.compareTo(rightZ);
       return depth == 0 ? left.$1.compareTo(right.$1) : depth;
     });
@@ -444,6 +545,11 @@ class CardStackController extends ChangeNotifier {
     Curve curve = settleCurve,
     bool animate = true,
   }) {
+    final previousMode = _mode;
+    final previousSelection = layoutSelectedIndex;
+    final previousIds = _cardIds;
+    final previousReveal = _revealScale;
+    final position = isConfigured && _isFan ? visualPosition : null;
     final current = isConfigured
         ? _snapshotCurrent()
         : const <String, CardTransformState>{};
@@ -451,32 +557,55 @@ class CardStackController extends ChangeNotifier {
     if (!isConfigured) return;
     final next = _calculateTarget();
     if (!animate || _reduceMotion) {
+      _motion.stop();
+      _fanMotionFromPosition = null;
+      _fanMotionToPosition = null;
+      _clearFanTransformCache();
       _from = next;
       _target = next;
       _motion.value = 1;
       notifyListeners();
       return;
     }
-    _startMotion(current, next, curve: curve);
+    final followsFan =
+        position != null &&
+        previousMode == _mode &&
+        previousSelection >= 0 &&
+        layoutSelectedIndex >= 0 &&
+        identical(previousIds, _cardIds) &&
+        previousReveal == _revealScale;
+    _startMotion(
+      current,
+      next,
+      curve: curve,
+      fanFromPosition: followsFan ? position : null,
+      fanToPosition: followsFan ? selectedIndex.toDouble() : null,
+    );
   }
 
   void _startMotion(
     Map<String, CardTransformState> current,
     Map<String, CardTransformState> next, {
     required Curve curve,
-    double? focusFromPosition,
-    double? focusToPosition,
+    double? fanFromPosition,
+    double? fanToPosition,
   }) {
     _curve = curve;
     _from = current;
     _target = next;
-    _focusMotionFromPosition = focusFromPosition;
-    _focusMotionToPosition = focusToPosition;
-    _clearFocusTransformCache();
+    _fanMotionFromPosition = fanFromPosition;
+    _fanMotionToPosition = fanToPosition;
+    _clearFanTransformCache();
+    _fanMotionBaseFrom = fanFromPosition == null
+        ? const {}
+        : _fanTransformsAtPosition(fanFromPosition);
+    _dragTakeoverFrom = const {};
+    _dragTakeoverBase = const {};
     if (_reduceMotion) {
+      _motion.stop();
       _from = next;
-      _focusMotionFromPosition = null;
-      _focusMotionToPosition = null;
+      _fanMotionFromPosition = null;
+      _fanMotionToPosition = null;
       _motion.value = 1;
       notifyListeners();
       return;
@@ -486,40 +615,41 @@ class CardStackController extends ChangeNotifier {
       ..forward(from: 0);
   }
 
-  double get _currentFocusMotionPosition {
-    final from = _focusMotionFromPosition;
-    final to = _focusMotionToPosition;
+  double get _currentFanMotionPosition {
+    final from = _fanMotionFromPosition;
+    final to = _fanMotionToPosition;
     if (from == null || to == null) return selectedIndex.toDouble();
     final progress = _curve.transform(_motion.value).clamp(0.0, 1.0);
     return from + (to - from) * progress;
   }
 
-  Map<String, CardTransformState> _focusTransformsAtPosition(double position) {
-    if (_focusTransformCachePosition == position) {
-      return _focusTransformCache;
+  Map<String, CardTransformState> _fanTransformsAtPosition(double position) {
+    if (_fanTransformCachePosition == position) {
+      return _fanTransformCache;
     }
     final anchor = position.round().clamp(0, _cardIds.length - 1);
     final states = CardLayoutCalculator.calculate(
-      mode: CardStackMode.focus,
+      mode: _mode,
       selectedIndex: anchor,
       dragOffset: (anchor - position) * _fanDragStep(),
       screenSize: _screenSize,
       cardSize: _cardSize,
       itemCount: _cardIds.length,
       revealScale: _revealScale,
+      sceneOffset: _sceneOffset,
     );
     final transforms = {
       for (var index = 0; index < _cardIds.length; index++)
         _cardIds[index]: states[index],
     };
-    _focusTransformCachePosition = position;
-    _focusTransformCache = transforms;
+    _fanTransformCachePosition = position;
+    _fanTransformCache = transforms;
     return transforms;
   }
 
-  void _clearFocusTransformCache() {
-    _focusTransformCachePosition = null;
-    _focusTransformCache = const {};
+  void _clearFanTransformCache() {
+    _fanTransformCachePosition = null;
+    _fanTransformCache = const {};
   }
 
   Map<String, CardTransformState> _calculateTarget() {
@@ -532,6 +662,7 @@ class CardStackController extends ChangeNotifier {
       cardSize: _cardSize,
       itemCount: _cardIds.length,
       revealScale: _revealScale,
+      sceneOffset: _sceneOffset,
     );
     final transforms = {
       for (var index = 0; index < _cardIds.length; index++)
@@ -590,9 +721,10 @@ class CardStackController extends ChangeNotifier {
   void _handleMotionStatus(AnimationStatus status) {
     if (status != AnimationStatus.completed) return;
     _from = _target;
-    _focusMotionFromPosition = null;
-    _focusMotionToPosition = null;
-    _clearFocusTransformCache();
+    _fanMotionFromPosition = null;
+    _fanMotionToPosition = null;
+    _fanMotionBaseFrom = const {};
+    _clearFanTransformCache();
   }
 
   @override

@@ -185,46 +185,51 @@ class _CardAdvisorPageState extends State<CardAdvisorPage> {
             physics: const BouncingScrollPhysics(),
             padding: EdgeInsets.fromLTRB(20, topInset + 82, 20, footerHeight),
             children: [
-              _AdvisorConversationHero(step: _step),
+              AiAssistantStepTransition(
+                step: _step == _AdvisorStep.review ? 1 : 0,
+                child: _AdvisorConversationHero(step: _step),
+              ),
               const SizedBox(height: 14),
               _AdvisorProgress(step: _step),
               const SizedBox(height: 16),
-              if (_step != _AdvisorStep.review)
-                _AdvisorQuestionCard(
-                  step: _step,
-                  selected: _stepValue,
-                  residence: _residence,
-                  selectedDocuments: _documents,
-                  onSelected: _selectOption,
-                  onResidenceChanged: (value) {
-                    AppHaptics.selection();
-                    setState(() {
-                      _residence = value;
-                      _aiDataConsent = false;
-                    });
-                  },
-                )
-              else
-                _AdvisorReviewCard(
-                  residence: _residence.localizedName(context),
-                  document: _document,
-                  useCase: _useCase,
-                  kycPreference: _kycPreference,
-                  noteController: _noteController,
-                  aiDataConsent: _aiDataConsent,
-                  onAiDataConsentChanged: (value) => setState(() {
-                    _aiDataConsent = value ?? false;
-                    _message = null;
-                  }),
-                  onNoteChanged: (_) {
-                    if (_aiDataConsent) {
-                      setState(() {
-                        _aiDataConsent = false;
-                        _message = null;
-                      });
-                    }
-                  },
-                ),
+              AiAssistantStepTransition(
+                step: _step.index,
+                child: _step != _AdvisorStep.review
+                    ? _AdvisorQuestionCard(
+                        step: _step,
+                        selected: _stepValue,
+                        residence: _residence,
+                        selectedDocuments: _documents,
+                        onSelected: _selectOption,
+                        onResidenceChanged: (value) {
+                          AppHaptics.selection();
+                          setState(() {
+                            _residence = value;
+                            _aiDataConsent = false;
+                          });
+                        },
+                      )
+                    : _AdvisorReviewCard(
+                        residence: _residence.localizedName(context),
+                        document: _document,
+                        useCase: _useCase,
+                        kycPreference: _kycPreference,
+                        noteController: _noteController,
+                        aiDataConsent: _aiDataConsent,
+                        onAiDataConsentChanged: (value) => setState(() {
+                          _aiDataConsent = value ?? false;
+                          _message = null;
+                        }),
+                        onNoteChanged: (_) {
+                          if (_aiDataConsent) {
+                            setState(() {
+                              _aiDataConsent = false;
+                              _message = null;
+                            });
+                          }
+                        },
+                      ),
+              ),
               if (_result case final result?) ...[
                 const SizedBox(height: 22),
                 _ResultSection(

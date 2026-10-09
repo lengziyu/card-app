@@ -5,6 +5,7 @@ import 'package:cardfi/core/theme/app_colors.dart';
 import 'package:cardfi/features/catalog/data/local_card_catalog.dart';
 import 'package:cardfi/features/market/data/card_application_assistant_repository.dart';
 import 'package:cardfi/features/market/presentation/card_application_assistant_page.dart';
+import 'package:cardfi/features/market/widgets/ai_assistant_flow_controls.dart';
 import 'package:country_picker/country_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -12,6 +13,68 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 void main() {
+  for (final reduceMotion in [false, true]) {
+    testWidgets(
+      'quick step reversal keeps answers with large text (reduced: $reduceMotion)',
+      (tester) async {
+        tester.view.physicalSize = const Size(390, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final client = ApiClient(baseUrl: 'https://example.test');
+        addTearDown(client.close);
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                disableAnimations: reduceMotion,
+                textScaler: TextScaler.linear(1.6),
+              ),
+              child: child!,
+            ),
+            home: CardApplicationAssistantPage(
+              repository: CardApplicationAssistantRepository(
+                client,
+                accessTokenProvider: () async => null,
+              ),
+              cards: localCardCatalog,
+              initialCard: localCardCatalog.first,
+              enableRemoteData: false,
+              onBack: () {},
+              onLoginRequired: () {},
+              onProRequired: () {},
+            ),
+          ),
+        );
+        final next = find.byKey(const Key('application-assistant-submit'));
+        final back = find.byKey(const Key('application-assistant-previous'));
+        await tester.tap(find.byKey(const Key('application-option-企业申请')));
+        await tester.tap(next);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 30));
+        await tester.tap(next);
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('application-option-身份证')));
+        await tester.tap(next);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 30));
+        await tester.tap(back);
+        await tester.pumpAndSettle();
+
+        for (final document in ['护照', '身份证']) {
+          final option = find.byKey(Key('application-option-$document'));
+          expect(option, findsOneWidget);
+          expect(tester.widget<AiAssistantOption>(option).selected, isTrue);
+        }
+        expect(find.byKey(const Key('application-option-准备申请')), findsNothing);
+        await tester.tap(back);
+        await tester.pumpAndSettle();
+        expect(find.text('企业注册国家或地区是？'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets('AI card step uses the searchable card artwork picker', (
     tester,
   ) async {

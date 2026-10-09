@@ -51,11 +51,15 @@ class BillHistoryPage extends StatefulWidget {
     required this.cards,
     required this.onBack,
     this.benchmarkRepository,
+    this.onOpenLedger,
+    this.onAddToLedger,
     super.key,
   });
 
   final BillHistoryRepository repository;
   final BillBenchmarkRepository? benchmarkRepository;
+  final VoidCallback? onOpenLedger;
+  final ValueChanged<BillRecord>? onAddToLedger;
   final List<CardSummary> cards;
   final VoidCallback onBack;
 
@@ -226,6 +230,7 @@ class _BillHistoryPageState extends State<BillHistoryPage> {
             benchmarkRepository: widget.benchmarkRepository,
             record: record,
             cards: widget.cards,
+            onAddToLedger: widget.onAddToLedger,
             onBack: () => Navigator.of(routeContext).pop(),
             onChanged: (result) {
               if (!mounted) return;
@@ -266,6 +271,18 @@ class _BillHistoryPageState extends State<BillHistoryPage> {
             ),
             slivers: [
               SliverToBoxAdapter(child: SizedBox(height: topInset + 70)),
+              if (widget.onOpenLedger != null)
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                  sliver: SliverToBoxAdapter(
+                    child: OutlinedButton.icon(
+                      key: const Key('bill-history-open-ledger'),
+                      onPressed: widget.onOpenLedger,
+                      icon: const Icon(Icons.account_balance_wallet_outlined),
+                      label: const Text('消费账本 · 记账与月度统计'),
+                    ),
+                  ),
+                ),
               if (_loading && _records.isEmpty)
                 const SliverPadding(
                   padding: EdgeInsets.symmetric(horizontal: 20),
@@ -1144,10 +1161,12 @@ class _BillRecordDetailPage extends StatefulWidget {
     required this.onBack,
     required this.onChanged,
     this.benchmarkRepository,
+    this.onAddToLedger,
   });
 
   final BillHistoryRepository repository;
   final BillBenchmarkRepository? benchmarkRepository;
+  final ValueChanged<BillRecord>? onAddToLedger;
   final BillRecord record;
   final List<CardSummary> cards;
   final VoidCallback onBack;
@@ -1271,6 +1290,15 @@ class _BillRecordDetailPageState extends State<_BillRecordDetailPage> {
             ),
             const SizedBox(height: 14),
             _BillDetailInformation(record: _record),
+            if (widget.onAddToLedger != null) ...[
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                key: const Key('bill-record-add-to-ledger'),
+                onPressed: () => widget.onAddToLedger!(_record),
+                icon: const Icon(Icons.add_card_outlined),
+                label: const Text('记入消费账本'),
+              ),
+            ],
             const SizedBox(height: 16),
             FilledButton.icon(
               key: const Key('bill-record-open-editor'),

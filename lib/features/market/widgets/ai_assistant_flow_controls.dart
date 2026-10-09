@@ -91,6 +91,88 @@ class AiResidenceSelection {
 
 /// Shared controls for the two guided AI flows, so their questions feel like
 /// one product rather than two separately styled forms.
+class AiAssistantStepTransition extends StatefulWidget {
+  const AiAssistantStepTransition({
+    required this.step,
+    required this.child,
+    super.key,
+  });
+
+  final int step;
+  final Widget child;
+
+  @override
+  State<AiAssistantStepTransition> createState() =>
+      _AiAssistantStepTransitionState();
+}
+
+class _AiAssistantStepTransitionState extends State<AiAssistantStepTransition>
+    with SingleTickerProviderStateMixin {
+  late final _controller = AnimationController(
+    vsync: this,
+    duration: MotionTokens.contentSwitch,
+    value: 1,
+  );
+  late final _progress = _controller.drive(
+    CurveTween(curve: MotionTokens.standardEnter),
+  );
+  double _direction = 1;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) _controller.value = 1;
+  }
+
+  @override
+  void didUpdateWidget(covariant AiAssistantStepTransition oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.step == oldWidget.step) return;
+    _direction = widget.step > oldWidget.step ? 1 : -1;
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _controller.value = 1;
+    } else {
+      _controller.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (MediaQuery.disableAnimationsOf(context)) {
+      return KeyedSubtree(key: ValueKey(widget.step), child: widget.child);
+    }
+    return AnimatedSize(
+      duration: MotionTokens.contentSwitch,
+      curve: MotionTokens.standardEnter,
+      alignment: Alignment.topCenter,
+      clipBehavior: Clip.none,
+      child: FadeTransition(
+        opacity: _progress,
+        child: AnimatedBuilder(
+          animation: _progress,
+          // Retain only the current form: an outgoing question must never keep
+          // accepting answers or expose duplicate fields to a screen reader.
+          child: KeyedSubtree(key: ValueKey(widget.step), child: widget.child),
+          builder: (context, child) => Transform.translate(
+            offset: Offset(
+              (1 - _progress.value) * MotionTokens.smallOffset * _direction,
+              0,
+            ),
+            transformHitTests: false,
+            child: child,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class AiAssistantProgress extends StatelessWidget {
   const AiAssistantProgress({
     required this.currentStep,
@@ -121,35 +203,28 @@ class AiAssistantProgress extends StatelessWidget {
         return Expanded(
           child: Padding(
             padding: EdgeInsets.only(right: index == stepCount - 1 ? 0 : 5),
-            child: TweenAnimationBuilder<double>(
-              key: ValueKey('$index-$active-$current'),
-              duration: reduceMotion
-                  ? Duration.zero
-                  : Duration(milliseconds: 420 + index * 55),
-              curve: Curves.easeOutBack,
-              tween: Tween(begin: active ? .72 : .94, end: 1),
-              builder: (context, value, _) => Transform.scale(
-                // Keep every segment at the same width even before it is
-                // active. Only the vertical arrival motion changes.
-                scaleY: value,
+            child: SizedBox(
+              height: 9,
+              child: Center(
                 child: AnimatedContainer(
                   duration: reduceMotion
                       ? Duration.zero
                       : MotionTokens.stateChange,
+                  curve: MotionTokens.standardEnter,
                   height: current ? 9 : 5,
                   decoration: BoxDecoration(
-                    gradient: active
-                        ? LinearGradient(
-                            colors: [
+                    gradient: LinearGradient(
+                      colors: active
+                          ? [
                               color.withValues(alpha: .78),
                               color,
                               Color.lerp(color, AppColors.cyan, .3)!,
-                            ],
-                          )
-                        : null,
-                    color: active
-                        ? null
-                        : AppColors.line.withValues(alpha: .34),
+                            ]
+                          : List.filled(
+                              3,
+                              AppColors.line.withValues(alpha: .34),
+                            ),
+                    ),
                     borderRadius: BorderRadius.circular(99),
                     boxShadow: current
                         ? [
@@ -246,16 +321,19 @@ class AiAssistantOption extends StatelessWidget {
                     ),
                   ),
                 ),
-                Icon(
-                  selected
-                      ? (multiSelect
-                            ? Icons.check_box_rounded
-                            : Icons.radio_button_checked_rounded)
-                      : (multiSelect
-                            ? Icons.check_box_outline_blank_rounded
-                            : Icons.radio_button_unchecked_rounded),
-                  color: selected ? Colors.white : AppColors.textMuted,
-                  size: 20,
+                MotionStateIcon(
+                  stateKey: (selected, multiSelect),
+                  child: Icon(
+                    selected
+                        ? (multiSelect
+                              ? Icons.check_box_rounded
+                              : Icons.radio_button_checked_rounded)
+                        : (multiSelect
+                              ? Icons.check_box_outline_blank_rounded
+                              : Icons.radio_button_unchecked_rounded),
+                    color: selected ? Colors.white : AppColors.textMuted,
+                    size: 20,
+                  ),
                 ),
               ],
             ),

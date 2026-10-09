@@ -134,6 +134,7 @@ class _CardApplicationAssistantPageState
       _message = null;
       _step = _ApplicationStep.values[_step.index - 1];
     });
+    _resetScrollPosition();
   }
 
   void _next() {
@@ -146,6 +147,15 @@ class _CardApplicationAssistantPageState
       _result = null;
       _message = null;
       _step = _ApplicationStep.values[_step.index + 1];
+    });
+    _resetScrollPosition();
+  }
+
+  void _resetScrollPosition() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      _scrollController.jumpTo(0);
     });
   }
 
@@ -248,56 +258,61 @@ class _CardApplicationAssistantPageState
             physics: const BouncingScrollPhysics(),
             padding: EdgeInsets.fromLTRB(20, topInset + 82, 20, footerHeight),
             children: [
-              _ApplicationHero(
-                card: _card,
-                step: _step,
-                businessApplicant: _applicantType == '企业申请',
+              AiAssistantStepTransition(
+                step: _step.index,
+                child: _ApplicationHero(
+                  card: _card,
+                  step: _step,
+                  businessApplicant: _applicantType == '企业申请',
+                ),
               ),
               const SizedBox(height: 14),
               _ApplicationProgress(step: _step),
               const SizedBox(height: 16),
-              if (_step == _ApplicationStep.review)
-                _ReviewPanel(
-                  card: _card,
-                  residence: _residence.localizedName(context),
-                  applicantType: _applicantType,
-                  document: _document,
-                  stage: _stage,
-                  controller: _questionController,
-                  aiDataConsent: _aiDataConsent,
-                  onAiDataConsentChanged: (value) => setState(() {
-                    _aiDataConsent = value ?? false;
-                    _message = null;
-                    _messageCode = null;
-                  }),
-                  onQuestionChanged: (_) {
-                    if (_aiDataConsent) {
-                      setState(() {
-                        _aiDataConsent = false;
-                        _message = null;
-                        _messageCode = null;
-                      });
-                    }
-                  },
-                )
-              else
-                _QuestionPanel(
-                  step: _step,
-                  cards: _cards,
-                  selected: _selectedValue,
-                  residence: _residence,
-                  businessApplicant: _applicantType == '企业申请',
-                  selectedDocuments: _documents,
-                  onSelected: _select,
-                  onResidenceChanged: (value) {
-                    AppHaptics.selection();
-                    setState(() {
-                      _result = null;
-                      _residence = value;
-                      _aiDataConsent = false;
-                    });
-                  },
-                ),
+              AiAssistantStepTransition(
+                step: _step.index,
+                child: _step == _ApplicationStep.review
+                    ? _ReviewPanel(
+                        card: _card,
+                        residence: _residence.localizedName(context),
+                        applicantType: _applicantType,
+                        document: _document,
+                        stage: _stage,
+                        controller: _questionController,
+                        aiDataConsent: _aiDataConsent,
+                        onAiDataConsentChanged: (value) => setState(() {
+                          _aiDataConsent = value ?? false;
+                          _message = null;
+                          _messageCode = null;
+                        }),
+                        onQuestionChanged: (_) {
+                          if (_aiDataConsent) {
+                            setState(() {
+                              _aiDataConsent = false;
+                              _message = null;
+                              _messageCode = null;
+                            });
+                          }
+                        },
+                      )
+                    : _QuestionPanel(
+                        step: _step,
+                        cards: _cards,
+                        selected: _selectedValue,
+                        residence: _residence,
+                        businessApplicant: _applicantType == '企业申请',
+                        selectedDocuments: _documents,
+                        onSelected: _select,
+                        onResidenceChanged: (value) {
+                          AppHaptics.selection();
+                          setState(() {
+                            _result = null;
+                            _residence = value;
+                            _aiDataConsent = false;
+                          });
+                        },
+                      ),
+              ),
               if (_result case final result?) ...[
                 const SizedBox(height: 22),
                 _ApplicationResult(

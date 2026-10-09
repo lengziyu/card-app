@@ -43,8 +43,8 @@ class AuthAccountRepository {
     }
   }
 
-  Future<void> deleteAccount() async {
-    final token = (await _accessTokenProvider())?.trim();
+  Future<void> deleteAccount({String? accessToken}) async {
+    final token = (accessToken ?? await _accessTokenProvider())?.trim();
     if (token == null || token.isEmpty) {
       throw const ApiException(code: 'UNAUTHORIZED', message: '请重新登录后再删除账号');
     }

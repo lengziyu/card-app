@@ -61,6 +61,19 @@ void main() {
     expect(localizations.text('保存账号资料'), '儲存帳號資料');
   });
 
+  test('other-card region labels are localized for every product locale', () {
+    for (final locale in AppLanguage.supportedLocales) {
+      final localizations = AppLocalizations(locale);
+      for (final source in ['港卡', '美卡', '内地卡', '更多']) {
+        final translation = localizations.text(source);
+        expect(translation, isNotEmpty, reason: '$locale: $source');
+        if (locale.languageCode != 'zh') {
+          expect(translation, isNot(source), reason: '$locale: $source');
+        }
+      }
+    }
+  });
+
   test('English localizes App Store subscription display names', () {
     const localizations = AppLocalizations(Locale('en', 'US'));
 

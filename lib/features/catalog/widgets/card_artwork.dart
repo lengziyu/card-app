@@ -11,6 +11,7 @@ class CardArtwork extends StatelessWidget {
     this.alignment = Alignment.center,
     this.showGeneratedLabels = true,
     this.memCacheWidth,
+    this.fallbackMemCacheWidth,
     super.key,
   });
 
@@ -19,6 +20,9 @@ class CardArtwork extends StatelessWidget {
   final Alignment alignment;
   final bool showGeneratedLabels;
   final int? memCacheWidth;
+
+  /// Reuse the already decoded list image while the detail resolution loads.
+  final int? fallbackMemCacheWidth;
 
   @override
   Widget build(BuildContext context) {
@@ -32,6 +36,23 @@ class CardArtwork extends StatelessWidget {
               (constraints.maxWidth.isFinite
                   ? (constraints.maxWidth * pixelRatio).round().clamp(1, 1280)
                   : null);
+          Widget fallback() {
+            final fallbackWidth = fallbackMemCacheWidth;
+            if (fallbackWidth != null && fallbackWidth != width) {
+              return CardArtwork(
+                card: card,
+                fit: fit,
+                alignment: alignment,
+                showGeneratedLabels: showGeneratedLabels,
+                memCacheWidth: fallbackWidth,
+              );
+            }
+            return _GeneratedArtwork(
+              card: card,
+              showLabels: showGeneratedLabels,
+            );
+          }
+
           return CachedNetworkImage(
             imageUrl: imageUrl,
             fit: fit,
@@ -39,14 +60,16 @@ class CardArtwork extends StatelessWidget {
             memCacheWidth: width,
             maxWidthDiskCache: 1280,
             filterQuality: FilterQuality.medium,
-            fadeInDuration: MediaQuery.disableAnimationsOf(context)
+            fadeInDuration:
+                fallbackMemCacheWidth != null ||
+                    MediaQuery.disableAnimationsOf(context)
                 ? Duration.zero
                 : const Duration(milliseconds: 180),
-            fadeOutDuration: const Duration(milliseconds: 90),
-            placeholder: (_, _) =>
-                _GeneratedArtwork(card: card, showLabels: showGeneratedLabels),
-            errorWidget: (_, _, _) =>
-                _GeneratedArtwork(card: card, showLabels: showGeneratedLabels),
+            fadeOutDuration: fallbackMemCacheWidth != null
+                ? Duration.zero
+                : const Duration(milliseconds: 90),
+            placeholder: (_, _) => fallback(),
+            errorWidget: (_, _, _) => fallback(),
           );
         },
       );
